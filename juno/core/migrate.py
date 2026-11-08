@@ -1,7 +1,7 @@
 import re
 from collections.abc import Callable, Mapping
 
-CODE_SCHEMA_VERSION = 2
+CODE_SCHEMA_VERSION = 3
 
 Step = Callable[[str], None]
 SCHEMA_RE = re.compile(r"^schema_version\s*=\s*(\d+)\s*$", re.M)
@@ -17,6 +17,22 @@ PRIVACY_NEW = (
     " or archive a knowledge or profile line that the repo's default branch contradicts, citing"
     " `repo:<name>@<sha>:<path>:<line>`; each change is undoable with `juno undo`."
 )
+
+RULES_QUOTE_OLD = (
+    "- The quote: at least 20 characters I typed this session, or of an "
+    "AskUserQuestion answer I chose in this session (the chosen option's label or "
+    "description, or my Other text or notes; not the question or other options), "
+    "sharing a meaningful word (4+ letters) with the rule. Never invent or pad it."
+)
+RULES_QUOTE_NEW = (
+    "- The quote: at least 20 characters I typed this session, or the label of an "
+    "AskUserQuestion option I chose, or my Other text or notes there (never an "
+    "option description or preview, the question or other options, so put the rule's "
+    "key words in the option label), sharing a meaningful word (4+ letters) with the "
+    "rule. Never invent or pad it."
+)
+CAPS_OLD = "Stay under the per-file and per-session caps."
+CAPS_NEW = "Stay under the per-session cap."
 
 
 def read_schema(toml_text: str) -> int | None:
@@ -55,3 +71,7 @@ def add_stale_exception(core_text: str) -> str:
         + match.group(3)
         + core_text[match.end() :]
     )
+
+
+def replace_exact(text: str, old: str, new: str) -> str:
+    return text.replace(old, new, 1)

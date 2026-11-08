@@ -63,8 +63,17 @@ class Skeleton(unittest.TestCase):
     def test_schema_file(self) -> None:
         text = read("juno-brain.toml").replace(vault.CREATED_TOKEN, "2026-01-01")
         data = tomllib.loads(text)
-        self.assertEqual(data["schema_version"], 2)
+        self.assertEqual(data["schema_version"], 3)
         self.assertIn(vault.CREATED_TOKEN, read("juno-brain.toml"))
+
+
+class RulesProtocol(unittest.TestCase):
+    def test_quote_sources_exclude_descriptions(self) -> None:
+        line = next(
+            x for x in read(os.path.join("protocol", "rules.md")).split("\n") if "The quote:" in x
+        )
+        self.assertNotIn("label or description", line)
+        self.assertIn("never an option description or preview", line)
 
 
 class CoreMd(unittest.TestCase):

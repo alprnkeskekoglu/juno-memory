@@ -25,10 +25,10 @@ class Core(unittest.TestCase):
         with self.assertRaises(ValueError):
             migrate.plan(1, 4, steps)
 
-    def test_code_schema_is_two_with_one_step(self) -> None:
-        self.assertEqual(migrate.CODE_SCHEMA_VERSION, 2)
-        self.assertEqual(sorted(migratesteps.STEPS), [1])
-        self.assertEqual(migrate.plan(1, 2, migratesteps.STEPS), [1])
+    def test_code_schema_is_three_with_two_steps(self) -> None:
+        self.assertEqual(migrate.CODE_SCHEMA_VERSION, 3)
+        self.assertEqual(sorted(migratesteps.STEPS), [1, 2])
+        self.assertEqual(migrate.plan(1, 3, migratesteps.STEPS), [1, 2])
 
     def test_stale_exception_is_added_once_and_only_to_the_old_sentence(self) -> None:
         old = open(os.path.join(REPO, "vault-template", "core.md"), encoding="utf-8").read()
@@ -123,12 +123,68 @@ class Command(SandboxCase):
             handle.write(text.replace(migrate.PRIVACY_NEW, migrate.PRIVACY_OLD))
         self.set_schema(1)
         self.assertEqual(self.sb.cli("migrate")[0], 0)
-        self.assertEqual(self.schema(), 2)
+        self.assertEqual(self.schema(), 3)
         with open(core, encoding="utf-8") as handle:
             self.assertEqual(handle.read(), text)
         self.assertEqual(self.sb.cli("migrate")[0], 0)
         with open(core, encoding="utf-8") as handle:
             self.assertEqual(handle.read(), text)
+
+    def read(self, rel: str) -> str:
+        with open(os.path.join(self.sb.vault, rel), encoding="utf-8") as handle:
+            return handle.read()
+
+    def write(self, rel: str, text: str) -> None:
+        with open(os.path.join(self.sb.vault, rel), "w", encoding="utf-8") as handle:
+            handle.write(text)
+
+    def make_schema_two(self) -> tuple[str, str]:
+        rules = self.read(os.path.join("protocol", "rules.md"))
+        core = self.read("core.md")
+        self.assertIn(migrate.RULES_QUOTE_NEW, rules)
+        self.assertIn(migrate.CAPS_NEW, core)
+        self.write(
+            os.path.join("protocol", "rules.md"),
+            rules.replace(migrate.RULES_QUOTE_NEW, migrate.RULES_QUOTE_OLD),
+        )
+        self.write("core.md", core.replace(migrate.CAPS_NEW, migrate.CAPS_OLD))
+        self.set_schema(2)
+        return rules, core
+
+    def test_step_two_rewrites_quote_rule_and_cap_sentence(self) -> None:
+        rules, core = self.make_schema_two()
+        self.assertEqual(self.sb.cli("migrate")[0], 0)
+        self.assertEqual(self.schema(), 3)
+        self.assertEqual(self.read(os.path.join("protocol", "rules.md")), rules)
+        self.assertEqual(self.read("core.md"), core)
+        backups = os.listdir(os.path.join(self.sb.state, "backups"))
+        self.assertEqual([b for b in backups if b.endswith("-v2")], backups)
+        old = os.path.join(self.sb.state, "backups", backups[0], "protocol", "rules.md")
+        with open(old, encoding="utf-8") as handle:
+            self.assertIn(migrate.RULES_QUOTE_OLD, handle.read())
+
+    def test_step_two_is_idempotent(self) -> None:
+        self.make_schema_two()
+        steps = {2: migratesteps.quote_and_cap_text}
+        migratesteps.quote_and_cap_text(self.sb.vault)
+        once = (self.read(os.path.join("protocol", "rules.md")), self.read("core.md"))
+        self.set_schema(2)
+        self.assertEqual(self.run_cmd(steps, 3), 0)
+        twice = (self.read(os.path.join("protocol", "rules.md")), self.read("core.md"))
+        self.assertEqual(once, twice)
+
+    def test_step_two_leaves_edited_lines_alone(self) -> None:
+        self.make_schema_two()
+        rules = self.read(os.path.join("protocol", "rules.md")).replace(
+            migrate.RULES_QUOTE_OLD, "- The quote: whatever I typed."
+        )
+        core = self.read("core.md").replace(migrate.CAPS_OLD, "Stay small.")
+        self.write(os.path.join("protocol", "rules.md"), rules)
+        self.write("core.md", core)
+        self.assertEqual(self.sb.cli("migrate")[0], 0)
+        self.assertEqual(self.schema(), 3)
+        self.assertEqual(self.read(os.path.join("protocol", "rules.md")), rules)
+        self.assertEqual(self.read("core.md"), core)
 
     def test_newer_vault_refused(self) -> None:
         with open(self.toml, "w", encoding="utf-8") as handle:

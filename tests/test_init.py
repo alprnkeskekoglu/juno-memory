@@ -58,7 +58,7 @@ class Init(SandboxCase):
         self.init()
         with open(os.path.join(self.sb.vault, "juno-brain.toml"), "rb") as handle:
             data = tomllib.load(handle)
-        self.assertEqual(data["schema_version"], 2)
+        self.assertEqual(data["schema_version"], 3)
         self.assertRegex(str(data["created"]), r"^\d{4}-\d{2}-\d{2}$")
         self.assertTrue(os.path.isfile(os.path.join(self.sb.vault, "core.md")))
         self.assertEqual(os.path.getsize(os.path.join(self.sb.vault, "rules", "global.md")), 0)
