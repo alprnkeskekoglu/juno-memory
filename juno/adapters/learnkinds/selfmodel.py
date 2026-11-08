@@ -52,8 +52,6 @@ def write(ctx: Ctx, found: dict[str, str]) -> str | None:
     items = [writegate.core_text(x) for x in old.splitlines() if x.startswith("- ")]
     if writegate.duplicate(items, writegate.core_text(line), preset):
         return "duplicate"
-    if len(items) >= (writegate.file_cap(rel) or len(items) + 1):
-        return "capped"
     new, _ = writegate.add_item(old, line, preset, base=f"# {found['file'].capitalize()}\n\n")
     gate.commit(cfg, ctx.seg, "self", rel, new, f"user {found['pid']}", engine=True)
     return None

@@ -124,13 +124,13 @@ class Kinds(CardCase):
             (sections["self"], again["self"]["dropped"]), ("dropped:duplicate", {"duplicate": 1})
         )
 
-    def test_a_full_file_drops_the_line(self) -> None:
+    def test_a_long_file_still_takes_the_line(self) -> None:
         full = "# Values\n\n" + "".join(
             f"- Distinct observation number {n} about habits\n" for n in range(60)
         )
         self.write("self/values.md", full)
         _, sections = self.learn({"self": [item()]})
-        self.assertEqual(sections["self"], "dropped:capped")
+        self.assertEqual(sections["self"], "ok")
 
     def test_identity_and_private_drop(self) -> None:
         _, sections = self.learn({"self": [item(text="I am the kind of person who ships")]})

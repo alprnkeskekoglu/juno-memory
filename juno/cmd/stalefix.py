@@ -74,6 +74,7 @@ def new_row(now: float, opts: Options) -> dict[str, Any]:
         "skipped": [],
         "writes": [],
         "refs": {},
+        "branches": {},
         "fetch": {},
         "cost_usd": 0.0,
         "snapshot": None,
@@ -343,6 +344,7 @@ def execute(
     for name, pin in probe.pins.items():
         if isinstance(pin, adapter.Pin):
             row["refs"][name] = pin.sha[:8]
+            row["branches"][name] = pin.ref
             row["fetch"][name] = pin.fetch
         else:
             row["fetch"][name] = pin

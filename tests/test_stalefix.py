@@ -105,6 +105,45 @@ class FullRun(StaleCase):
         )
 
 
+class NoRemote(StaleCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.world.go_local()
+
+    def test_a_repo_without_origin_is_read_at_its_local_default_branch_commit(self) -> None:
+        out, calls = self.run_job(self.world.all_entries())
+        row = out.row
+        self.assertEqual(row["status"], "ok", row)
+        self.assertEqual((row["fixed"], row["archived"]), (1, 1))
+        self.assertEqual(row["refs"], {"app": self.world.sha[:8]})
+        self.assertEqual(row["branches"], {"app": "main"})
+        self.assertEqual(row["fetch"], {"app": "no remote"})
+        self.assertEqual(
+            calls.listings[0][os.path.join("app", "src", "retry.py")],
+            "RETRY_LIMIT = 5\nBACKOFF = 2\n",
+        )
+        with open(os.path.join(self.world.app, "src", "retry.py"), encoding="utf-8") as handle:
+            self.assertEqual(handle.read(), "RETRY_LIMIT = 9\n")
+        self.assertTrue(
+            all(r["evidence"].startswith("repo:app@" + self.world.sha) for r in self.writes())
+        )
+
+    def test_no_branch_of_the_order_means_no_default_branch(self) -> None:
+        self.world.git(self.world.app, "branch", "-m", "main", "trunk")
+        out, calls = self.run_job(self.world.all_entries())
+        self.assertEqual(out.row["fetch"], {"app": "no default branch"})
+        self.assertEqual(out.row["files_checked"], 0)
+        self.assertEqual(calls.prompts, [])
+
+    def test_an_origin_whose_fetch_fails_still_skips_the_repo(self) -> None:
+        self.world.git(self.world.app, "remote", "add", "origin", "/nonexistent/origin.git")
+        out, calls = self.run_job(self.world.all_entries())
+        self.assertEqual(out.row["fetch"], {"app": "no origin default branch"})
+        self.assertEqual(out.row["refs"], {})
+        self.assertEqual(out.row["files_checked"], 0)
+        self.assertEqual(calls.prompts, [])
+
+
 class DryRun(StaleCase):
     def test_writes_nothing_but_the_run_row(self) -> None:
         before = self.get(REL)

@@ -396,7 +396,7 @@ class Pitfalls(ExtractCase):
         row = self.ext(pitfalls=cases)
         self.assertEqual(row["pitfalls"]["dropped"]["capped"], 4)
 
-    def test_duplicate_and_per_run_cap_and_full_file(self) -> None:
+    def test_duplicate_and_per_run_cap_and_no_file_cap(self) -> None:
         self.start()
         items = [
             dict(self.ITEM, text=f"Pitfall number {i} about src/money.py usage") for i in range(3)
@@ -408,9 +408,12 @@ class Pitfalls(ExtractCase):
         self.write("pitfalls.md", "# Pitfalls\n\n" + lines)
         self.redirty()
         row = self.ext(
-            pitfalls=[dict(self.ITEM, text="A pitfall that arrives after the cap in src/money.py")]
+            pitfalls=[
+                dict(self.ITEM, text="A pitfall that arrives past sixty lines in src/money.py")
+            ]
         )
-        self.assertEqual(row["pitfalls"]["dropped"], {"full": 1})
+        self.assertEqual(len(row["pitfalls"]["written"]), 1)
+        self.assertEqual(row["pitfalls"]["dropped"], {})
 
     def test_symlinked_pitfalls_file_is_refused(self) -> None:
         target = os.path.join(self.sb.root, "real-pitfalls.md")

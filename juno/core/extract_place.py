@@ -23,7 +23,6 @@ from juno.core.extract import (
     thread_tags,
 )
 from juno.core.textchecks import SECOND_PERSON_RE, as_list, text_field
-from juno.core.writegate import PITFALL_LINES
 
 GOTCHAS_CAP = 25
 KNOWLEDGE_FILE_CHARS = 8000
@@ -227,7 +226,6 @@ def apply_pitfalls(
         dropped["capped"] += len(items) - PITFALLS_CONSIDERED
     lines = text.splitlines()
     known = {fold.fold(f["text"].rstrip(".")) for f in topics.pitfall_lines(text)}
-    count = sum(1 for row in lines if row.startswith("- "))
     for item in items[:PITFALLS_CONSIDERED]:
         problem, value = pitfall_item(item, digest)
         key = fold.fold(value["text"].rstrip(".")) if value else ""
@@ -235,8 +233,6 @@ def apply_pitfalls(
             problem = "duplicate"
         elif problem is None and len(written) >= PITFALLS_PER_RUN:
             problem = "capped"
-        elif problem is None and count >= PITFALL_LINES:
-            problem = "full"
         if problem or value is None:
             dropped[problem or "invalid"] += 1
             continue
@@ -245,7 +241,6 @@ def apply_pitfalls(
             f"- {value['text']} · triggers: {trig} · {value['evidence']}; segment {sid8} · {today}"
         )
         known.add(key)
-        count += 1
         written.append({"text": value["text"][:160], "triggers": value["triggers"]})
     if not written:
         return None, written, dict(dropped)

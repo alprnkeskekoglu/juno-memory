@@ -89,13 +89,14 @@ class Capture(Base):
         self.assertEqual(len(lines), 1)
         self.assertTrue(lines[0].startswith("- Look into the flaky invoice export tests · "))
 
-    def test_cap(self) -> None:
-        cap = writegate.FILE_LINES["inbox.md"]
+    def test_no_line_cap(self) -> None:
         self.put(
             "inbox.md",
-            "# Inbox\n\n" + "".join(f"- Loose thought {n:03d} here\n" for n in range(cap)),
+            "# Inbox\n\n" + "".join(f"- Loose thought {n:03d} here\n" for n in range(80)),
         )
-        self.assertIn("cap", self.refused("capture", "One thought too many for the inbox"))
+        self.ok("capture", "One thought too many for the inbox")
+        lines = [x for x in self.get("inbox.md").splitlines() if x.startswith("- ")]
+        self.assertEqual(len(lines), 81)
 
 
 class Pitfall(Base):
@@ -199,17 +200,6 @@ class Knowledge(Base):
             "invented words here ok",
             "Jobs retry thrice",
         )
-
-    def test_file_cap(self) -> None:
-        cap = writegate.FILE_LINES["knowledge"]
-        self.put(
-            "knowledge/big.md",
-            "---\ntopic: big\n---\n\n" + "".join(f"- Fact {n:03d} here\n" for n in range(cap)),
-        )
-        out = self.refused(
-            "knowledge", "add", "--topic", "big", "--evidence", QUOTE, "One fact too many"
-        )
-        self.assertIn("cap", out)
 
 
 class Decision(Base):

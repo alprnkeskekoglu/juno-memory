@@ -39,6 +39,12 @@ def pin_repo(cfg: config.Config, name: str) -> Pin | str:
     directory = repos.repo_dir(cfg, name)
     if directory is None:
         return "repo missing"
+    order = cfg.get_list("stale", "branch_order")
+    if not repos.has_origin(directory):
+        local = repos.local_default_ref(directory, order)
+        if local is None:
+            return "no default branch"
+        return Pin(name, directory, local[0], local[1], "no remote")
     fetch = "skipped"
     if cfg.get_bool("stale", "fetch"):
         done = git.result(["fetch", "--quiet", "origin"], directory, 60)
@@ -49,7 +55,7 @@ def pin_repo(cfg: config.Config, name: str) -> Pin | str:
             if age is None or age > FETCH_FRESH_DAYS:
                 return "fetch failed"
             fetch = f"failed, last fetch {age:.1f} days ago"
-    found = repos.default_ref(directory, cfg.get_list("stale", "branch_order"))
+    found = repos.default_ref(directory, order)
     if found is None:
         return "no origin default branch"
     return Pin(name, directory, found[0], found[1], fetch)

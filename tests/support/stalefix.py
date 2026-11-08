@@ -102,6 +102,18 @@ class World:
         self.git(self.helper, "push", "-q", "origin", "develop")
         self.sha = self.git(self.helper, "rev-parse", "HEAD")
 
+    def go_local(self, branch: str = "main") -> None:
+        self.git(self.app, "remote", "remove", "origin")
+        self.git(self.app, "checkout", "-q", "develop")
+        self.write(self.app, "src/retry.py", "RETRY_LIMIT = 5\nBACKOFF = 2\n")
+        self.write(self.app, "src/old.py", None)
+        self.git(self.app, "add", "-A")
+        self.git(self.app, "commit", "-q", "-m", "raise the retry limit to 5, drop old.py")
+        self.sha = self.git(self.app, "rev-parse", "HEAD")
+        self.git(self.app, "branch", "-m", "develop", branch)
+        self.git(self.app, "checkout", "-q", "feature")
+        self.write(self.app, "src/retry.py", "RETRY_LIMIT = 9\n")
+
     def config(self, extra: str = "") -> None:
         if not hasattr(self, "base"):
             with open(self.sb.config, encoding="utf-8") as handle:

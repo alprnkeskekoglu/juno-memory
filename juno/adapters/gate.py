@@ -103,9 +103,6 @@ def commit(
     old = store.read_text(path)
     if new_text == old and not delete:
         return Result(None, rel, False)
-    cap = None if engine else writegate.file_cap(rel)
-    if cap and writegate.count_lines(new_text) > max(cap, writegate.count_lines(old)):
-        raise Refused(f"{rel} is at its cap of {cap} lines; fix or forget a line first")
     if run_cap and not engine and not (extra and "of" in extra):
         check_run_cap(cfg, seg)
     store.backup(cfg, path)

@@ -12,7 +12,6 @@ from juno.core.vaultfmt import (
     injected_rules,
     rule_entries,
 )
-from juno.core.writegate import PITFALL_LINES
 
 Check = tuple[str, str, str]
 BUDGET_WARN_RATIO = 0.9
@@ -266,10 +265,6 @@ def pitfall_checks(text: str, preset: str) -> list[Check]:
         )
         for n in bad
     ]
-    if len(lines) > PITFALL_LINES:
-        out.append(
-            ("WARN", "pitfalls", f"pitfalls.md has {len(lines)} lines (over {PITFALL_LINES})")
-        )
     return out or [("PASS", "pitfalls", f"pitfalls.md: {len(lines)} lines")]
 
 

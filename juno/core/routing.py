@@ -10,7 +10,7 @@ Target = dict[str, Any]
 
 
 def local_stamp(now: float | None = None) -> str:
-    return time.strftime("%Y-%m-%d %H:%M", time.localtime(now))
+    return time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() if now is None else now))
 
 
 def handoff_targets(seg: Segment) -> list[Target]:

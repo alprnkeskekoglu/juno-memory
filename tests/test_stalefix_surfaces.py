@@ -161,6 +161,30 @@ class DefaultRef(unittest.TestCase):
             git("update-ref", "refs/remotes/origin/develop", new)
             self.assertEqual(repos.default_ref(tmp, order), ("origin/develop", new))
 
+    def test_local_default_ref_takes_the_first_branch_of_the_order_by_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {"PATH": os.environ.get("PATH", ""), "HOME": tmp, "GIT_CONFIG_NOSYSTEM": "1"}
+
+            def git(*args: str) -> str:
+                e = dict(env, GIT_AUTHOR_NAME="T", GIT_AUTHOR_EMAIL="t@e", GIT_COMMITTER_NAME="T")
+                e["GIT_COMMITTER_EMAIL"] = "t@e"
+                done = subprocess.run(
+                    ["git", "-C", tmp, *args], capture_output=True, text=True, env=e, check=True
+                )
+                return done.stdout.strip()
+
+            git("init", "-q", "-b", "feature")
+            git("commit", "-q", "--allow-empty", "-m", "a")
+            first = git("rev-parse", "HEAD")
+            git("branch", "main")
+            git("commit", "-q", "--allow-empty", "-m", "b")
+            order = ["develop", "main", "master"]
+            self.assertFalse(repos.has_origin(tmp))
+            self.assertEqual(repos.local_default_ref(tmp, order), ("main", first))
+            self.assertIsNone(repos.local_default_ref(tmp, ["develop", "master"]))
+            git("remote", "add", "origin", "/nonexistent/origin.git")
+            self.assertTrue(repos.has_origin(tmp))
+
 
 if __name__ == "__main__":
     unittest.main()

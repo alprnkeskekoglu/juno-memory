@@ -98,7 +98,7 @@ def number(value: object, default: float) -> float:
 
 
 def spent_today(cfg: config.Config, now: float | None = None) -> float:
-    today = time.strftime("%Y-%m-%d", time.localtime(now))
+    today = time.strftime("%Y-%m-%d", time.localtime(time.time() if now is None else now))
     return sum(
         number(r.get("cost_usd"), 0.0)
         for r in read_runs(cfg)

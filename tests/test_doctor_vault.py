@@ -85,7 +85,7 @@ class Pure(unittest.TestCase):
         self.assertEqual(dv.pitfall_checks(line + "\n", "none")[0][0], "PASS")
         self.assertEqual(dv.pitfall_checks("- broken\n", "none")[0][0], "WARN")
         many = "\n".join([line] * 61)
-        self.assertTrue(any("over 60" in d for _, _, d in dv.pitfall_checks(many, "none")))
+        self.assertEqual(dv.pitfall_checks(many, "none")[0][0], "PASS")
 
     def test_threads(self) -> None:
         now = time.mktime(time.strptime("2026-11-07", "%Y-%m-%d"))

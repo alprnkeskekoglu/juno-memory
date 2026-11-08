@@ -8,16 +8,6 @@ RUN_MAX = 30
 LINE_MIN = 8
 LINE_MAX = 300
 NEAR_RATIO = 0.88
-PITFALL_LINES = 60
-FILE_LINES = {
-    "pitfalls.md": PITFALL_LINES,
-    "inbox.md": 40,
-    "knowledge": 60,
-    "decisions": 40,
-    "projects": 30,
-    "self": 60,
-    "procedures": 40,
-}
 TEXT_MAX = {"note": 2000, "idea": 1500, "card": 1500, "procedure": 2000}
 FORGET_DENIED = ("rules", "protocol", "_generated", "archive", ".git")
 FIX_DENIED_FILES = ("core.md", "juno-brain.toml")
@@ -47,16 +37,6 @@ def check_length(text: str, kind: str) -> None:
 def check_line(text: str, label: str) -> None:
     if not LINE_MIN <= len(text) <= LINE_MAX:
         raise Refused(f"{label} must be {LINE_MIN}-{LINE_MAX} characters")
-
-
-def file_cap(rel: str) -> int | None:
-    if "/" not in rel:
-        return FILE_LINES.get(rel)
-    return FILE_LINES.get(rel.split("/", 1)[0])
-
-
-def count_lines(text: str) -> int:
-    return sum(1 for line in text.splitlines() if line.startswith("- "))
 
 
 def duplicate(lines: list[str], text: str, preset: str) -> tuple[int, bool] | None:

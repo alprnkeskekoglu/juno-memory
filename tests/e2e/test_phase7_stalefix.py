@@ -123,6 +123,27 @@ class WeeklyStaleFixer(Case):
         self.assertEqual(self.get(REL), self.original)
         self.assertNotIn(OLD_LINE, self.archive_text())
 
+    def test_a_repo_without_a_remote_is_read_at_its_local_default_branch(self) -> None:
+        self.world.go_local()
+        feature = self.world.git(self.world.app, "rev-parse", "feature")
+        self.assertNotEqual(feature, self.world.sha)
+        _, row = self.run_job("--job")
+        self.assertEqual(row["status"], "ok", row)
+        sha = self.world.sha
+        self.assertEqual(row["refs"], {"app": sha[:8]})
+        self.assertEqual(row["branches"], {"app": "main"})
+        self.assertEqual(row["fetch"], {"app": "no remote"})
+        text = self.get(REL)
+        line = next(x for x in text.splitlines() if "src/retry.py" in x and "repo app@" in x)
+        self.assertRegex(line, r"\b5\b", text)
+        self.assertNotRegex(line, r"\b[39]\b")
+        self.assertIn(f"src: repo app@{sha[:8]} · {day(0)}", line)
+        records = [r for r in self.writes() if r.get("run") == row["run"]]
+        self.assertTrue(records, self.writes())
+        self.assertTrue(all(str(r["evidence"]).startswith(f"repo:app@{sha}:") for r in records))
+        with open(os.path.join(self.world.app, "src", "retry.py"), encoding="utf-8") as handle:
+            self.assertEqual(handle.read(), "RETRY_LIMIT = 9\n")
+
     def test_the_job_refuses_inside_a_claude_session(self) -> None:
         env = job_env(self)
         env["CLAUDECODE"] = "1"

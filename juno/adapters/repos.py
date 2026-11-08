@@ -175,3 +175,16 @@ def default_ref(repo_dir: str, order: list[str]) -> tuple[str, str] | None:
             return head_ref, head_sha
         return ref, sha
     return None
+
+
+def has_origin(repo_dir: str) -> bool:
+    done = git.result(["remote", "get-url", "origin"], repo_dir, 20)
+    return done is not None and done.returncode == 0
+
+
+def local_default_ref(repo_dir: str, order: list[str]) -> tuple[str, str] | None:
+    for name in order:
+        sha = commit_sha(repo_dir, f"refs/heads/{name}")
+        if sha is not None:
+            return name, sha
+    return None
