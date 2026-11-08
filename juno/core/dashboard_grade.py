@@ -62,7 +62,26 @@ def grade_queues(block: dict[str, Any], t: Text) -> Row:
 
 def grade_stale(block: dict[str, Any], t: Text) -> Row:
     detail = t("g_stale_detail", block["stale"], block["total"])
-    return row("stale", t("g_stale"), "yellow" if block["stale"] else "green", detail, "juno stale")
+    level = "yellow" if block["stale"] else "green"
+    fixer = block.get("fixer")
+    last = fixer.get("last") if isinstance(fixer, dict) else None
+    if isinstance(last, dict):
+        if last.get("status") in ("ok", "budget"):
+            detail += " · " + t(
+                "g_stalefix_detail",
+                last.get("day"),
+                last.get("fixed", 0),
+                last.get("archived", 0),
+                last.get("unsure", 0),
+            )
+        else:
+            detail += " · " + t("g_stalefix_failed", last.get("day"), last.get("status"))
+        if last.get("unsure") or last.get("status") not in ("ok", "budget"):
+            level = "yellow"
+    if isinstance(fixer, dict) and fixer.get("overdue"):
+        detail += " · " + t("g_stalefix_overdue")
+        level = "yellow"
+    return row("stale", t("g_stale"), level, detail, "juno stale")
 
 
 def grade_index(block: dict[str, Any], t: Text) -> Row:

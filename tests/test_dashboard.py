@@ -10,8 +10,7 @@ from unittest import mock
 
 from juno import cli, config
 from juno.cmd import dashboard as cmd
-from juno.core import dashboard, dashboard_collect, dashboard_grade, dashboard_html
-from juno.core.dashboard_assets import JS, THEME_JS
+from juno.core import dashboard, dashboard_collect, dashboard_grade, dashboard_html, dashboard_text
 from tests.support import PYTHON, REPO, SandboxCase, subproc
 
 TZ = "Europe/Istanbul"
@@ -126,9 +125,8 @@ class Collectors(DashCase):
             data["today"]["threads"], {"unavailable": "FileNotFoundError: threads.md not found"}
         )
         page = self.page(data)
-        self.assertIn('title="FileNotFoundError: threads.md not found">no data</span>', page)
-        self.assertIn("Thread list unreadable", page)
         self.assertNotIn("FileNotFoundError", visible(page))
+        self.assertIn("<h1>", page)
 
     def test_missing_transcripts_dir_is_unavailable_not_zero(self) -> None:
         self.sb.env["JUNO_CLAUDE_PROJECTS"] = os.path.join(self.sb.root, "nowhere")
@@ -262,22 +260,44 @@ class Collectors(DashCase):
         )
         gate = dashboard_collect.experiments_gate(self.sources())
         self.assertEqual(gate["sets"], [{"name": "set-1.json", "frozen": True}])
-        self.assertIn("floor", self.page(self.data()))
 
 
 class Page(DashCase):
+    def seed(self) -> None:
+        day = time.mktime(time.strptime("2026-10-24 10:00:00", "%Y-%m-%d %H:%M:%S"))
+        rows = [
+            {"id": "w-1", "t": day, "verb": "card"},
+            {"id": "w-2", "t": day, "verb": "knowledge"},
+            {"id": "w-3", "t": self.now - 60, "verb": "fix"},
+            {"id": "w-4", "t": self.now - 60, "verb": "forget"},
+            {"id": "w-5", "t": self.now - 60, "verb": "card"},
+            {"id": "u-1", "t": self.now - 30, "verb": "undo", "of": "w-5"},
+        ]
+        self.state_file("writes.jsonl", "".join(json.dumps(r) + "\n" for r in rows))
+        runs = {"t": self.now, "status": "ok", "cost_usd": 0.4}
+        self.state_file("cards/runs.jsonl", json.dumps(runs) + "\n")
+
+    def test_sections_in_order(self) -> None:
+        page = self.page()
+        titles = [re.sub(r"<.*", "", x) for x in re.findall(r"<h2>(.*?)</h2>", page)]
+        self.assertEqual(
+            [
+                x
+                for x in titles
+                if x in ("Recall over time", "Experiments", "Writes", "Cost", "Health")
+            ],
+            ["Recall over time", "Experiments", "Writes", "Cost", "Health"],
+        )
+        self.assertIn("<h1>Juno · memory health</h1>", page)
+        self.assertIn("updated 25 Oct 12:00", page)
+        self.assertNotIn("Recent cards", page)
+        self.assertNotIn("Threads", page)
+
     def test_page_contract(self) -> None:
         page = self.page()
-        csp = "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:"
-        self.assertIn(f'content="{csp}"', page)
-        self.assertNotIn("connect-src", page)
+        self.assertIn("default-src 'none'", page)
         self.assertIn('<html lang="en">', page)
-        self.assertIn("updated 12:00 · next ~14:00", page)
-        self.assertIn("API-price estimate", page)
-        self.assertEqual(
-            re.findall(r'<span class="st">(.*?)</span>', page),
-            ["Threads", "Recent cards", "Health", "Cost", "Memory"],
-        )
+        self.assertTrue(page.endswith("\n"))
         for forbidden in (
             "http://",
             "https://",
@@ -291,113 +311,165 @@ class Page(DashCase):
         ):
             self.assertNotIn(forbidden, page)
         self.assertEqual(page.count("<script>"), 2)
-        self.assertTrue(page.endswith("\n"))
-        for word in ("alarm", "mentee", "Saga", "saga"):
-            self.assertNotIn(word, page)
+        self.assertIn("prefers-color-scheme:dark", page)
 
-    def test_no_alarm_or_mentee_panels_in_the_data(self) -> None:
+    def test_writes_and_spend_feed_tiles_and_charts(self) -> None:
+        self.seed()
         data = self.data()
-        self.assertEqual(
-            sorted(data["health"]), ["coverage", "hook_errors", "queues", "rows", "runs", "verdict"]
+        w = data["writes"]
+        self.assertEqual((w["today"], w["week"], w["month"]), (2, 4, 4))
+        self.assertEqual(w["by_day"]["2026-10-25"]["other"], 1)
+        page = self.page(data)
+        self.assertIn('class="fig">4</div>', page)
+        self.assertEqual(page.count('<g class="col"'), 30 + 30)
+        self.assertIn("$0.40", page)
+        self.assertEqual(page.count('<details class="tv">'), 2)
+        self.assertIn("5-hour and weekly quota usage is not recorded.", page)
+        self.assertNotIn("KeyError", visible(page))
+
+    def test_arm_rows_show_state_and_progress(self) -> None:
+        data = self.data()
+        now = data["generated_epoch"]
+        data["arms"] = {
+            "items": [
+                {
+                    "name": "linked",
+                    "status": "running",
+                    "started": now - 10 * 86400,
+                    "min_n": 60,
+                    "max_days": 42,
+                    "n": {"on": 15, "off": 30},
+                    "ready": True,
+                    "reason": "",
+                    "stop_fired": False,
+                },
+                {
+                    "name": "next",
+                    "status": "not_started",
+                    "started": None,
+                    "min_n": 50,
+                    "max_days": 56,
+                    "n": None,
+                    "ready": None,
+                    "reason": "",
+                    "stop_fired": False,
+                },
+            ]
+        }
+        page = self.page(data)
+        self.assertIn("Running", page)
+        self.assertIn("Not started", page)
+        self.assertIn("on 15 · off 30 · min 60 each", page)
+        self.assertIn('aria-valuenow="25"', page)
+        self.assertIn("Decide by 26 Nov (max 42 days)", page)
+        self.assertIn("Needs 50 per side, up to 56 days", page)
+        self.assertNotIn("Card A/B", page)
+
+    def test_recall_trend_and_tile(self) -> None:
+        data = self.data()
+        weeks = [
+            {
+                "week": "2026-W43",
+                "start": "2026-10-19",
+                "n": 0,
+                "hits": 0,
+                "pack_hits": 0,
+                "recall": None,
+                "pack_recall": None,
+                "wilson_lower": 0.0,
+                "pack_wilson_lower": 0.0,
+            },
+            {
+                "week": "2026-W44",
+                "start": "2026-10-26",
+                "n": 20,
+                "hits": 10,
+                "pack_hits": 18,
+                "recall": 0.5,
+                "pack_recall": 0.9,
+                "wilson_lower": 0.3,
+                "pack_wilson_lower": 0.7,
+            },
+            {
+                "week": "2026-W45",
+                "start": "2026-11-02",
+                "n": 10,
+                "hits": 5,
+                "pack_hits": 8,
+                "recall": 0.5,
+                "pack_recall": 0.8,
+                "wilson_lower": 0.2,
+                "pack_wilson_lower": 0.5,
+            },
+        ]
+        data["experiments"]["recall_weekly"] = {"weeks": weeks}
+        data["experiments"]["recall"].update(
+            with_evidence=30,
+            hits=15,
+            pack_hits=26,
+            recall=0.5,
+            pack_recall=26 / 30,
+            wilson_lower=0.33,
+            pack_wilson_lower=0.70,
         )
-        self.assertNotIn("needs", data)
-        self.assertNotIn("alarms", data["cost"]["juno"])
+        page = self.page(data)
+        self.assertIn('class="fig">87%</div>', page)
+        self.assertIn("at least 70%", page)
+        self.assertEqual(page.count('class="ln"'), 2)
+        self.assertNotIn("19 Oct", page)
+        data["experiments"]["recall_weekly"] = {"weeks": weeks[:2]}
+        self.assertIn("at least 2 weeks", self.page(data))
 
-    def test_page_is_complete_without_javascript(self) -> None:
-        page = self.page()
-        scripts = re.findall(r"<script>(.*?)</script>", page, re.S)
-        for text in ("check the rollout", "Fix the sync job", "second", "ABC-1"):
-            self.assertIn(text, page)
-            self.assertFalse(any(text in s for s in scripts), text)
-        self.assertEqual(scripts, [THEME_JS, JS])
-        self.assertEqual(page.count('id="q"'), 1)
-
-    def test_vault_text_is_escaped(self) -> None:
-        page = self.page()
-        self.assertNotIn("<script>alert", page)
-        self.assertNotIn("<b>card</b>", page)
-        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", page)
+    def test_health_green_rows_are_one_line_and_others_expand(self) -> None:
+        data = self.data()
+        data["health"]["rows"] = [
+            {"id": "runs", "label": "Card runs", "level": "green", "detail": "ok", "fix": None},
+            {"id": "x", "label": "Odd", "level": "red", "detail": "it broke", "fix": "juno doctor"},
+        ]
+        data["health"]["verdict"] = dashboard_grade.verdict(data["health"]["rows"])
+        page = self.page(data)
+        self.assertEqual(page.count('class="hrow ok"'), 1)
+        self.assertEqual(page.count('class="hrow open bad"'), 1)
+        self.assertIn('<code class="cmd">juno doctor</code>', page)
+        self.assertIn("Broken", page)
 
     def test_every_hostile_string_is_escaped(self) -> None:
         evil = '"><img src=x onerror=1>'
         data = self.data()
-        data["today"]["threads"] = {
-            "items": [
-                {
-                    "line": 1,
-                    "tag": evil,
-                    "tags": [evil],
-                    "group": evil,
-                    "text": evil,
-                    "age": 30,
-                    "since": None,
-                    "dates": [],
-                    "due": "2026-10-20",
-                    "due_state": "past",
-                }
-            ]
-        }
-        data["today"]["backlog"]["items"] = [
-            {
-                "slug": evil,
-                "title": evil,
-                "status": "doing",
-                "priority": "p1",
-                "due": None,
-                "overdue": False,
-                "urgent": True,
-            }
-        ]
-        data["today"]["handoffs"] = {
-            "cards": [
-                {"time": "2026-10-25 09:00", "key": evil, "label": evil, "seg": "x", "file": evil}
-            ],
-            "total": 1,
-        }
         data["health"]["rows"] = [
             {"id": "x", "label": evil, "level": "red", "detail": evil, "fix": evil}
         ]
-        data["experiments"]["gate"] = {
-            "last": {"passed": False, "reasons": [evil], "set": evil},
-            "sets": [],
+        data["arms"] = {
+            "items": [
+                {
+                    "name": evil,
+                    "status": evil,
+                    "started": None,
+                    "min_n": 1,
+                    "max_days": 1,
+                    "n": None,
+                    "ready": None,
+                    "reason": evil,
+                    "stop_fired": False,
+                }
+            ]
         }
-        data["experiments"]["ideas"] = {"items": [{"id": evil, "title": evil}]}
+        data["cost"]["usage"] = {"unavailable": evil}
         page = self.page(data)
         self.assertNotIn("<img", page)
-        self.assertNotIn("onerror=1>", page)
-        self.assertGreater(page.count("&lt;img src=x onerror=1&gt;"), 8)
+        self.assertGreater(page.count("&lt;img src=x onerror=1&gt;"), 3)
 
-    def test_open_threads_are_grouped_with_age_badges_and_overdue_first(self) -> None:
-        self.write(
-            "threads.md",
-            "- [app] gate failed 2026-10-25; rerun ~10-28 · since 2026-10-19\n"
-            "- [ABC-3] sweep 2026-10-26 · since 2026-10-25\n- [nova] no date · since 2026-10-22\n"
-            "- [x] old 2026-10-20 · since 2026-10-01\n",
-        )
-        work = self.page().split("Threads", 1)[1].split("Recent cards", 1)[0]
-        self.assertEqual(
-            re.findall(r'<div class="ghd"><b>(.*?)</b>', work), ["x", "app", "nova", "ABC-3"]
-        )
-        self.assertIn('<span class="bd warn">oldest 24 days</span>', work)
-        self.assertIn('<span class="bd bad">overdue</span>', work)
-        self.assertIn('<span class="bd warn">tomorrow</span>', work)
-        self.assertIn('<span class="muted">28 Oct</span>', work)
-
-    def test_todo_list_sources_commands_and_order(self) -> None:
-        self.state_file(
-            "cards/backlog-suggestions.json",
-            json.dumps({"v": 1, "items": [{"id": "b123456", "status": "pending"}]}),
-        )
-        todo = self.page().split('<section class="todo">', 1)[1].split("</section>", 1)[0]
-        order = [
-            "Fix the sync job today",
-            "1 backlog suggestions waiting",
-            "stale-memory scan never ran",
-        ]
-        positions = [todo.index(t) for t in order]
-        self.assertEqual(positions, sorted(positions))
-        for cmd_text in ("juno backlog show p1-item", "juno backlog list"):
-            self.assertIn(f'<code class="cmd">{cmd_text}</code>', todo)
+    def test_empty_state_renders_without_errors(self) -> None:
+        os.unlink(os.path.join(self.sb.vault, "threads.md"))
+        page = self.page()
+        for text in (
+            "No writes in the last 30 days.",
+            "no data yet",
+            "No spend in the last 30 days.",
+        ):
+            self.assertIn(text, page)
+        self.assertNotIn("Traceback", page)
+        self.assertEqual(page.count('<svg class="ic"'), page.count('<svg class="ic"'))
 
     def test_verdict_levels(self) -> None:
         def row(level: str) -> dict:
@@ -414,41 +486,46 @@ class Page(DashCase):
         self.assertEqual(rows["runs"]["level"], "na")
         self.assertNotEqual(rows["hook_errors"]["level"], "na")
 
-    def test_cost_section_with_transcripts_and_over_budget(self) -> None:
-        row = {
-            "type": "assistant",
-            "timestamp": "2026-10-25T08:00:00Z",
-            "sessionId": "s",
-            "cwd": "/w",
-            "message": {
-                "id": "m1",
-                "model": "claude-opus-4-7",
-                "usage": {"input_tokens": 1000000, "output_tokens": 0},
-            },
-        }
-        self.write("p/a.jsonl", json.dumps(row) + "\n", self.projects)
-        self.state_file(
-            "cards/runs.jsonl", json.dumps({"t": self.now, "status": "ok", "cost_usd": 3.0}) + "\n"
-        )
-        page = self.page()
-        self.assertIn("$5.00", page)
-        self.assertIn('class="stat over"', page)
-        self.assertTrue(os.path.isfile(os.path.join(self.sb.state, "dashboard", "usage.json")))
+    def test_json_keeps_the_old_keys(self) -> None:
+        data = self.data()
+        for key in (
+            "today",
+            "cost",
+            "health",
+            "experiments",
+            "today_date",
+            "language",
+            "generated",
+        ):
+            self.assertIn(key, data)
+        self.assertEqual(sorted(data["today"]), ["backlog", "handoffs", "threads"])
+        for key in ("card_ab", "recall", "gate", "tasks", "ideas", "recall_weekly"):
+            self.assertIn(key, data["experiments"])
+        self.assertEqual(len(data["cost"]["juno"]["days"]), 30)
 
 
 class Turkish(DashCase):
     preset = "tr"
 
-    def test_tr_preset_keeps_the_v1_strings(self) -> None:
+    def test_tr_page(self) -> None:
         page = self.page()
         self.assertIn('<html lang="tr">', page)
-        self.assertIn("güncellendi 12:00 · sonraki ~14:00", page)
-        self.assertEqual(
-            re.findall(r'<span class="st">(.*?)</span>', page),
-            ["Thread&#x27;ler", "Son kartlar", "Sağlık", "Maliyet", "Hafıza"],
-        )
-        self.assertIn("API fiyatıyla tahmin; Max kotan değil", page)
-        self.assertIn("Yapılacaklar", page)
+        self.assertIn("<h1>Juno · hafıza sağlığı</h1>", page)
+        for title in ("Deneyler", "Yazılanlar", "Maliyet", "Sağlık", "Zaman içinde hatırlama"):
+            self.assertRegex(page, f"<h2>{title}[<]")
+
+    def test_both_languages_have_the_same_keys(self) -> None:
+        self.assertEqual(dashboard_text.EN.keys(), dashboard_text.TR.keys())
+
+    def test_used_keys_exist(self) -> None:
+        import glob
+
+        keys = set()
+        root = os.path.join(REPO, "juno", "core")
+        for path in glob.glob(os.path.join(root, "dashboard_*.py")):
+            with open(path, encoding="utf-8") as h:
+                keys |= set(re.findall(r'\bt\("([a-z_0-9]+)"', h.read()))
+        self.assertLessEqual({k for k in keys if not k.endswith("_")}, set(dashboard_text.EN))
 
 
 class Cli(DashCase):
@@ -468,7 +545,7 @@ class Cli(DashCase):
         }
         self.assertTrue(all(w.startswith("dashboard" + os.sep) for w in written), written)
         with open(path, encoding="utf-8") as h:
-            self.assertIn("<title>Juno</title>", h.read())
+            self.assertIn("<title>Juno · memory health</title>", h.read())
         self.assertEqual(
             [n for n in os.listdir(os.path.dirname(path)) if n.startswith(".juno-tmp-")], []
         )

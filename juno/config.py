@@ -97,6 +97,23 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "decay": {"window_days": 90},
     "keys": {"weight": 0.0, "model": ""},
     "self": {"max_lines": 12, "max_chars": 1200},
+    "stale": {
+        "auto_fix": False,
+        "weekday": "sun",
+        "start_hour": 9,
+        "end_hour": 21,
+        "model": "sonnet",
+        "file_budget_usd": 0.4,
+        "run_budget_usd": 3.0,
+        "timeout_seconds": 600,
+        "max_files": 10,
+        "max_changes_per_file": 5,
+        "max_changes_per_run": 25,
+        "max_lines_per_file": 12,
+        "branch_order": ["develop", "main", "master"],
+        "fetch": True,
+        "busy_minutes": 20,
+    },
 }
 
 PRESETS: dict[str, dict[str, list[str]]] = {

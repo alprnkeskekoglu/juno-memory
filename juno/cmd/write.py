@@ -41,6 +41,18 @@ def guard(cfg: config.Config) -> Segment:
     return ledgerio.fold(cfg, cfg.env["CLAUDE_CODE_SESSION_ID"])
 
 
+JOBS = frozenset({"stale-weekly"})
+
+
+def guard_job(cfg: config.Config, name: str, rid: str) -> Segment:
+    if name not in JOBS:
+        raise Refused(f"{name!r} is not a known job")
+    reason = checks.job_refusal(cfg)
+    if reason:
+        raise Refused(reason)
+    return ledgerio.fold(cfg, f"{checks.JOB_PREFIX}{name}-{rid}")
+
+
 def preset(cfg: config.Config) -> str:
     return cfg.get_str("language", "preset")
 

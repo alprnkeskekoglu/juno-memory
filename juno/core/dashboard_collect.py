@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from juno.adapters import fs
-from juno.core import backlog, vaultfmt
+from juno.core import backlog, schedule, stalerow, vaultfmt
 from juno.core import dashboard_grade as grade
 from juno.core import dashboard_parse as parse
 from juno.core import dashboard_scan as scan
@@ -25,6 +25,8 @@ ERROR_TAIL = 5
 MISSES_KEPT = 5
 PLAIN_STATUSES = ("planned", "in-progress")
 QUOTA_KEYS = ("five_hour", "seven_day")
+WRITE_KINDS = ("card", "knowledge", "decision", "pitfall", "rule", "fix")
+WEEKS = 8
 STALE_CACHE_VERSION = 1
 SKIP_TOP = {".git", ".obsidian", "archive", "_generated"}
 
@@ -40,6 +42,7 @@ class Sources:
     t: Text
     ticket: re.Pattern[str] | None = None
     daily_budget: float | None = None
+    arm_rows: Callable[[], list[dict[str, Any]]] | None = None
 
 
 def unavailable(exc: BaseException) -> Block:
@@ -188,7 +191,7 @@ def spend_by_day(rows: list[Block], days: list[str]) -> dict[str, float]:
 
 
 def cost_juno(src: Sources, now: float) -> Block:
-    days = usage.window_days(usage.WINDOW_DAYS, now)
+    days = usage.window_days(usage.LOOKBACK_DAYS, now)
     runs, bad = read_jsonl(os.path.join(src.state, "cards", "runs.jsonl"))
     return {
         "days": days,
@@ -202,6 +205,50 @@ def collect_cost(src: Sources, now: float) -> Block:
         "quota": guarded(cost_quota, src),
         "juno": guarded(cost_juno, src, now),
     }
+
+
+def write_records(state: str) -> tuple[list[Block], int]:
+    rows: list[Block] = []
+    bad = 0
+    for name in ("writes.jsonl.1", "writes.jsonl"):
+        path = os.path.join(state, name)
+        if os.path.isfile(path):
+            found, skipped = read_jsonl(path)
+            rows += found
+            bad += skipped
+    return rows, bad
+
+
+def collect_writes(src: Sources, now: float) -> Block:
+    days = usage.window_days(usage.LOOKBACK_DAYS, now)
+    rows, bad = write_records(src.state)
+    undone = {str(r.get("of")) for r in rows if r.get("verb") == "undo"}
+    kinds = (*WRITE_KINDS, "other")
+    by_day = {d: dict.fromkeys(kinds, 0) for d in days}
+    for row in rows:
+        epoch = epoch_of(row.get("t"))
+        verb = row.get("verb")
+        if epoch is None or verb == "undo" or str(row.get("id")) in undone:
+            continue
+        day = usage.local_day(epoch)
+        if day in by_day:
+            by_day[day][verb if verb in WRITE_KINDS else "other"] += 1
+    totals = [sum(by_day[d].values()) for d in days]
+    return {
+        "days": days,
+        "kinds": list(kinds),
+        "by_day": by_day,
+        "today": totals[-1],
+        "week": sum(totals[-usage.WINDOW_DAYS :]),
+        "month": sum(totals),
+        "bad_lines": bad,
+    }
+
+
+def collect_arms(src: Sources) -> Block:
+    if src.arm_rows is None:
+        return {"items": []}
+    return {"items": src.arm_rows()}
 
 
 def health_runs(src: Sources, now: float) -> Block:
@@ -323,12 +370,42 @@ def coverage_stale(src: Sources) -> Block:
     return {"stale": len(flagged), "total": len(names), "generated": cache.get("generated")}
 
 
+def schedule_installed(src: Sources) -> bool:
+    agent = os.path.join(src.home, "Library", "LaunchAgents", f"{schedule.LABEL}.plist")
+    unit = os.path.join(src.home, ".config", "systemd", "user", f"{schedule.UNIT}.timer")
+    return os.path.exists(agent) or os.path.exists(unit)
+
+
+def coverage_stalefix(src: Sources, now: float) -> Block:
+    rows, _ = read_jsonl(os.path.join(src.state, *stalerow.RUNS_DIR, stalerow.RUNS_FILE))
+    stamped = [r for r in rows if isinstance(r.get("t"), (int, float))]
+    seen = [r for r in stamped if r.get("status") in ("ok", "failed", "refused", "budget")]
+    last_ok = [r for r in stamped if r.get("status") == "ok"]
+    installed = schedule_installed(src)
+    overdue = installed and (not last_ok or now - last_ok[-1]["t"] > stalerow.OVERDUE_DAYS * 86400)
+    keep = ("day", "status", "fixed", "archived", "unsure", "reason", "run")
+    return {
+        "last": {k: seen[-1].get(k) for k in keep} if seen else None,
+        "installed": installed,
+        "overdue": overdue,
+    }
+
+
+def with_fixer(stale_block: Block, fixer: Block) -> Block:
+    if "unavailable" in stale_block or "unavailable" in fixer:
+        return stale_block
+    return dict(stale_block, fixer=fixer)
+
+
 def collect_health(src: Sources, now: float) -> Block:
     return {
         "runs": guarded(health_runs, src, now),
         "hook_errors": guarded(health_hook_errors, src, now),
         "queues": guarded(health_queues, src),
-        "coverage": {"index": guarded(coverage_index, src), "stale": guarded(coverage_stale, src)},
+        "coverage": {
+            "index": guarded(coverage_index, src),
+            "stale": with_fixer(guarded(coverage_stale, src), guarded(coverage_stalefix, src, now)),
+        },
     }
 
 
@@ -366,6 +443,16 @@ def experiments_recall(src: Sources, now: float) -> Block:
         return dict(result, misses=result["misses"][:MISSES_KEPT])
 
     return cached_result(src, "recall.json", now, compute)
+
+
+def experiments_recall_weekly(src: Sources, now: float) -> Block:
+    def compute() -> Block:
+        weeks: list[Block] = eval_module().recall_weekly(
+            src.state, src.vault, src.transcripts, now, WEEKS
+        )
+        return {"weeks": weeks}
+
+    return cached_result(src, "recall-weekly.json", now, compute)
 
 
 def experiments_gate(src: Sources) -> Block:
@@ -421,6 +508,7 @@ def collect_experiments(src: Sources, now: float) -> Block:
     return {
         "card_ab": guarded(experiments_ab, src, now),
         "recall": guarded(experiments_recall, src, now),
+        "recall_weekly": guarded(experiments_recall_weekly, src, now),
         "gate": guarded(experiments_gate, src),
         "tasks": guarded(experiments_tasks, src),
         "ideas": guarded(experiments_ideas, src),
@@ -438,6 +526,8 @@ def collect(src: Sources, now: float) -> Block:
         "cost": collect_cost(src, now),
         "health": collect_health(src, now),
         "experiments": collect_experiments(src, now),
+        "writes": guarded(collect_writes, src, now),
+        "arms": guarded(collect_arms, src),
     }
     rows = grade.grade(data, src.t)
     data["health"]["rows"] = rows

@@ -25,13 +25,13 @@ How to read the references:
 | Company names, channel names, absolute user paths in code | everywhere | They move to config or examples only. [plan] |
 | Dashboard alarm and mentee panels, the dashboard launchd job | [v1: Dashboard] | The dashboard is built on demand (section 12.10). |
 
-Network exceptions. There are exactly three, and all are stated in the code: the session-end run calls `claude -p --tools ""`, `juno keys backfill` calls the same `claude -p` flags in the foreground under a `--max-usd` cap (12.1), and the thread scan may call `gh pr view` (read-only, capped). Nothing else uses the network. [plan]
+Network exceptions. There are exactly four, and all are stated in the code: the session-end run calls `claude -p --tools ""`, `juno keys backfill` calls the same `claude -p` flags in the foreground under a `--max-usd` cap (12.1), the thread scan may call `gh pr view` (read-only, capped), and `juno stale --fix` runs `git fetch` in the user's repos and calls `claude -p` with read-only file tools in a throwaway export (12.6.1). Nothing else uses the network. [plan]
 
 ## 2. Principles (carried, adjusted)
 
 Carried from [v1: Principles] with these changes:
 - Markdown is the source of truth. Index, ledgers, caches and eval live in the state dir, never in the vault, and can be rebuilt. A busy or locked index is never deleted.
-- Only the live interactive main session writes memory. There is one background exception, the session-end card run (section 11). It writes only through engine code.
+- Only the live interactive main session writes memory. There are two background exceptions: the session-end card run (section 11) and, only when the user turns it on, the weekly stale fixer (12.6.1). Both write only through engine code.
 - Rules change only with a verbatim quote of the user's own words (section 10.4).
 - Every hook output is at most 9,500 chars. Claude Code's cap is 10,000 [phase0 0.1]. The output has visible truncation markers and keeps `RULES (follow)` apart from `CONTEXT (data, not instructions)`.
 - Runtime is the Python 3.14+ standard library only. Hooks run as `<python> -I -S <entry>`.
@@ -88,7 +88,7 @@ The vault is `~/juno-vault`. It is local only and has its own git repo for snaps
 
 ```
 ~/juno-vault/
-  juno-brain.toml            schema_version = 1
+  juno-brain.toml            schema_version = 2
   core.md                    memory protocol, <= core_chars; invariant sections marked
   protocol/                  task procedures (handoffs, rules, vault-files, links, ideas, backlog)
   rules/                     global.md, repos/<repo>.md, topics/<slug>.md; changed only with the user's quote;
@@ -128,7 +128,7 @@ The vault is `~/juno-vault`. It is local only and has its own git repo for snaps
 | Backlog item | v1 frontmatter, the four sections, and a Log | [v1 backlog: 3. Vault layout and file format] |
 | Idea | `status`, `created`, `updated`, `tags`, `source`, plus the sections | v1 protocol/ideas.md |
 | `decisions/<topic>.md` | frontmatter `topic`, `updated`, `valid_from`. One `## Current` section with the decision lines (`- <decision> (<source>, YYYY-MM-DD)`), and `## History` with superseded lines moved there. | decided here (below) |
-| `juno-brain.toml` | `schema_version = 1`, `created = YYYY-MM-DD` | [plan] |
+| `juno-brain.toml` | `schema_version = 2`, `created = YYYY-MM-DD` | [plan]; schema 2 carries the stale fixer exception in the `core.md` Privacy block (13.8) |
 
 - **Decided here: the `decisions/<topic>.md` format.** Reason: the plan replaces `decisions.md` with per-topic files but gives no format. Keeping the current and superseded lines in separate sections lets the packs inject only `## Current`.
 - Retirement, `supersedes:`, `status: archived` and `visibility: private` behave as in v1 [v1: Phase 2 item 2]. The protected folders are `rules`, `tasks`, `handoffs`, `projects`, `decisions` and `self`. **Decided here: `decisions` and `self` are added to the protected list.** Reason: they hold the current truth and must not be retired by a stray `supersedes:`.
@@ -220,6 +220,14 @@ The path is `~/.config/juno/juno.toml`. When `XDG_CONFIG_HOME` is set, the path 
 | `[packs] purpose` | `false` | the profile Purpose section in repo packs (12.2) |
 | `[keys] weight` | 0.0 | the fourth BM25 weight, for the fact keys of a passage (12.1); 0 turns keys off, both in ranking and in matching |
 | `[keys] model` | `""` (= `[handoff] model`) | model of `juno keys backfill` |
+| `[stale] auto_fix` | `false` | the switch of the weekly stale fixer (12.6.1); `juno schedule install` and a real `stale --fix` refuse while it is `false` |
+| `[stale] weekday`, `start_hour`, `end_hour` | `"sun"`, 9, 21 | the schedule fires hourly in this window until the week has a successful run (13.9) |
+| `[stale] model` | `"sonnet"` | model of the fixer |
+| `[stale] file_budget_usd`, `run_budget_usd`, `timeout_seconds` | 0.40, 3.0, 600 | per file and per run spend caps, and the timeout of one model call |
+| `[stale] max_files`, `max_changes_per_file`, `max_changes_per_run`, `max_lines_per_file` | 10, 5, 25, 12 | files checked per run, writes per file and per run, candidate lines sent per file |
+| `[stale] branch_order` | `["develop","main","master"]` | the first existing `origin/<name>` is the default branch the fixer reads |
+| `[stale] fetch` | `true` | `git fetch origin` before pinning |
+| `[stale] busy_minutes` | 20 | `--job` defers while any session ledger changed within this window or a card run is active |
 
 Dropped keys: `guards`, `[known_gaps]`, `[thresholds] rule_grant_seconds`, `[mentees]`, `[ab] card_holdout` (ignored; doctor warns, see 12.12).
 
@@ -295,7 +303,7 @@ Non-interactive sessions get nothing and write nothing.
 | Event | Matcher | Does | Source |
 |---|---|---|---|
 | SessionStart (handler `rules`) | - | retention prune; core.md and global rules as RULES | [v1: Phase 1 hooks], [v1: Injection] |
-| SessionStart (handler `context`) | - | refresh `plugin_root` when `CLAUDE_PLUGIN_ROOT` differs; stub pass and late runs (max 2); `_generated/learned.md` rebuild when stale; overview or repo pack; previous-segment line; repeated hook-error line; general pitfalls (5 lines, 1,200 chars); rule, thread candidate nudges (4 each, 1,600 chars); ideas line; local time. The context opens with the segment line and a `Juno vault: <absolute path>.` line resolved from the config, so a model reads vault files at the real path. The stub pass and nudges are skipped after compact. | [v1: Injection], [v1: Enforcement], [v1: Session-end cards] |
+| SessionStart (handler `context`) | - | refresh `plugin_root` when `CLAUDE_PLUGIN_ROOT` differs; stub pass and late runs (max 2); `_generated/learned.md` rebuild when stale; overview or repo pack; previous-segment line; repeated hook-error line; the weekly report line; the stale fixer line (12.6.1); general pitfalls (5 lines, 1,200 chars); rule, thread candidate nudges (4 each, 1,600 chars); ideas line; local time. The context opens with the segment line and a `Juno vault: <absolute path>.` line resolved from the config, so a model reads vault files at the real path. The stub pass and nudges are skipped after compact. | [v1: Injection], [v1: Enforcement], [v1: Session-end cards] |
 | SubagentStart | - | subagent header, RULES (global ≤ 2,500, ticket/repo rules, delivered topics), CONTEXT pointer; ≤ 3,000 chars; nothing for headless parents | [v1: Injection] Subagents |
 | UserPromptSubmit | - | append the typed prompt (paste-stripped, redacted, `prompt_id`); count the turn; record the session title; `[nosave]`; ticket packs (only with `[jira]`); correction cue line; topic rules, knowledge and pitfalls on prompt triggers; shadow record (150 ms, main session) | [v1: Phase 1 hooks], [v1: Phase 3] |
 | PreToolUse | `Edit\|Write\|MultiEdit\|NotebookEdit\|Bash\|Read\|Glob\|Grep\|AskUserQuestion\|mcp__.*` | topic rules, knowledge, pitfalls on tool triggers (claimed per segment and agent); AskUserQuestion `ask` record (clean or prefilled, main session); refusal of Edit/Write/MultiEdit/NotebookEdit on any vault path and on Juno's own state (section 14.4), and of a subagent Bash call whose marker cannot be recorded (8.3); these are the only denies Juno issues. A write tool outside both falls through to the topic triggers. | [v1: Injection] Topic rules, [v1: Rules policy] AskUserQuestion answers |
@@ -408,6 +416,8 @@ The shim is `juno <verb>`. Each verb with `--json` prints one JSON object. Exit 
 | `tasks [--status] [--repo] [--json]` | - | [v1: Phase 2 item 4]; prints "jira not configured" without `[jira]` |
 | `ideas [--status] [--tag] [--json]` | - | [v1: Decisions] ideas |
 | `stale [--days N] [--json]` | `stale.json` | section 12.6 |
+| `stale --fix [--dry-run] [--limit N] [--max-usd X] [--file REL] [--job] [--json]` | vault (through the gate), `jobs/stale-weekly/runs.jsonl`, vault `.git` | section 12.6.1; calls the model; a real run needs `[stale] auto_fix`, schema 2 and no Claude session; `--dry-run` writes only the run row |
+| `schedule install\|remove\|status [stale-weekly] [--json]` | `~/Library/LaunchAgents` or `~/.config/systemd/user` | section 13.9 |
 | `decay [--days N] [--json]` | - | Phase 6.5; read-only: knowledge, procedure, note and idea files (not private, archived or retired) with no `usage.jsonl` signal within the window, counted from max(file `created` else mtime, the trace's first row); there is no mover |
 | `doctor [--purge-synthetic] [--json]` | state; ledgers with `--purge-synthetic` | section 13.6 |
 | `snapshot [-m msg] [--json]` | vault `.git` | [v1: Phase 2 item 6]; no quote (8.2) |
@@ -550,6 +560,22 @@ Carried from [v1: Stale memory detection]:
 - Signals are age over `stale_days`, and code drift: a commit after the baseline touching a backticked path. Git limits are 1.5 s per call and a 10 s budget.
 - The repo is resolved through `[repos] roots`.
 - Verdicts go to `stale.json`. Doctor and packs read the cache only, signature-checked. Hooks never run git for stale detection.
+- `scan` measures drift against the checked-out HEAD and the working tree. That is a known limit; the fixer (12.6.1) does not inherit it.
+
+#### 12.6.1 Weekly stale fixer
+`stale --fix` checks the knowledge and profile lines that name a code path against the repo's fetched default branch, and fixes or archives the lines the code contradicts. It is off unless `[stale] auto_fix = true`.
+1. **Select.** Files under `knowledge/` and `projects/` that are not private, retired or archived, have at least one backticked path token and either a path that went missing or a commit to a path since the baseline (a missing path alone counts only when the file is older than `stale_days`). Sorted by drift commits, then age; at most `--limit` / `max_files`. Files with no path token (age only) are skipped with `no code anchor`, because there is nothing to check them against.
+2. **Pin.** Per repo (resolved as in 12.6): `git fetch origin` (a failed fetch is tolerated only when `FETCH_HEAD` is under 7 days old), then the first existing `origin/<name>` of `branch_order`; when `origin/HEAD` points elsewhere and that branch's last commit is more than 180 days older than `origin/HEAD`'s, `origin/HEAD` wins. One sha per repo and run. The working tree and the checked-out branch are never read.
+3. **Facts.** The engine computes, at the sha: whether each token's path exists (`git cat-file -e`), up to 20 commits to it since the baseline, and renames.
+4. **Candidates.** Content lines (not headings, markers, frontmatter or fenced blocks, and not lines the secret scan would redact) that hold a drifted or missing token, at most `max_lines_per_file`.
+5. **Model call.** `claude -p --restricted --tools=Read,Grep,Glob --disallowedTools=Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch,Task --permission-mode=dontAsk --setting-sources "" --strict-mcp-config`, `JUNO_DISABLE=1`, the prompt on stdin (flag values use `=`, because a variadic flag before the prompt swallows it), cwd a fresh temp dir holding `git archive <sha>` of the top-level directories of the tokens per repo (capped at 200 MB, then the token paths only). `--restricted` is what confines the file tools to that directory: without it `-p` reads any path (checked on claude 2.1.319, e2e case `ModelCannotReadOutsideItsDirectory`). The model sees no vault and has no write tool. The note lines are JSON-encoded inside a nonce-fenced block as untrusted data. The system prompt names Juno and nobody else.
+6. **Answer.** One JSON object `{"lines":[{"line","was","verdict":"OK|WRONG|GONE|UNSURE","new","evidence":["repo:<name>@<sha>:<path>:<line>"],"why"}]}`.
+7. **Validation before any write.** Unknown keys, duplicate lines, a line that is not a candidate or whose `was` differs from the line byte for byte, and a verdict outside the enum are rejected. Every verdict but UNSURE needs evidence: the repo must be one of the file's repos, the sha a prefix of the pinned sha, and the path a file at that sha with the line inside it (for GONE the evidence may instead name a path the engine found absent). WRONG: `new` (cut at its first ` · `, a final period dropped) must pass the secret and privacy scan, be one line of at most 300 characters, differ from the old text and keep a `difflib` ratio of at least 0.3 against it (a rewrite is rejected); the engine rebuilds the line as the bullet, the new text and ` · src: repo <name>@<sha8> · <date>`. GONE: every path token on the line is absent at the sha, with no rename, and none is unchecked. UNSURE and every rejected verdict are never written. More than `max_changes_per_file` changes, or more than half of a file's candidates changed, writes nothing in that file (`too many changes`). The run stops at `run_budget_usd` / `--max-usd` (`budget`) and after `max_changes_per_run` writes; two model failures in a row end it as `failed`.
+8. **Write.** Identity `job:stale-weekly`: the run refuses unless `[stale] auto_fix`, vault schema 2 or newer, no `CLAUDECODE` / `CLAUDE_CODE_*` session variable, no `*AGENT_ID` and no `JUNO_DISABLE`; it takes the synthetic segment `job-stale-weekly-<run>` (`write.guard_job`); the interactive guard refuses any `job-` sid. Each file is re-read under `vault.lock` (10 s; a busy lock skips the file) and written only if every candidate line is unchanged. A change goes through `gate.commit(..., run_cap=False)` with `actor: job:stale-weekly`, `run: <rid>` and the first verified evidence: WRONG as verb `fix`, GONE through `forget.move` (verbs `forget` and `forget-archive`). A file whose candidates are all settled (OK, fixed or archived) and complete gets `verified: <today>` as verb `verify`. So every write has a backup, a `writes.jsonl` record and a ledger event, and `juno undo --run <rid>` reverts the run.
+9. **Snapshot.** After the writes, `snapshot.take("juno stale-fix <date>: N fixed, M archived")` under the view lock. The snapshot stages the whole vault, so it also commits whatever else changed there. A signing failure (no agent under launchd) is recorded in the row and is not fatal; the next `juno snapshot` commits.
+10. **`--job`.** A week with an `ok` row is a no-op (no row). Otherwise the run defers (`deferred`) while a session ledger changed within `busy_minutes` or a card run is active; the next hourly slot retries (13.9). A run where no repo could be fetched is `failed`, so the slots retry.
+11. **Report.** `<state>/jobs/stale-weekly/runs.jsonl` (90 days): `{t, run, day, week, status ok|dry-run|deferred|refused|failed|budget, files_checked, fixed, archived, verified, unsure, rejected:[{file,line,reason}], skipped:[{file,reason}], writes:[ids], refs:{repo:sha8}, fetch, cost_usd, snapshot}`. SessionStart adds one line `Juno: stale fixer <date>: N lines fixed, M archived, K unsure (juno undo --run <rid>; juno stale for the rest)` once per run (a failed or refused run prints its reason once per reason). The dashboard "Stale memory" row appends the last fix and turns yellow when unsure > 0, the last run failed, or the schedule is installed and the last `ok` run is over 8 days old.
+- **Decided here: `--dry-run` runs without `auto_fix` and inside a Claude session, but not in an agent context or with `JUNO_DISABLE=1`.** Reason: it writes only its run row, and it is the way to look at the fixer before turning it on. It does spend model budget.
 
 ### 12.7 Retirement, supersedes, privacy
 As in [v1: Phase 2 item 2], with the protected list from 4.2. `retired.json` is written at sync, and hooks only read it. `visibility: private` files are excluded from search, recap, packs and digest.
@@ -591,7 +617,7 @@ Read-only views, as in v1. `tasks` and the overview's active tickets apply only 
 ## 13. Install and lifecycle
 
 ### 13.1 `juno init`
-Asks nothing [plan]. It is idempotent, and each step prints one line.
+Asks nothing [plan], except one question at the end of an interactive run (step 8). It is idempotent, and each step prints one line.
 1. Interpreter discovery (13.2). Refuses below 3.14 with one line and exit 2.
 2. Config: creates `juno.toml` when missing, with `[runtime]` first. Otherwise it only adds or updates `[runtime] python` and `plugin_root`, and never changes another key.
 3. State dir: created with mode 0700.
@@ -599,6 +625,7 @@ Asks nothing [plan]. It is idempotent, and each step prints one line.
 5. Settings merge (13.4).
 6. Shim (13.3).
 7. Plugin: init checks whether `juno@<marketplace>` is installed and enabled. When it is not, init prints the `claude plugin install` command and exits 0. **Decided here: init does not install the plugin itself.** Reason: plugin installation belongs to Claude Code's own CLI and trust prompts.
+8. Stale fixer question (user decision, 2026-11-08): only when stdin and stdout are terminals, not with `--dry-run`, and only if `[stale] auto_fix` is not already set in the config and the question was not asked before (marker `stale-fix-asked` in the state dir). `Fix stale notes automatically every Sunday? (model calls, at most $3 a week) [y/N]`, default No. Yes writes `[stale] auto_fix = true` to the config and runs the equivalent of `juno schedule install stale-weekly` (13.9); a refusal there is printed and init still exits 0. A non-interactive init asks nothing and leaves the fixer off.
 
 The first run before the shim exists is `"<plugin root>/bin/juno" init`. The SessionStart launcher prints this command when there is no config (6.1).
 
@@ -680,6 +707,15 @@ A POSIX sh script written by init. It is refused when a non-Juno file already ex
 ### 13.8 `juno migrate`
 - `migrate [--dry-run]` reads `juno-brain.toml` `schema_version` and applies one version step at a time. Each step backs up the vault, writes the new version last, and is idempotent. [plan]
 - History: the `--from-saga` step, `rollback` and the cutover contract were removed by decision 61.
+- Step 1 to 2 (`adapters/migratesteps.py`): in the `core.md` Privacy invariant block, the exact sentence `Write memory only in this interactive session with me, never from a subagent.` gets the stale fixer exception appended (12.6.1, decision 63). It is idempotent, and a block the user edited (no such sentence) is left alone; doctor then WARNs while `[stale] auto_fix` is on and the block does not mention the stale fixer. Fresh vaults come from the template already at schema 2. The code is at schema 2, so doctor FAILs and init stops at an older vault until `juno migrate` ran.
+
+### 13.9 `juno schedule`
+- `schedule install|remove|status [stale-weekly]`, action first like `juno rule add`; the job name is for future jobs. `install` refuses unless `[stale] auto_fix = true` and the vault is at schema 2, and rejects an invalid `weekday` or hour window. `init` offers it once (13.1 step 8) and never installs it otherwise.
+- macOS: `~/Library/LaunchAgents/dev.juno.stale-weekly.plist`, built with `plistlib`: `ProgramArguments` `[<[runtime] python>, -I, -S, <plugin_root>/juno/cli.py, stale, --fix, --job]`, `StartCalendarInterval` one entry per hour from `start_hour` to `end_hour` on `weekday` (so a deferred or missed run retries and launchd fires a missed slot after wake), `EnvironmentVariables` `HOME`, `PATH` from `[handoff] launch_path`, and `JUNO_CONFIG`, `JUNO_VAULT`, `JUNO_STATE`, `JUNO_REPO_ROOTS` when set at install time, stdout and stderr to `<state>/jobs/stale-weekly/stale-weekly.log`, `RunAtLoad` false. Loaded with `launchctl bootstrap gui/<uid>` after a `bootout`.
+- Linux: `~/.config/systemd/user/juno-stale-weekly.service` and `.timer` (`OnCalendar=<Day> *-*-* HH..HH:00:00`, `Persistent=true`), enabled with `systemctl --user enable --now`. Without `systemctl` it prints the crontab line and writes nothing.
+- No path of the machine is in the code: every path is computed at install time from `HOME`, the config and the plugin root. Tests point `JUNO_LAUNCHCTL`, `JUNO_SYSTEMCTL` and `JUNO_SCHEDULE_PLATFORM` at fakes, and never run the real tools.
+- `status` shows installed, loaded, `auto_fix`, the last run row and the next fire time; `remove` unloads and deletes the files.
+- Signed snapshots under launchd need a signing key the job can reach (an ssh-agent or gpg-agent socket in the job's environment); otherwise the row records the failure.
 
 ## 14. Phase 4 write gate
 
@@ -719,7 +755,7 @@ Paths are resolved from the vault root, and a symlink on the way is refused. One
 
 ### 14.3 Undo
 
-`undo <id>` reverts the line hunks of the record, and of the records linked to it for `forget`. It refuses with `Juno: refused: write <id> cannot be undone cleanly (...)` and a pointer to the last snapshot (`git --git-dir <vault>/.git log -1`) when:
+`undo <id>` reverts the line hunks of the record, and of the records linked to it for `forget`. `undo --run <rid>` reverts every live write of one job run (12.6.1), newest first, and reports the ones it had to refuse. It refuses with `Juno: refused: write <id> cannot be undone cleanly (...)` and a pointer to the last snapshot (`git --git-dir <vault>/.git log -1`) when:
 - a later write on the same file touched the same lines (a later write and its own undo cancel out);
 - the write created the file and a later write touched it;
 - the written lines are no longer in the file.
@@ -901,5 +937,7 @@ Each line points to the section that states the decision and its reason.
 60. `[keys] weight` defaults to 0 (keys stored, not used in ranking or matching): the first paired comparison after the backfill (2026-11-07, 805 of 811 passages keyed, 53 shadow entries with evidence) found no entry that any weight 0.25-4 hit and weight 0 missed, and 1-4 the other way, as the 6.1 rule pre-registered; re-run `juno eval compare --setting keys` when the evidence set has grown.
 61. Saga v1 compatibility is removed (2026-11-08, user decision): no `migrate --from-saga`, no `rollback`, no `saga` shim or `juno init --saga-shim`, no v1-hook guard in hooks, card run and doctor, no `SAGA_DISABLE` and no `---SAGA-EXTRACT---` marker. The cutover finished on 2026-11-07, there will be no rollback, and published installs never had v1; 4.3, 9.2 and the cutover parts of 13.8 are history.
 62. The assistant name is fixed as Juno (2026-11-08, user decision): the `[assistant] name` setting is removed, because the `juno` command, the plugin and every `Juno:` output prefix carry the name anyway.
+
+63. Weekly unattended stale fixer (2026-11-08, user decision, chosen over a review queue): with `[stale] auto_fix = true` and `juno schedule install stale-weekly`, `juno stale --fix --job` checks stale knowledge and profile lines against each repo's fetched default branch (never the working tree) with a read-only, directory-confined model, and writes only validated WRONG fixes and GONE archives as actor `job:stale-weekly` with `repo:<name>@<sha>:<path>:<line>` evidence. UNSURE is never written. Writes are capped per file and per run, logged and undoable (`juno undo --run`), snapshotted, and reported at the next SessionStart. Off by default; `juno init` asks once, interactively, and installs the schedule only on a yes. The vault schema is 2 and `core.md` Privacy names the exception (13.8).
 
 User decisions applied (2026-11-07, not Claude's): the `juno-brain` vault name and move plus the symlink (4.3); the cutover rules policy (4.3); unloading the v1 launchd jobs (16); no push in Phase 7 (16); mandatory e2e proof (15.3); snapshot uses the user's git signing and never turns off gpgSign (12.8).

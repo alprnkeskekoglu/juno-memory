@@ -7,12 +7,14 @@ from juno.adapters import gate, git, writelog
 from juno.cmd import gateio, write
 from juno.core import writegate
 from juno.core.errors import Refused
+from juno.core.ledger import Segment
 
 Record = dict[str, object]
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("id", help="a write id printed by a write verb (w-xxxxxxxx)")
+    parser.add_argument("id", nargs="?", help="a write id printed by a write verb (w-xxxxxxxx)")
+    parser.add_argument("--run", help="revert every write of a job run, newest first")
 
 
 def snapshot_hint(cfg: config.Config) -> str:
@@ -53,8 +55,63 @@ def plan(cfg: config.Config, records: list[Record], rec: Record) -> tuple[str, s
     return rel, new
 
 
+def revert(cfg: config.Config, seg: Segment, records: list[Record], found: Record) -> list[str]:
+    wid = str(found["id"])
+    group = [found, *[r for r in records if r.get("link") == wid]]
+    plans = [plan(cfg, records, r) for r in group]
+    done = [
+        gate.commit(
+            cfg,
+            seg,
+            "undo",
+            rel,
+            new,
+            f"undo {wid}",
+            extra={"of": rec["id"]},
+            delete=bool(rec.get("created")) and not new,
+        )
+        for rec, (rel, new) in zip(group, plans, strict=True)
+    ]
+    return [r.rel for r in done if r.changed]
+
+
+def run_ids(records: list[Record], rid: str) -> list[str]:
+    undone = writelog.undone(records)
+    return [
+        str(r["id"])
+        for r in reversed(records)
+        if r.get("run") == rid
+        and not r.get("link")
+        and r.get("verb") != "undo"
+        and r.get("id") not in undone
+    ]
+
+
+def undo_run(cfg: config.Config, seg: Segment, rid: str) -> int:
+    with write.locked(cfg):
+        ids = run_ids(writelog.read(cfg), rid)
+        if not ids:
+            raise Refused(f"no live writes in run {rid}")
+        failed: list[str] = []
+        for wid in ids:
+            records = writelog.read(cfg)
+            found = next(r for r in records if r.get("id") == wid)
+            try:
+                revert(cfg, seg, records, found)
+            except Refused as error:
+                failed.append(f"{wid}: {error}")
+    print(f"Juno: run {rid}: {len(ids) - len(failed)} of {len(ids)} writes reverted")
+    for line in failed:
+        print(f"Juno: {line}")
+    return write.REFUSED if failed else 0
+
+
 def do(cfg: config.Config, args: argparse.Namespace) -> int:
     seg = write.guard(cfg)
+    if args.run:
+        return undo_run(cfg, seg, args.run.strip())
+    if not args.id:
+        raise Refused("give a write id or --run <run id>")
     wid = args.id.strip()
     if not writegate.WRITE_ID_RE.match(wid):
         raise Refused("write id must look like w-1a2b3c4d")
@@ -65,22 +122,7 @@ def do(cfg: config.Config, args: argparse.Namespace) -> int:
             raise Refused(f"no write {wid} in the write log")
         if wid in writelog.undone(records):
             raise Refused(f"write {wid} is already undone")
-        group = [found, *[r for r in records if r.get("link") == wid]]
-        plans = [plan(cfg, records, r) for r in group]
-        done = [
-            gate.commit(
-                cfg,
-                seg,
-                "undo",
-                rel,
-                new,
-                f"undo {wid}",
-                extra={"of": rec["id"]},
-                delete=bool(rec.get("created")) and not new,
-            )
-            for rec, (rel, new) in zip(group, plans, strict=True)
-        ]
-    files = ", ".join(r.rel for r in done if r.changed)
+        files = ", ".join(revert(cfg, seg, records, found))
     print(f"Juno: write {wid} reverted in {files}" if files else f"Juno: write {wid} left nothing")
     return 0
 

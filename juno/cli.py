@@ -51,6 +51,7 @@ VERBS: dict[str, tuple[str, str]] = {
     "undo": ("undo", "revert a write by its id"),
     "decay": ("decay", "list vault files with no recorded use (read-only)"),
     "report": ("report", "write the weekly report to _generated/reports (no model call)"),
+    "schedule": ("schedule", "install, remove or show the weekly stale fixer schedule"),
 }
 
 

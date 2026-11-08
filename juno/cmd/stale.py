@@ -6,15 +6,19 @@ from collections.abc import Mapping
 
 from juno import config
 from juno.adapters import stalescan
+from juno.cmd import stalefix
 from juno.core import stale
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--days", type=int, help="age limit (default: [thresholds] stale_days)")
     parser.add_argument("--json", action="store_true")
+    stalefix.add_flags(parser)
 
 
 def run(args: argparse.Namespace, env: Mapping[str, str]) -> int:
+    if args.fix or stalefix.flag_problem(args):
+        return stalefix.run(args, env)
     cfg = config.load(env)
     if not os.path.isdir(cfg.vault):
         sys.stderr.write(f"Juno: vault not found at {cfg.vault}\n")

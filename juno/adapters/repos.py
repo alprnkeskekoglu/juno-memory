@@ -1,8 +1,10 @@
 import os
 
 from juno import config
-from juno.adapters import store
+from juno.adapters import git, store
 from juno.core.detect import Tickets
+
+ABANDONED_SECONDS = 180 * 86400
 
 
 def tickets_from(cfg: config.Config) -> Tickets:
@@ -140,3 +142,36 @@ def repos_for(cfg: config.Config, paths: list[str]) -> dict[str, str | None]:
 def is_overview_dir(cfg: config.Config, cwd: str) -> bool:
     real = store.norm(os.path.realpath(cwd))
     return any(store.norm(os.path.realpath(root)) == real for root in cfg.overview_roots())
+
+
+def commit_sha(repo_dir: str, ref: str) -> str | None:
+    done = git.result(["rev-parse", "--verify", "-q", f"{ref}^{{commit}}"], repo_dir, 20)
+    return done.stdout.strip() if done and done.returncode == 0 and done.stdout.strip() else None
+
+
+def commit_time(repo_dir: str, sha: str) -> int:
+    done = git.result(["log", "-1", "--format=%ct", sha], repo_dir, 20)
+    text = done.stdout.strip() if done and done.returncode == 0 else ""
+    return int(text) if text.isdigit() else 0
+
+
+def default_ref(repo_dir: str, order: list[str]) -> tuple[str, str] | None:
+    head = git.result(["symbolic-ref", "-q", "refs/remotes/origin/HEAD"], repo_dir, 20)
+    head_ref = ""
+    if head and head.returncode == 0:
+        head_ref = head.stdout.strip().removeprefix("refs/remotes/")
+    head_sha = commit_sha(repo_dir, f"refs/remotes/{head_ref}") if head_ref else None
+    for name in order:
+        ref = f"origin/{name}"
+        sha = commit_sha(repo_dir, f"refs/remotes/{ref}")
+        if sha is None:
+            continue
+        moved = bool(head_sha) and head_ref != ref
+        if (
+            head_sha
+            and moved
+            and commit_time(repo_dir, head_sha) - commit_time(repo_dir, sha) > ABANDONED_SECONDS
+        ):
+            return head_ref, head_sha
+        return ref, sha
+    return None

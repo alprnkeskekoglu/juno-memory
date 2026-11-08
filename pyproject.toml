@@ -1,6 +1,6 @@
 [project]
 name = "juno"
-version = "0.1.0"
+version = "1.0.0"
 description = "Juno: a portable second brain for Claude Code"
 requires-python = ">=3.14"
 license = "MIT"
@@ -72,6 +72,7 @@ files = ["juno"]
   "juno.cmd.keys",
   "juno.cmd.decay",
   "juno.cmd.report",
+  "juno.cmd.schedule",
 ]
 "tests.test_launcher" = [
   "juno.cli",

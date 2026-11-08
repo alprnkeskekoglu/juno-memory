@@ -57,3 +57,24 @@ def drop_table(text: str, name: str) -> str:
     while rest and not rest[0].strip():
         rest.pop(0)
     return "\n".join(rest) + "\n" if rest else ""
+
+
+def set_table_bool(text: str, table: str, key: str, value: bool) -> str:
+    new_line = f"{key} = {'true' if value else 'false'}"
+    lines = text.splitlines()
+    start = next((i for i, line in enumerate(lines) if line.strip() == f"[{table}]"), None)
+    if start is None:
+        block = [f"[{table}]", new_line]
+        head = "\n".join(lines).rstrip("\n")
+        return (head + "\n\n" if head else "") + "\n".join(block) + "\n"
+    end = next(
+        (i for i in range(start + 1, len(lines)) if HEADER_RE.match(lines[i])),
+        len(lines),
+    )
+    body = lines[start + 1 : end]
+    index = next((i for i, line in enumerate(body) if re.match(rf"^{key}\s*=", line)), None)
+    if index is None:
+        body.insert(0, new_line)
+    else:
+        body[index] = new_line
+    return "\n".join(lines[: start + 1] + body + lines[end:]) + "\n"

@@ -45,6 +45,7 @@ To remove Juno, run `juno uninstall`. It reverts exactly what `init` changed in 
 - Ask `/juno <question>` to search past work, or run `juno search <words>` in a terminal.
 - Teach it a durable preference with `juno rule add` (it requires `--quote`, a verbatim part of a prompt you typed). Other useful verbs: `juno recap`, `juno tasks`, `juno ideas`, `juno backlog`, `juno stale`. Run `juno --help` for all of them.
 - Look inside the vault. It is plain Markdown, and Obsidian opens it well.
+- Optional, off by default: a weekly stale fixer. `juno stale --fix --dry-run` shows what it would change in notes that name code paths, checked against each repo's fetched default branch. With `[stale] auto_fix = true` in `juno.toml`, `juno schedule install stale-weekly` runs it on Sundays (`juno init` asks once in a terminal). It calls the model (at most `[stale] run_budget_usd`, $3, a week), changes only lines the code contradicts, and every change is undoable: `juno undo --run <id>`. `juno schedule status` shows the last run, and `juno schedule remove` turns the schedule off. The vault must be at schema 2 (`juno migrate`).
 
 ## Privacy
 

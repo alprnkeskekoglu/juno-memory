@@ -4,7 +4,7 @@ Vault: the Juno vault; its absolute path is the `Juno vault:` line in the sessio
 
 <!-- juno:invariant -->
 ## Privacy
-Write memory only in this interactive session with me, never from a subagent. Never store secrets, customer data or personal data (partner or end-user IDs, emails, phone numbers); company and partner names are fine. If my message contains `[nosave]`, write nothing to the vault this session.
+Write memory only in this interactive session with me, never from a subagent. One exception, only while I keep `[stale] auto_fix` on: the weekly stale fixer may fix or archive a knowledge or profile line that the repo's default branch contradicts, citing `repo:<name>@<sha>:<path>:<line>`; each change is undoable with `juno undo`. Never store secrets, customer data or personal data (partner or end-user IDs, emails, phone numbers); company and partner names are fine. If my message contains `[nosave]`, write nothing to the vault this session.
 <!-- /juno:invariant -->
 
 <!-- juno:invariant -->

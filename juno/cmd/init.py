@@ -3,15 +3,17 @@ import datetime
 import difflib
 import json
 import os
+import sys
 import time
 from collections.abc import Mapping
 from typing import Any
 
 from juno import config, paths
-from juno.adapters import fs, interpreter, vault
+from juno.adapters import fs, interpreter, schedule, vault
 from juno.cmd import common
 from juno.cmd.common import say
 from juno.core import interp, migrate, settings_merge, shim, tomlio
+from juno.core.errors import Refused
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -164,6 +166,41 @@ def plugin_status(settings: str) -> str:
     )
 
 
+ASKED_MARKER = "stale-fix-asked"
+
+
+def interactive() -> bool:
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def offer_stale_fix(cfg: config.Config, env: Mapping[str, str]) -> None:
+    marker = os.path.join(cfg.state, ASKED_MARKER)
+    if not interactive() or ("stale", "auto_fix") in cfg.explicit or os.path.exists(marker):
+        return
+    budget = cfg.get_float("stale", "run_budget_usd")
+    question = (
+        "Fix stale notes automatically every Sunday? "
+        f"(model calls, at most ${budget:g} a week) [y/N] "
+    )
+    try:
+        answer = input(question).strip().lower()
+    except EOFError:
+        answer = ""
+    fs.atomic_write(marker, b"asked\n", 0o600)
+    if answer not in ("y", "yes"):
+        say("stale fixer: left off; turn it on later with juno schedule install stale-weekly")
+        return
+    raw = fs.read_bytes(cfg.path)
+    text = tomlio.set_table_bool((raw or b"").decode("utf-8"), "stale", "auto_fix", True)
+    fs.atomic_write(cfg.path, text.encode("utf-8"), 0o600)
+    say("config: [stale] auto_fix = true")
+    try:
+        for line in schedule.install(config.load(env)):
+            say(line)
+    except Refused as error:
+        say(f"stale fixer: not scheduled ({error}); then run juno schedule install stale-weekly")
+
+
 def run(args: argparse.Namespace, env: Mapping[str, str]) -> int:
     dry = bool(args.dry_run)
     cfg = config.load(env)
@@ -200,4 +237,6 @@ def run(args: argparse.Namespace, env: Mapping[str, str]) -> int:
     if refused:
         say("Juno: " + refused)
     say(plugin_status(settings))
+    if not dry and not refused:
+        offer_stale_fix(config.load(env), env)
     return 2 if refused else 0

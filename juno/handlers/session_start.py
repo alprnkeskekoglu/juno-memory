@@ -10,6 +10,7 @@ from juno.adapters import (
     reportauto,
     repos,
     selfio,
+    stalerun,
     status,
     store,
     stubs,
@@ -83,6 +84,14 @@ def weekly_report_line(cfg: config.Config) -> str:
         return ""
 
 
+def stalefix_line(cfg: config.Config) -> str:
+    try:
+        return stalerun.notice(cfg)
+    except OSError as exc:
+        store.log_error(cfg, "stale-fixer", exc)
+        return ""
+
+
 def extra_blocks(cfg: config.Config, source: str) -> list[str]:
     if source == "compact":
         return []
@@ -152,6 +161,7 @@ def session_context(
     if not compact:
         lines.append(hook_error_line(cfg))
         lines.append(weekly_report_line(cfg))
+        lines.append(stalefix_line(cfg))
     blocks = [inject.context_block(lines)]
     if not compact:
         blocks.append(topicsio.general_block(cfg))

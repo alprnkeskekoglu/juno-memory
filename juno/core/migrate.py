@@ -1,12 +1,22 @@
 import re
 from collections.abc import Callable, Mapping
 
-CODE_SCHEMA_VERSION = 1
+CODE_SCHEMA_VERSION = 2
 
 Step = Callable[[str], None]
 SCHEMA_RE = re.compile(r"^schema_version\s*=\s*(\d+)\s*$", re.M)
 
-STEPS: dict[int, Step] = {}
+PRIVACY_BLOCK_RE = re.compile(
+    r"(<!-- juno:invariant -->\n## Privacy\n)(.*?)(\n<!-- /juno:invariant -->)", re.S
+)
+PRIVACY_OLD = "Write memory only in this interactive session with me, never from a subagent."
+PRIVACY_MARK = "stale fixer"
+PRIVACY_NEW = (
+    PRIVACY_OLD
+    + " One exception, only while I keep `[stale] auto_fix` on: the weekly stale fixer may fix"
+    " or archive a knowledge or profile line that the repo's default branch contradicts, citing"
+    " `repo:<name>@<sha>:<path>:<line>`; each change is undoable with `juno undo`."
+)
 
 
 def read_schema(toml_text: str) -> int | None:
@@ -26,3 +36,22 @@ def plan(current: int, target: int, steps: Mapping[int, Step]) -> list[int]:
     if missing:
         raise ValueError(f"no migration step from schema {missing[0]} to {missing[0] + 1}")
     return wanted
+
+
+def privacy_has_exception(core_text: str) -> bool:
+    match = PRIVACY_BLOCK_RE.search(core_text)
+    return match is not None and PRIVACY_MARK in match.group(2)
+
+
+def add_stale_exception(core_text: str) -> str:
+    match = PRIVACY_BLOCK_RE.search(core_text)
+    if not match or PRIVACY_MARK in match.group(2) or PRIVACY_OLD not in match.group(2):
+        return core_text
+    body = match.group(2).replace(PRIVACY_OLD, PRIVACY_NEW, 1)
+    return (
+        core_text[: match.start()]
+        + match.group(1)
+        + body
+        + match.group(3)
+        + core_text[match.end() :]
+    )

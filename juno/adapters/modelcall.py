@@ -24,8 +24,28 @@ def model_env() -> dict[str, str]:
     return env
 
 
+READ_TOOLS = "Read,Grep,Glob"
+DENIED_TOOLS = "Bash,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch,Task"
+
+
+def tool_flags(tools: str) -> list[str]:
+    if not tools:
+        return ["--tools", ""]
+    return [
+        "--restricted",
+        f"--tools={tools}",
+        f"--disallowedTools={DENIED_TOOLS}",
+        "--permission-mode=dontAsk",
+    ]
+
+
 def model_argv(
-    cfg: config.Config, binary: str, budget: float, model: str = "", system: str = ""
+    cfg: config.Config,
+    binary: str,
+    budget: float,
+    model: str = "",
+    system: str = "",
+    tools: str = "",
 ) -> list[str]:
     return [
         binary,
@@ -37,8 +57,7 @@ def model_argv(
         "--strict-mcp-config",
         "--disable-slash-commands",
         "--no-session-persistence",
-        "--tools",
-        "",
+        *tool_flags(tools),
         "--system-prompt",
         system or cardfmt.system_prompt("Juno"),
         "--max-budget-usd",
@@ -59,7 +78,14 @@ def kill_group(proc: Any) -> None:
 
 
 def call_model(
-    cfg: config.Config, prompt: str, budget: float, model: str = "", system: str = ""
+    cfg: config.Config,
+    prompt: str,
+    budget: float,
+    model: str = "",
+    system: str = "",
+    tools: str = "",
+    workdir: str | None = None,
+    timeout: float | None = None,
 ) -> tuple[str, float]:
     import subprocess
     import tempfile
@@ -67,11 +93,11 @@ def call_model(
     if budget < cfg.get_float("handoff", "min_run_usd"):
         raise cardfmt.Failed("budget")
     env = model_env()
-    timeout = cfg.get_float("handoff", "timeout_seconds")
-    cwd = tempfile.mkdtemp(prefix="juno-card-")
+    timeout = cfg.get_float("handoff", "timeout_seconds") if timeout is None else timeout
+    cwd = workdir or tempfile.mkdtemp(prefix="juno-card-")
     try:
         proc = subprocess.Popen(
-            model_argv(cfg, claude_bin(cfg, env), budget, model, system),
+            model_argv(cfg, claude_bin(cfg, env), budget, model, system, tools),
             cwd=cwd,
             env=env,
             stdin=subprocess.PIPE,
@@ -88,5 +114,6 @@ def call_model(
             kill_group(proc)
             raise cardfmt.Failed(f"timeout after {timeout:.0f}s") from None
     finally:
-        shutil.rmtree(cwd, ignore_errors=True)
+        if workdir is None:
+            shutil.rmtree(cwd, ignore_errors=True)
     return cardfmt.parse_output(out, proc.returncode)

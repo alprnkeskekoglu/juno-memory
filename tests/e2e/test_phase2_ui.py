@@ -71,13 +71,11 @@ class DashboardPanels(Case):
         self.assertEqual(page_path, os.path.join(self.sb.state, "dashboard", "index.html"))
         with open(page_path, encoding="utf-8") as handle:
             page = handle.read()
-        self.assertEqual(
-            re.findall(r'<span class="st">(.*?)</span>', page),
-            ["Threads", "Recent cards", "Health", "Cost", "Memory"],
-        )
-        self.assertIn("<h2>To do", page)
-        for needle in ("ship the thing", "a card", "Fix the sync job"):
-            self.assertIn(needle, page)
+        titles = [
+            re.sub(r"<button.*?</button>", "", t) for t in re.findall(r"<h2>(.*?)</h2>", page)
+        ]
+        for name in ("Recall over time", "Experiments", "Writes", "Cost", "Health"):
+            self.assertIn(name, titles)
         for word in ("alarm", "mentee", "Saga"):
             self.assertNotIn(word, page.lower() if word.islower() else page)
         self.assertEqual(tree_hash(self.sb.vault), before)

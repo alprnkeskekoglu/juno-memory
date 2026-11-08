@@ -89,7 +89,6 @@ class Formatting(unittest.TestCase):
             (fmt.short_date("2026-10-19", tr), fmt.short_date("2026-10-19", en)),
             ("19 Eki", "19 Oct"),
         )
-        self.assertEqual(fmt.model_name("claude-opus-5-5-20260301[1m]"), "Opus 5.5")
 
     def test_text_tables_have_the_same_keys(self) -> None:
         self.assertEqual(sorted(texts.EN), sorted(texts.TR))

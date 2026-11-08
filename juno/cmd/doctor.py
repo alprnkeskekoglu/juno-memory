@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from juno import config
-from juno.adapters import fs, interpreter, keysbackfill, ledgerio, vault
+from juno.adapters import fs, interpreter, keysbackfill, ledgerio, store, vault
 from juno.cmd import common, doctor_vault, init, write
 from juno.core import interp, migrate, settings_merge, shim, tomlio
 
@@ -66,6 +66,22 @@ def check_keys(cfg: config.Config) -> list[Check]:
         pct = round(100 * keyed / total)
         return [("WARN", "keys", f"{pct}% of passages have fact keys; run juno keys backfill")]
     return []
+
+
+def check_stale(cfg: config.Config) -> list[Check]:
+    if not cfg.get_bool("stale", "auto_fix"):
+        return []
+    core = store.read_text(os.path.join(cfg.vault, "core.md"))
+    if migrate.privacy_has_exception(core):
+        return []
+    return [
+        (
+            "WARN",
+            "stale",
+            "[stale] auto_fix is on but core.md Privacy has no stale fixer exception; "
+            "run juno migrate or add the sentence by hand",
+        )
+    ]
 
 
 def check_paths(cfg: config.Config) -> list[Check]:
@@ -179,6 +195,7 @@ def collect(args: argparse.Namespace, cfg: config.Config) -> list[Check]:
     )
     if vault.status(cfg.vault) == "juno":
         out += doctor_vault.collect(cfg, run_probe=not args.json) + check_keys(cfg)
+        out += check_stale(cfg)
     return out
 
 

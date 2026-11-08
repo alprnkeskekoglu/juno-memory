@@ -5,7 +5,7 @@ import time
 from collections.abc import Mapping
 
 from juno import config
-from juno.adapters import fs, vault
+from juno.adapters import fs, migratesteps, vault
 from juno.cmd.common import say
 from juno.core import migrate
 
@@ -20,7 +20,7 @@ def run(
     steps: Mapping[int, migrate.Step] | None = None,
     target: int | None = None,
 ) -> int:
-    steps = migrate.STEPS if steps is None else steps
+    steps = migratesteps.STEPS if steps is None else steps
     target = migrate.CODE_SCHEMA_VERSION if target is None else target
     cfg = config.load(env)
     if vault.status(cfg.vault) != "juno":

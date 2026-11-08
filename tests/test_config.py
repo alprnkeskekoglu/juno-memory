@@ -22,6 +22,10 @@ handoff.timeout_seconds handoff.digest_chars handoff.extract handoff.claude_bin 
 threads.scan threads.stale_days threads.gh threads.gh_owner threads.gh_calls
 threads.gh_timeout_seconds links.linked_block keys.weight keys.model packs.purpose decay.window_days
 self.max_lines self.max_chars
+stale.auto_fix stale.weekday stale.start_hour stale.end_hour stale.model stale.file_budget_usd
+stale.run_budget_usd stale.timeout_seconds stale.max_files stale.max_changes_per_file
+stale.max_changes_per_run stale.max_lines_per_file stale.branch_order stale.fetch
+stale.busy_minutes
 """.split()
 
 

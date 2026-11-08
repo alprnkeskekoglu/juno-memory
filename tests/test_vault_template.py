@@ -5,6 +5,7 @@ import unittest
 
 from juno import config
 from juno.adapters import vault
+from juno.core import migrate
 from tests.support import REPO
 from tests.support.banned import local_banned
 
@@ -62,7 +63,7 @@ class Skeleton(unittest.TestCase):
     def test_schema_file(self) -> None:
         text = read("juno-brain.toml").replace(vault.CREATED_TOKEN, "2026-01-01")
         data = tomllib.loads(text)
-        self.assertEqual(data["schema_version"], 1)
+        self.assertEqual(data["schema_version"], 2)
         self.assertIn(vault.CREATED_TOKEN, read("juno-brain.toml"))
 
 
@@ -97,6 +98,11 @@ class CoreMd(unittest.TestCase):
             "Never edit `rules/` files",
         ):
             self.assertIn(needle, text)
+
+    def test_privacy_names_the_stale_fixer_exception(self) -> None:
+        text = read("core.md")
+        self.assertTrue(migrate.privacy_has_exception(text))
+        self.assertEqual(migrate.add_stale_exception(text), text)
 
     def test_uses_juno_cli_verbs(self) -> None:
         self.assertNotIn("saga ", read("core.md").lower())

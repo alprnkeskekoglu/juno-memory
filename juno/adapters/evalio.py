@@ -1,3 +1,4 @@
+import datetime
 import hashlib
 import json
 import os
@@ -8,7 +9,7 @@ from typing import Any
 from juno import config, paths
 from juno.adapters import fs, index, indexquery, ledgerio, shadowio
 from juno.core import eval as core
-from juno.core import fold, shadow
+from juno.core import fold, isoweek, shadow
 from juno.core import keys as keycore
 
 LAST_GATE = "last-gate.json"
@@ -317,6 +318,42 @@ def recall_proxy(
         lambda rel: os.path.isfile(os.path.join(vault, rel)),
         floor,
     )
+
+
+def recall_weekly(
+    state: str, vault_dir: str, transcripts: str, now: float, weeks: int
+) -> list[dict[str, Any]]:
+    """recall_proxy per ISO week; a segment counts in the week of its first prompt."""
+    entries, _ = shadowio.read(state)
+    vault = os.path.realpath(vault_dir)
+    touches = touches_reader(transcripts, vault)
+    first: dict[str, float] = {}
+    for e in entries:
+        seg = str(e["segment"])
+        first[seg] = min(first.get(seg, e["ts"]), e["ts"])
+    today = datetime.date.fromtimestamp(now)
+    labels = [isoweek.week_label(today - datetime.timedelta(days=7 * i)) for i in range(weeks)]
+    out: list[dict[str, Any]] = []
+    for label in reversed(labels):
+        start, end = isoweek.bounds(label)
+        week = [e for e in entries if start <= first[str(e["segment"])] < end]
+        m = core.recall_from(
+            week, touches, lambda rel: os.path.isfile(os.path.join(vault, rel)), 0.0
+        )
+        out.append(
+            {
+                "week": label,
+                "start": time.strftime("%Y-%m-%d", time.localtime(start)),
+                "n": m["with_evidence"],
+                "hits": m["hits"],
+                "pack_hits": m["pack_hits"],
+                "recall": m["recall"],
+                "pack_recall": m["pack_recall"],
+                "wilson_lower": m["wilson_lower"],
+                "pack_wilson_lower": m["pack_wilson_lower"],
+            }
+        )
+    return out
 
 
 def card_ab(
