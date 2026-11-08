@@ -1,0 +1,118 @@
+[project]
+name = "juno"
+version = "0.1.0"
+description = "Juno: a portable second brain for Claude Code"
+requires-python = ">=3.14"
+license = "MIT"
+dependencies = []
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+extend-exclude = ["vault-template", ".claude"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "C4", "SIM", "RUF"]
+ignore = ["SIM905"]
+
+[tool.ruff.lint.per-file-ignores]
+"juno/hooks/*.py" = ["E402"]
+"juno/cli.py" = ["E402", "UP036"]
+"juno/config.py" = ["RUF001"]
+"juno/core/fold.py" = ["RUF001"]
+"juno/adapters/vaultview.py" = ["RUF001"]
+"tests/**" = ["B011", "E501", "UP031", "SIM115", "SIM117", "RUF001", "RUF015", "C416"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+files = ["juno"]
+
+[tool.juno-tests.inputs]
+"hooks/hooks.json" = ["test_plugin_files", "test_launcher"]
+"bin/*" = ["test_plugin_files", "test_launcher"]
+".claude-plugin/*" = ["test_plugin_files"]
+"ui/**" = ["test_ui"]
+"skills/**" = ["test_skills"]
+"vault-template/**" = ["test_vault_template", "test_init"]
+".githooks/*" = ["test_repo_rules"]
+"docs/e2e.md" = ["test_e2e_docs"]
+"tests/e2e/*" = ["test_e2e_docs"]
+"docs/spec.md" = []
+"docs/prereg/*" = ["test_arms"]
+"docs/phase0.md" = []
+"docs/colleague.md" = ["test_repo_rules"]
+".gitignore" = []
+
+[tool.juno-tests.targets]
+"juno.cli" = [
+  "juno.cmd.init",
+  "juno.cmd.uninstall",
+  "juno.cmd.doctor",
+  "juno.cmd.export",
+  "juno.cmd.import_",
+  "juno.cmd.migrate",
+  "juno.cmd.version",
+  "juno.cmd.rule",
+  "juno.cmd.thread",
+  "juno.cmd.backlog",
+  "juno.cmd.ideas",
+  "juno.cmd.tasks",
+  "juno.cmd.digest",
+  "juno.cmd.compact",
+  "juno.cmd.snapshot",
+  "juno.cmd.search",
+  "juno.cmd.recap",
+  "juno.cmd.stale",
+  "juno.cmd.eval",
+  "juno.cmd.arm",
+  "juno.cmd.keys",
+  "juno.cmd.decay",
+  "juno.cmd.report",
+]
+"tests.test_launcher" = [
+  "juno.cli",
+  "juno.hooks.session_start",
+  "juno.hooks.subagent_start",
+  "juno.hooks.user_prompt_submit",
+  "juno.hooks.pre_tool_use",
+  "juno.hooks.post_tool_use",
+  "juno.hooks.post_tool_use_failure",
+  "juno.hooks.stop",
+  "juno.hooks.session_end",
+]
+"tests.test_runner" = ["tests.run"]
+"tests.test_hooks" = [
+  "juno.hooks.session_start",
+  "juno.hooks.subagent_start",
+  "juno.hooks.user_prompt_submit",
+  "juno.hooks.pre_tool_use",
+  "juno.hooks.post_tool_use",
+  "juno.hooks.post_tool_use_failure",
+  "juno.hooks.stop",
+  "juno.hooks.session_end",
+]
+"tests.test_hook_imports" = [
+  "juno.hooks.session_start",
+  "juno.hooks.subagent_start",
+  "juno.hooks.user_prompt_submit",
+  "juno.hooks.pre_tool_use",
+  "juno.hooks.post_tool_use",
+  "juno.hooks.post_tool_use_failure",
+  "juno.hooks.stop",
+  "juno.hooks.session_end",
+]
+"tests.support.hooks" = [
+  "juno.hooks.session_start",
+  "juno.hooks.subagent_start",
+  "juno.hooks.user_prompt_submit",
+  "juno.hooks.pre_tool_use",
+  "juno.hooks.post_tool_use",
+  "juno.hooks.post_tool_use_failure",
+  "juno.hooks.stop",
+  "juno.hooks.session_end",
+  "juno.hooks.card_run",
+]

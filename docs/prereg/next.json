@@ -1,0 +1,18 @@
+{
+  "hypothesis": "2-3 predicted next questions with answers shown with a resumed card cut the lookup effort at the start of the next segment.",
+  "assignment": {"fraction": 0.5, "salted": true},
+  "unit": "A segment where a pack showed or held a card that has stored next questions; assignment is per segment, so every metric is aggregated per segment first.",
+  "metric": {
+    "code": "next_lookup_calls",
+    "primary": "next_lookup_calls: juno search calls plus vault Reads in the first 10 tool calls of the unit (lower is better).",
+    "secondary": [
+      "prediction hit rate: fold-token Jaccard of at least 0.5 between a question and one of the first 3 typed prompts, measurable in both arms because both store the questions",
+      "card cost per run"
+    ]
+  },
+  "min_n": 50,
+  "max_days": 56,
+  "stop_rule": "Decide at min_n units per arm or at max_days; no early stop.",
+  "decision": "On only if the primary metric falls by at least 1 call per unit (bootstrap 90% upper bound of on minus off below 0) and card cost per run rises by at most $0.02. Otherwise off, and the stored questions stay unused.",
+  "caveat": "Evidence is synthetic only and the primary metric is the weakest proxy of the three arms. Not started: it is the only arm that raises the card-run cost on every run."
+}

@@ -1,0 +1,24 @@
+#!/bin/sh
+# Enable with: python3 tests/run.py --install-hooks   (git config core.hooksPath .githooks)
+root=$(git rev-parse --show-toplevel) || exit 1
+cd "$root" || exit 1
+
+py="${JUNO_PYTHON:-python3}"
+bin="$root/.venv/bin"
+[ -x "$bin/python" ] && py="$bin/python"
+PATH="$bin:$PATH"
+
+need() {
+  command -v "$1" >/dev/null 2>&1 || {
+    echo "pre-commit: $1 is missing. Install the dev tools: python3 -m venv .venv && .venv/bin/pip install ruff mypy" >&2
+    exit 1
+  }
+}
+need ruff
+need mypy
+
+"$py" tests/run.py || exit 1
+ruff check . || exit 1
+ruff format --check . || exit 1
+mypy --strict juno || exit 1
+# @e2e cases are not run here: they spend model budget (python3 tests/run.py --e2e).

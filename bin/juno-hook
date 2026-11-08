@@ -1,0 +1,28 @@
+#!/bin/sh
+event="$1"
+case "$event" in
+"" | *[!a-z_]*) exit 0 ;;
+esac
+[ "${JUNO_DISABLE:-}" = 1 ] && exit 0
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." 2>/dev/null && pwd) || exit 0
+cfg="${JUNO_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/juno/juno.toml}"
+py="${JUNO_PYTHON:-}"
+if [ -z "$py" ] && [ -r "$cfg" ]; then
+  py=$(sed -n 's/^python = "\(.*\)"$/\1/p' "$cfg" | head -1)
+fi
+if [ -z "$py" ] && [ ! -r "$cfg" ]; then
+  if [ "$event" = session_start ] && [ "${CLAUDE_CODE_SESSION_ATTENDED:-}" != 0 ]; then
+    case "$root" in
+    *[\"\\]*) ;;
+    *)
+      printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"Juno is not initialised: run \\"%s/bin/juno\\" init"}}\n' "$root"
+      ;;
+    esac
+  fi
+  exit 0
+fi
+[ -x "$py" ] || exit 0
+script="$root/juno/hooks/$event.py"
+[ -f "$script" ] || exit 0
+"$py" -I -S "$script"
+exit 0

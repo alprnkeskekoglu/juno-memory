@@ -1,0 +1,19 @@
+{
+  "hypothesis": "A filtered Linked block (at most 5 titles) makes sessions open the linked memory they need, with no more friction.",
+  "assignment": {"fraction": 0.5, "salted": true},
+  "unit": "A segment with at least one pack event whose nb is non-empty; assignment is per segment, so every metric is aggregated per segment first.",
+  "metric": {
+    "code": "linked_read_share",
+    "primary": "linked_read_share: the share of units in which any nb path was Read later in the same segment.",
+    "secondary": [
+      "correction cues per 100 typed prompts",
+      "prompts per segment",
+      "pack chars"
+    ]
+  },
+  "min_n": 60,
+  "max_days": 42,
+  "stop_rule": "Decide at min_n units per arm or at max_days; no early stop for gain. Stop early for harm when, after at least 30 units per arm, correction cues per 100 prompts on-arm exceed off-arm by more than 50% relative.",
+  "decision": "Default on ([links] linked_block = true, arm closed) only if the on minus off read share is at least +0.10, a one-sided Fisher exact p is below 0.10, and on-arm cues per 100 prompts are at most 1.2 times off. Otherwise off, and the code stays for doctor and Obsidian. Inconclusive at max_days (n short) means off.",
+  "caveat": "A read is a proxy and can reward distraction, which is why the cue guard is part of the decision. About 10 segments a day, half with a pack and neighbours (unverified), so min_n takes about 4 weeks."
+}

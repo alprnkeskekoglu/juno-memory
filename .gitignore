@@ -1,0 +1,10 @@
+plan.md
+*-plan.md
+__pycache__/
+*.pyc
+.venv/
+.idea/
+.mypy_cache/
+.ruff_cache/
+.claude/
+.juno-banned.txt

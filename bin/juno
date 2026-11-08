@@ -1,0 +1,21 @@
+#!/bin/sh
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+cfg="${JUNO_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/juno/juno.toml}"
+rd() { [ -r "$cfg" ] && sed -n "s/^$1 = \"\(.*\)\"\$/\1/p" "$cfg" | head -1; }
+ok() { [ -x "$1" ] && "$1" -I -S -c 'import sys; sys.exit(sys.version_info < (3, 14))' 2>/dev/null; }
+py="${JUNO_PYTHON:-$(rd python)}"
+if ! ok "$py"; then
+  py=""
+  for c in /opt/homebrew/bin/python3 /usr/local/bin/python3 "$(command -v python3.16)" \
+    "$(command -v python3.15)" "$(command -v python3.14)" "$(command -v python3)"; do
+    if ok "$c"; then
+      py="$c"
+      break
+    fi
+  done
+fi
+if [ -z "$py" ]; then
+  echo "Juno needs Python >= 3.14; none found" >&2
+  exit 2
+fi
+exec "$py" -I -S "$root/juno/cli.py" "$@"

@@ -1,0 +1,17 @@
+{
+  "hypothesis": "Injecting observed-behaviour lines raises the rate at which the user picks Claude's Recommended option, without making Claude agree more.",
+  "assignment": {"fraction": 0.5, "salted": true},
+  "unit": "An answered single-select AskUserQuestion whose options include a (Recommended) label, clustered by segment; assignment is per segment, so every metric is aggregated per segment first and compared across segments (cluster bootstrap, 2000 resamples, seed 0).",
+  "metric": {
+    "code": "recommended_pick",
+    "primary": "recommended_pick: picked == Recommended, per question, clustered by segment.",
+    "guard": "pushback_rate: pushback per 100 proposals from runs.jsonl turns, per arm."
+  },
+  "baseline": "63% first-option pick over 416 questions in 14 days (measured), about 30 answered questions a day.",
+  "min_n": 450,
+  "max_days": 56,
+  "stop_rule": "Decide at min_n questions per arm (and at least 40 segments and 150 proposals per arm) or at max_days. Stop early (off) if, after at least 75 proposals per arm, on-arm pushback per 100 proposals is below 0.7 times off (the CHI '26 sycophancy direction).",
+  "decision": "Default on only if the pick gain point estimate is at least +0.03, the bootstrap 90% lower bound is above 0, and on-arm pushback is at least 0.9 times off. Otherwise off; the self/ lines stay readable but are not injected.",
+  "caveat": "A +8-point effect at alpha 0.10 one-sided and power 0.8 needs about 320 per arm; times 1.4 for clustering (unverified design effect); about 30 days.",
+  "note": "Claude marks Recommended in both arms (the global rule), so the comparison is fair; questions asked inside maestro skills count like any others."
+}
