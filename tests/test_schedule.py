@@ -199,10 +199,16 @@ class InitOffer(SandboxCase):
         self.sb.env.update(JUNO_SCHEDULE_PLATFORM="darwin", JUNO_LAUNCHCTL="/bin/echo")
         self.asked: list[str] = []
 
+    def reply(self, prompt: str, answer: str) -> str:
+        if "Sunday" not in prompt:
+            return ""
+        self.asked.append(prompt)
+        return answer
+
     def init(self, tty: bool, answer: str = "") -> tuple[int, str]:
         with (
             mock.patch.object(init, "interactive", lambda: tty),
-            mock.patch("builtins.input", lambda prompt: self.asked.append(prompt) or answer),
+            mock.patch("builtins.input", lambda prompt: self.reply(prompt, answer)),
         ):
             return self.sb.cli("init", *self.sb.install_args())
 
@@ -238,7 +244,7 @@ class InitOffer(SandboxCase):
     def test_dry_run_asks_nothing(self) -> None:
         with (
             mock.patch.object(init, "interactive", lambda: True),
-            mock.patch("builtins.input", lambda prompt: self.asked.append(prompt) or "y"),
+            mock.patch("builtins.input", lambda prompt: self.reply(prompt, "y")),
         ):
             self.sb.cli("init", "--dry-run", *self.sb.install_args())
         self.assertEqual(self.asked, [])

@@ -181,6 +181,27 @@ def check_settings(cfg: config.Config, settings: str) -> list[Check]:
     return out
 
 
+def check_output_style(cfg: config.Config, settings: str) -> list[Check]:
+    root = cfg.get_str("runtime", "plugin_root")
+    try:
+        current = settings_merge.parse(fs.read_bytes(settings) or b"").get("outputStyle")
+    except settings_merge.SettingsError:
+        return []
+    chosen = current if current in init.OUTPUT_STYLES else init.OUTPUT_STYLES[0]
+    file = chosen.split(":", 1)[1] + ".md"
+    if not root or not os.path.isfile(os.path.join(root, "output-styles", file)):
+        return [("WARN", "output style", f"output-styles/{file} is missing from the plugin")]
+    if current in init.OUTPUT_STYLES:
+        return [("PASS", "output style", f"{current} is active")]
+    return [
+        (
+            "INFO",
+            "output style",
+            f'not active; set "outputStyle" in {settings} to {" or ".join(init.OUTPUT_STYLES)}',
+        )
+    ]
+
+
 def collect(args: argparse.Namespace, cfg: config.Config) -> list[Check]:
     first = check_interpreter(cfg)
     if first[0][0] == "FAIL" and "needs Python" in first[0][2]:
@@ -192,6 +213,7 @@ def collect(args: argparse.Namespace, cfg: config.Config) -> list[Check]:
         + check_plugin(cfg, settings)
         + check_shim(args, cfg)
         + check_settings(cfg, settings)
+        + check_output_style(cfg, settings)
     )
     if vault.status(cfg.vault) == "juno":
         out += doctor_vault.collect(cfg, run_probe=not args.json) + check_keys(cfg)

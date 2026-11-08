@@ -1,6 +1,6 @@
 {
   "name": "juno-ui",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Display-only Juno band above the prompt. Reads status.json; never blocks, injects or writes.",
   "author": { "name": "Juno contributors" }
 }

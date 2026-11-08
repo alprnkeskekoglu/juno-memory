@@ -98,7 +98,10 @@ def merge_records(old: Record, extra: Record) -> Record:
     auto = old["autoMemoryEnabled"]
     if extra["autoMemoryEnabled"]["changed"] and not auto["changed"]:
         auto = extra["autoMemoryEnabled"]
-    return {"added": added, "created": created, "autoMemoryEnabled": auto}
+    merged: Record = {"added": added, "created": created, "autoMemoryEnabled": auto}
+    if "outputStyle" in old:
+        merged["outputStyle"] = old["outputStyle"]
+    return merged
 
 
 def unmerge(data: dict[str, Any], record: Record) -> tuple[dict[str, Any], list[str]]:
@@ -128,4 +131,9 @@ def unmerge(data: dict[str, Any], record: Record) -> tuple[dict[str, Any], list[
                 del new["autoMemoryEnabled"]
         else:
             notes.append("autoMemoryEnabled changed since install; left alone")
+    if "outputStyle" in record:
+        if new.get("outputStyle") == record["outputStyle"]:
+            del new["outputStyle"]
+        else:
+            notes.append("outputStyle changed since install; left alone")
     return new, notes

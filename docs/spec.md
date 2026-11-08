@@ -54,6 +54,7 @@ juno/                          repo root = plugin root (${CLAUDE_PLUGIN_ROOT})
   skills/research/SKILL.md     /juno:research skill (6.9)
   agents/researcher.md         web research agent (WebSearch, WebFetch), used by the research skill
   agents/verifier.md           one-claim verifier (WebFetch only)
+  output-styles/juno*.md       the Juno identity as four plugin output styles (13.10)
   bin/juno                     POSIX sh entry: interpreter lookup, then juno/cli.py
   bin/juno-hook                POSIX sh hook launcher (section 6.1)
   juno/                        Python package
@@ -617,7 +618,7 @@ Read-only views, as in v1. `tasks` and the overview's active tickets apply only 
 ## 13. Install and lifecycle
 
 ### 13.1 `juno init`
-Asks nothing [plan], except one question at the end of an interactive run (step 8). It is idempotent, and each step prints one line.
+Asks nothing [plan], except two questions at the end of an interactive run (steps 8 and 9). It is idempotent, and each step prints one line.
 1. Interpreter discovery (13.2). Refuses below 3.14 with one line and exit 2.
 2. Config: creates `juno.toml` when missing, with `[runtime]` first. Otherwise it only adds or updates `[runtime] python` and `plugin_root`, and never changes another key.
 3. State dir: created with mode 0700.
@@ -626,6 +627,7 @@ Asks nothing [plan], except one question at the end of an interactive run (step 
 6. Shim (13.3).
 7. Plugin: init checks whether `juno@<marketplace>` is installed and enabled. When it is not, init prints the `claude plugin install` command and exits 0. **Decided here: init does not install the plugin itself.** Reason: plugin installation belongs to Claude Code's own CLI and trust prompts.
 8. Stale fixer question (user decision, 2026-11-08): only when stdin and stdout are terminals, not with `--dry-run`, and only if `[stale] auto_fix` is not already set in the config and the question was not asked before (marker `stale-fix-asked` in the state dir). `Fix stale notes automatically every Sunday? (model calls, at most $3 a week) [y/N]`, default No. Yes writes `[stale] auto_fix = true` to the config and runs the equivalent of `juno schedule install stale-weekly` (13.9); a refusal there is printed and init still exits 0. A non-interactive init asks nothing and leaves the fixer off.
+9. Output style question (decisions 66 and 67, 13.10): same conditions as step 8, own marker `output-style-asked`. One choice question for the tone.
 
 The first run before the shim exists is `"<plugin root>/bin/juno" init`. The SessionStart launcher prints this command when there is no config (6.1).
 
@@ -663,6 +665,7 @@ A POSIX sh script written by init. It is refused when a non-Juno file already ex
 
 ### 13.5 `juno uninstall`
 - When the settings file is byte-identical to the post-install bytes recorded in the manifest, it restores the original bytes. Otherwise it removes only the recorded entries and restores `autoMemoryEnabled` to its recorded previous state.
+- When init set `outputStyle` (13.10), the manifest record keeps it and uninstall removes it again unless the user changed it since.
 - It removes the shim only when the shim is Juno's.
 - It never touches the vault or the state dir, apart from deleting the manifest last. [plan, v1 uninstall]
 
@@ -692,6 +695,7 @@ A POSIX sh script written by init. It is refused when a non-Juno file already ex
   - shim present and resolving;
   - manifest entries still present in the settings;
   - `autoMemoryEnabled` false;
+  - the output style (13.10): PASS when `outputStyle` in the user settings is one of `juno:juno`, `juno:juno-witty`, `juno:juno-warm`, `juno:juno-mentor` (the line shows which), INFO when it is not, WARN when the selected style file (`juno.md` when none is selected) is missing from the plugin;
   - config types valid;
   - vault schema version matches the code;
   - `hook_output_chars` < 10,000.
@@ -716,6 +720,12 @@ A POSIX sh script written by init. It is refused when a non-Juno file already ex
 - No path of the machine is in the code: every path is computed at install time from `HOME`, the config and the plugin root. Tests point `JUNO_LAUNCHCTL`, `JUNO_SYSTEMCTL` and `JUNO_SCHEDULE_PLATFORM` at fakes, and never run the real tools.
 - `status` shows installed, loaded, `auto_fix`, the last run row and the next fire time; `remove` unloads and deletes the files.
 - Signed snapshots under launchd need a signing key the job can reach (an ssh-agent or gpg-agent socket in the job's environment); otherwise the row records the failure.
+
+### 13.10 Output style (decisions 66 and 67)
+- `output-styles/juno.md` (plain), `juno-witty.md`, `juno-warm.md` and `juno-mentor.md` give the assistant the identity Juno. The four files share one identical core text (identity, memory use, naming a contradicted decision, keeping memory/checked/inferred apart, answer first and short, owning unfinished work, direct judgment, asking when memory is silent, user instructions first, runs on Claude) and differ only by one last tone line: none, a dry joke never in errors or serious moments (witty), warm encouragement (warm), the why behind a decision in a sentence or two (mentor). A plugin output style goes into the system prompt of every request, which SessionStart context does not. Frontmatter: `keep-coding-instructions: true` (without it Claude Code drops its software-engineering instructions) and no `force-for-plugin` (it would override the user's own `outputStyle`). The text is generic: no user name, language or company.
+- Selecting value, proved with the real `claude` CLI (`--plugin-dir <repo>` plus `--settings '{"outputStyle":"..."}'`, prompt "What is your name?", haiku): a plugin style is addressed as `<plugin>:<name>` with the frontmatter `name`. `juno:juno` answered "I'm Juno"; plain `juno` and `Juno` selected nothing (the answer was the default one), and `juno:Juno` worked only while the frontmatter name was `Juno` (the match is case-sensitive). The frontmatter name is therefore lowercase (`juno`, `juno-witty`, `juno-warm`, `juno-mentor`), and the values are `juno:juno`, `juno:juno-witty`, `juno:juno-warm`, `juno:juno-mentor`.
+- `juno init` offers it in step 9: `Juno style: 1) plain  2) witty  3) warm  4) mentor  5) none (Claude's default) [5]: `, default 5 (no style), once (marker `output-style-asked`), interactive only, never with `--dry-run`. 5, an empty answer, EOF or an invalid answer leave the settings alone. 1 to 4 set `outputStyle` in the user settings file with a backup in `install-backups/` and an atomic write, records it in the manifest and prints that Claude Code must be restarted. An `outputStyle` that is already set to another value is printed and left alone; one that is already a `juno:*` value is reported; nothing is asked then. Uninstall removes whichever `juno:*` value was recorded, unless the user changed it since.
+- Styles apply to the main conversation and forks, not to other subagents; this is by design, and subagents keep their own prompts.
 
 ## 14. Phase 4 write gate
 
@@ -941,5 +951,7 @@ Each line points to the section that states the decision and its reason.
 63. Weekly unattended stale fixer (2026-11-08, user decision, chosen over a review queue): with `[stale] auto_fix = true` and `juno schedule install stale-weekly`, `juno stale --fix --job` checks stale knowledge and profile lines against each repo's fetched default branch (never the working tree) with a read-only, directory-confined model, and writes only validated WRONG fixes and GONE archives as actor `job:stale-weekly` with `repo:<name>@<sha>:<path>:<line>` evidence. UNSURE is never written. Writes are capped per file and per run, logged and undoable (`juno undo --run`), snapshotted, and reported at the next SessionStart. Off by default; `juno init` asks once, interactively, and installs the schedule only on a yes. The vault schema is 2 and `core.md` Privacy names the exception (13.8).
 64. Per-file line caps are removed (2026-11-08, user decision): the write gate no longer refuses a write because a vault file has too many lines, the pitfalls extractor no longer drops a pitfall as `full`, the self extractor no longer drops a line as `capped` for file size, and doctor no longer WARNs on pitfalls length. Session-start injection is bounded by its own char budgets (`pack_chars`, `pack_knowledge_chars`, `hook_output_chars`), so the line caps no longer controlled context cost and only refused writes mid-session. The 30-write session cap and the `TEXT_MAX` char caps (note, idea, card, procedure) stay.
 65. Local default branch for repos without a remote (2026-11-08, user decision): when a repo has no `origin` remote, the stale fixer skips the fetch and pins the committed sha of the first existing local branch of `[stale] branch_order`, never the working tree; the run row shows the ref (`branches`) and fetch `no remote`. A repo that has an `origin` whose fetch fails is still skipped under the 7-day `FETCH_HEAD` rule.
+66. The identity is a plugin output style (2026-11-08, user decision): `output-styles/juno.md` with `keep-coding-instructions: true`, not `core.md`, because a style reaches the system prompt of every request. It is not forced (`force-for-plugin` unset, the user's `outputStyle` wins), `juno init` asks once and defaults to No, and subagents are unaffected by design (13.10).
+67. Four traits and a chosen tone (2026-11-08, user decision): the shared core of the output style carries four behaviour traits (name a contradicted earlier decision, keep memory, checked and inferred apart, lead with the answer and keep replies short, own unfinished items), and `juno init` lets the user choose the tone from plain, witty, warm or mentor (`juno:juno`, `juno:juno-witty`, `juno:juno-warm`, `juno:juno-mentor`); the default is no style. The witty tone never jokes in errors, incidents, bad news or serious moments (13.10).
 
 User decisions applied (2026-11-07, not Claude's): the `juno-brain` vault name and move plus the symlink (4.3); the cutover rules policy (4.3); unloading the v1 launchd jobs (16); no push in Phase 7 (16); mandatory e2e proof (15.3); snapshot uses the user's git signing and never turns off gpgSign (12.8).

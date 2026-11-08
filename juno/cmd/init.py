@@ -167,6 +167,14 @@ def plugin_status(settings: str) -> str:
 
 
 ASKED_MARKER = "stale-fix-asked"
+STYLE_MARKER = "output-style-asked"
+STYLE_CHOICES = {
+    "1": "juno:juno",
+    "2": "juno:juno-witty",
+    "3": "juno:juno-warm",
+    "4": "juno:juno-mentor",
+}
+OUTPUT_STYLES = tuple(STYLE_CHOICES.values())
 
 
 def interactive() -> bool:
@@ -199,6 +207,63 @@ def offer_stale_fix(cfg: config.Config, env: Mapping[str, str]) -> None:
             say(line)
     except Refused as error:
         say(f"stale fixer: not scheduled ({error}); then run juno schedule install stale-weekly")
+
+
+def offer_output_style(cfg: config.Config, settings: str) -> None:
+    marker = os.path.join(cfg.state, STYLE_MARKER)
+    if not interactive() or os.path.exists(marker):
+        return
+    raw = fs.read_bytes(settings)
+    try:
+        data = settings_merge.parse(raw or b"")
+        manifest = common.load_manifest(cfg)
+    except (ValueError, settings_merge.SettingsError) as error:
+        say(f"output style: not set ({error})")
+        return
+    current = data.get("outputStyle")
+    if current in OUTPUT_STYLES:
+        say(f"output style: {current} already set")
+        return
+    if current is not None:
+        say(f"output style: {current!r} is already set in {settings}; left as it is")
+        return
+    question = (
+        "Juno style: 1) plain  2) witty  3) warm  4) mentor  5) none (Claude's default) [5]: "
+    )
+    try:
+        answer = input(question).strip()
+    except EOFError:
+        answer = ""
+    fs.atomic_write(marker, b"asked\n", 0o600)
+    style = STYLE_CHOICES.get(answer)
+    if style is None:
+        say(f'output style: left off; turn it on later with "outputStyle": "{OUTPUT_STYLES[0]}"')
+        return
+    new = dict(data)
+    new["outputStyle"] = style
+    new_bytes = settings_merge.dumps(
+        new, settings_merge.detect_indent(raw or b""), raw.endswith(b"\n") if raw else True
+    )
+    backups = os.path.join(cfg.state, "install-backups")
+    fs.ensure_private_dir(backups)
+    stamp = time.strftime("%Y%m%dT%H%M%S")
+    backup = os.path.join(backups, f"settings-{stamp}-{fs.sha256(raw or b'')[:8]}.json")
+    fs.atomic_write(backup, raw or b"", 0o600)
+    mode = None if raw is not None else 0o600
+    fs.atomic_write(settings, new_bytes, mode)
+    if settings_merge.parse(fs.read_bytes(settings) or b"") != new:
+        say("output style: verification failed after writing; restore from " + backup)
+        return
+    if manifest and "settings" in manifest and "record" in manifest:
+        manifest = dict(manifest)
+        info = dict(manifest["settings"])
+        if info.get("post_sha256") == fs.sha256(raw or b""):
+            info["post_sha256"] = fs.sha256(new_bytes)
+        manifest["settings"] = info
+        manifest["record"] = {**manifest["record"], "outputStyle": style}
+        common.save_manifest(cfg, manifest)
+    say(f"settings: outputStyle = {style} in {settings} (backup {backup})")
+    say("output style: restart Claude Code for it to take effect")
 
 
 def run(args: argparse.Namespace, env: Mapping[str, str]) -> int:
@@ -238,5 +303,6 @@ def run(args: argparse.Namespace, env: Mapping[str, str]) -> int:
         say("Juno: " + refused)
     say(plugin_status(settings))
     if not dry and not refused:
+        offer_output_style(config.load(env), settings)
         offer_stale_fix(config.load(env), env)
     return 2 if refused else 0
