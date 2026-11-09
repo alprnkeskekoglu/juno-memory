@@ -15,6 +15,7 @@ Part of [[core]]. Every write is a `juno` verb; Edit and Write on vault files ar
 - Self, what my own words show about me: `juno self --file values|decisions|communication|tensions --evidence "<my words>" "<line>"`.
 - Thread, a topic outliving this segment: `juno thread add --tag <KEY or repo> "<open question>"`; settle it with `juno thread close <ids>` for a listed candidate, or, when the user explicitly asks, `juno thread close --line <N> --was "<part of the line>" --evidence "<the user's own words, 20+ chars>"` (undo with `juno undo <write id>`).
 - Loose item to sort later: `juno capture "<text>"`.
+- Write cap: 30 vault writes per segment (`[caps] run_max`). When it refuses, ask me; only after I approve, `juno cap raise --by N --evidence "<my words approving it>"` (N up to 100, my words only, never from a subagent) raises it for this segment. `juno cap show` prints used/limit.
 
 ## Correcting
 - A wrong or outdated line: `juno fix <file>:<line> --was "<part of the line as it is now>" --evidence E "<corrected line>"`.

@@ -91,6 +91,7 @@ class Segment:
         self.private = False
         self.cards: list[str] = []
         self.rules_added = 0
+        self.cap_raised = 0
         self.first_t: float | None = None
         self.last_t: float | None = None
         self.cwd: str | None = None
@@ -285,6 +286,11 @@ class Segment:
     def on_stop(self, rec: Record) -> None:
         if isinstance(rec.get("msg"), str):
             self.last_msg = rec["msg"]
+
+    def on_cap_raise(self, rec: Record) -> None:
+        by = rec.get("by")
+        if isinstance(by, int) and not isinstance(by, bool) and by > 0:
+            self.cap_raised += by
 
     def on_rule_added(self, rec: Record) -> None:
         self.rules_added += 1

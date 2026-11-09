@@ -19,7 +19,7 @@ FILES = "core.md juno-brain.toml inbox.md threads.md pitfalls.md rules/global.md
 PROTOCOLS = "handoffs rules vault-files links ideas backlog".split()
 ALLOWED_VERBS = set(
     "rule backlog search stale thread card knowledge note decision project procedure pitfall "
-    "idea capture self fix forget undo task".split()
+    "idea capture self fix forget undo task cap".split()
 )
 
 

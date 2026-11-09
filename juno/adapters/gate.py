@@ -77,11 +77,17 @@ def read(cfg: config.Config, rel: str) -> str:
     return store.read_text(vault_file(cfg, rel))
 
 
+def run_limit(cfg: config.Config, seg: Segment) -> int:
+    return cfg.get_int("caps", "run_max") + seg.cap_raised
+
+
 def check_run_cap(cfg: config.Config, seg: Segment) -> None:
-    if writelog.live_count(writelog.read(cfg), seg.sid) >= writegate.RUN_MAX:
+    limit = run_limit(cfg, seg)
+    if writelog.live_count(writelog.read(cfg), seg.sid) >= limit:
         raise Refused(
-            f"this session already made {writegate.RUN_MAX} vault writes; "
-            "undo or ask the user before writing more"
+            f"this session already made {limit} vault writes (the cap is {limit}); it can be "
+            'raised only with `juno cap raise --by N --evidence "<user\'s words>"` after the '
+            "user approves, or by [caps] run_max in juno.toml"
         )
 
 

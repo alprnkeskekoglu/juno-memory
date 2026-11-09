@@ -10,7 +10,7 @@ language.preset language.correction_cues language.user_cues language.self_cues l
 jira.base_url jira.prefixes jira.projects jira.no_ticket_branches repos.roots repos.overview_roots
 repos.exclude caps.hook_output_chars caps.core_chars caps.global_rules_chars caps.global_rule_lines
 caps.scoped_rule_lines caps.overview_chars caps.pack_chars caps.max_full_packs caps.last_message_chars
-caps.stub_excerpt_chars caps.quote_min_chars caps.rule_max_chars caps.overview_cards caps.pack_cards
+caps.stub_excerpt_chars caps.quote_min_chars caps.run_max caps.rule_max_chars caps.overview_cards caps.pack_cards
 caps.pack_threads_chars caps.pack_knowledge_chars caps.subagent_chars caps.subagent_global_rules_chars
 thresholds.meaningful_tool_calls thresholds.meaningful_user_turns thresholds.dirty_user_turns
 thresholds.dirty_tool_calls thresholds.reminder_spacing_turns thresholds.active_ticket_days

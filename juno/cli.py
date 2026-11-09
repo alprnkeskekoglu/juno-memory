@@ -49,6 +49,7 @@ VERBS: dict[str, tuple[str, str]] = {
     "fix": ("fix", "correct one vault line"),
     "forget": ("forget", "move a wrong vault line to the archive"),
     "undo": ("undo", "revert a write by its id"),
+    "cap": ("cap", "show or (user-approved) raise this session's write cap"),
     "decay": ("decay", "list vault files with no recorded use (read-only)"),
     "report": ("report", "write the weekly report to _generated/reports (no model call)"),
     "schedule": ("schedule", "install, remove or show the weekly stale fixer schedule"),
