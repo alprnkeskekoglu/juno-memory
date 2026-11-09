@@ -10,7 +10,7 @@ from juno.core.detect import Tickets
 
 MAX_LINE_BYTES = 4000
 SAFE_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
-SHRINKABLE = ("repos", "edits", "tickets", "cmd_tickets")
+SHRINKABLE = ("repos", "edits", "tickets", "cmd_tickets", "keys")
 
 Record = dict[str, Any]
 
@@ -216,8 +216,30 @@ class Segment:
             self.edits[repo] += 1
             if ticket:
                 self.ticket_edits[ticket] += 1
+        if not rec.get("agent"):
+            for key in self.tool_keys(rec):
+                self.tickets[key] += 1
+                self.main_tickets[key] += 1
+        if not rec.get("agent"):
+            self.on_keys(rec)
         if rec.get("boundary"):
             self.dirty = True
+
+    def on_keys(self, rec: Record) -> None:
+        """Ticket keys seen by a main-session tool call, or named by a card (`ev: keys`)."""
+        keys = rec.get("keys")
+        if not isinstance(keys, list) or not self.rules.tickets.enabled:
+            return
+        for key in keys[:5]:
+            if isinstance(key, str) and self.rules.tickets.find(key) == [key]:
+                self.tickets[key] += 1
+                self.main_tickets[key] += 1
+
+    def tool_keys(self, rec: Record) -> list[str]:
+        keys = rec.get("keys")
+        if not isinstance(keys, list) or not self.rules.tickets.enabled:
+            return []
+        return [k for k in keys[:5] if isinstance(k, str) and self.rules.tickets.find(k) == [k]]
 
     def touch(self, repo: str, ticket: str | None, source: Counter[str] | None = None) -> None:
         ticket = ticket if self.rules.tickets.enabled else None
