@@ -48,6 +48,7 @@ class Fold(unittest.TestCase):
         s = Segment(SID, RULES)
         s.apply({"ev": "tool", "name": EDIT, "keys": ["ABC-5"]})
         self.assertEqual(set(s.tickets), {"ABC-5"})
+        self.assertEqual((s.tickets["ABC-5"], s.main_tickets["ABC-5"]), (1, 1))
         self.assertEqual(routing.handoff_targets(s)[0]["path"], "handoffs/ABC-5.md")
         self.assertEqual(routing.handoff_targets(s)[0]["key"], "ABC-5")
 
