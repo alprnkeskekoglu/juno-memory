@@ -173,7 +173,7 @@ The path is `~/.config/juno/juno.toml`. When `XDG_CONFIG_HOME` is set, the path 
 | `[caps] last_message_chars` | 1500 | |
 | `[caps] stub_excerpt_chars` | 400 | |
 | `[caps] quote_min_chars` | 20 | |
-| `[caps] run_max` | 30 | live vault writes per segment; `juno cap raise --by N --evidence "<user words>"` adds N (1-100) to one segment (ledger event `cap_raise`, not a vault write) |
+| `[caps] run_max` | 50 | live vault writes per segment; `juno cap raise --by N --evidence "<user words>"` adds N (1-100) to one segment (ledger event `cap_raise`, not a vault write) |
 | `[caps] rule_max_chars` | 300 | |
 | `[caps] overview_cards` | 2 | |
 | `[caps] pack_cards` | 2 | |
@@ -761,7 +761,7 @@ Evidence kinds: `--evidence` is a verbatim part (at least `quote_min_chars`) of 
 1. Scan: secrets (`redact.find_secrets`), then email, phone and 6+ digit ids (`privacy.scan`, 8.3). One-line fields also refuse the `·` separator and keep 8-300 characters.
 2. Anchor the evidence (14.1).
 3. Dedupe on the folded first part of the line (before ` · ` and a trailing parenthesis): an exact match writes nothing and prints "already recorded"; a match with similarity at least 0.88 replaces that line (update instead of add).
-4. Caps: 30 live writes per session (`[caps] run_max`); notes 2,000, ideas 1,500, cards 1,500 and procedures 2,000 characters. There is no per-file line cap (decision 64).
+4. Caps: 50 live writes per session (`[caps] run_max`); notes 2,000, ideas 1,500, cards 1,500 and procedures 2,000 characters. There is no per-file line cap (decision 64).
 5. Back up the file (`store.backup`), write atomically under `vault.lock`, append a record `{id, sid, seg, t, verb, file, created, evidence, after, hunks}` to `writes.jsonl` and a ledger `vault_write` event. The write id is `w-` plus 8 hex digits and is printed with the result.
 
 Paths are resolved from the vault root, and a symlink on the way is refused. One check does this everywhere (`store.vault_file`; a compare on NFC and case folded components, with the inode of the vault root as fallback): the gate, the card run, stubs, tasks, backlog, compact and `dashboard --out`. `task set` is a write verb of this gate (verb `task`, evidence `ticket <KEY>`).

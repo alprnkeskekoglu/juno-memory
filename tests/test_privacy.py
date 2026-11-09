@@ -1,6 +1,6 @@
 import unittest
 
-from juno.core import cardfmt, privacy, routing
+from juno.core import cardfmt, privacy, routing, writegate
 from juno.core.errors import Refused
 from juno.core.ledger import Segment
 from tests.support.write import WriteCase
@@ -237,11 +237,11 @@ class WritePaths(WriteCase):
         self.assertEqual(self.get("tasks/ABC-100.md"), "")
 
     def test_task_set_is_capped_like_the_gate(self) -> None:
-        for n in range(30):
+        for n in range(writegate.RUN_MAX):
             code, out = self.juno("task", "set", f"ABC-{n + 1}", "--title", "T", "--status", "open")
             self.assertEqual(code, 0, out)
         out = self.refused("task", "set", "ABC-99", "--title", "T", "--status", "open")
-        self.assertIn("30 vault writes", out)
+        self.assertIn(f"{writegate.RUN_MAX} vault writes", out)
 
 
 if __name__ == "__main__":
