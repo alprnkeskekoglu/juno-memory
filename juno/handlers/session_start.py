@@ -5,6 +5,7 @@ from typing import Any
 from juno import config, hookcore
 from juno.adapters import (
     armsio,
+    cardjob,
     ledgerio,
     prune,
     reportauto,
@@ -157,7 +158,9 @@ def session_context(
     previous = None if compact else stubs.stub_ended_segments(cfg, sid)
     lines = [segment_line(sid), f"Juno vault: {cfg.vault}."]
     if previous:
-        lines.append(routing.previous_segment_line(*previous))
+        lines.append(routing.previous_segment_line(
+                *previous, failure=cardjob.card_failure(cfg, previous[0].sid)
+            ))
     if not compact:
         lines.append(hook_error_line(cfg))
         lines.append(weekly_report_line(cfg))

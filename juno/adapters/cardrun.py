@@ -152,9 +152,16 @@ def write_valid_card(
     chosen, body = cardfmt.split_file_line(card_text)
     body, out["links_unlinked"] = cardfmt.fix_links(body)
     body = cardfmt.normalise_heading(body, seg.sid[:8], str(targets[0]["key"]), stamp)
-    body = cardfmt.validate_card(
-        body, seg.sid[:8], str(targets[0]["key"]), stamp, cfg.get_list("jira", "prefixes")
-    )
+    prefixes = cfg.get_list("jira", "prefixes")
+    key = str(targets[0]["key"])
+    try:
+        body = cardfmt.validate_card(body, seg.sid[:8], key, stamp, prefixes)
+    except cardfmt.Failed as exc:
+        masked, counts = cardfmt.mask_private(body, seg.sid[:8], str(exc), prefixes)
+        if not counts:
+            raise
+        body = cardfmt.validate_card(masked, seg.sid[:8], key, stamp, prefixes)
+        out["masked"] = counts
     if naming:
         slug = cardfmt.valid_slug(chosen, cardwrite.reserved_names(cfg))
         targets = [dict(targets[0], path=f"handoffs/{slug or 'misc'}.md")]
@@ -246,6 +253,10 @@ def run_locked(
         files=row["files"],
         cost_usd=row["cost_usd"],
     )
+    if row.get("masked"):
+        job["masked"] = row["masked"]
+    else:
+        job.pop("masked", None)
     cardjob.write_job(cfg, sid, job)
     prune_runs(cfg)
     return 0 if row["status"] in ("ok", "skipped") else 1

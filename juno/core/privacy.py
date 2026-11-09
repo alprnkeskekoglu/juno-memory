@@ -56,6 +56,65 @@ def personal(text: str, prefixes: Sequence[str] | None = None) -> str | None:
     return personal_kind(GIT_HASH_RE.sub(" ", ticket_re(prefixes).sub(" ", URL_RE.sub(" ", text))))
 
 
+PLACEHOLDERS = {"id": "<id>", "phone": "<phone>", "email": "<email>"}
+MASK_PASSES = 3
+
+
+def blank(chars: list[tuple[str, int]], pattern: re.Pattern[str]) -> list[tuple[str, int]]:
+    """Blank every match of pattern the way personal() does (one space), keeping origins."""
+    text = "".join(c for c, _ in chars)
+    out: list[tuple[str, int]] = []
+    pos = 0
+    for m in pattern.finditer(text):
+        out += chars[pos : m.start()] + [(" ", -1)]
+        pos = m.end()
+    return out + chars[pos:]
+
+
+def personal_spans(
+    text: str, prefixes: Sequence[str] | None = None
+) -> list[tuple[int, int, str]]:
+    """(start, end, kind) of every span personal() would object to, in text offsets."""
+    spans: list[tuple[int, int, str]] = []
+    for m in URL_RE.finditer(text):
+        problem = url_problem(m.group(0))
+        if problem:
+            spans.append((m.start(), m.end(), problem))
+    chars = [(c, i) for i, c in enumerate(text)]
+    for pattern in (URL_RE, ticket_re(prefixes), GIT_HASH_RE):
+        chars = blank(chars, pattern)
+    for kind, pattern in (("email", EMAIL_RE), ("phone", PHONE_RE), ("id", LONG_ID_RE)):
+        flat = "".join(c for c, _ in chars)
+        hits = [(m.start(), m.end()) for m in pattern.finditer(flat)]
+        for a, b in hits:
+            real = [i for _, i in chars[a:b] if i >= 0]
+            if real:
+                spans.append((min(real), max(real) + 1, kind))
+        chars = blank(chars, pattern)
+    return spans
+
+
+def mask(text: str, prefixes: Sequence[str] | None = None) -> tuple[str, dict[str, int]]:
+    """Replace personal spans with <id>, <phone>, <email>; return the text and counts by kind.
+
+    Secrets are not handled here. Text with no personal data comes back unchanged."""
+    counts: dict[str, int] = {}
+    for _ in range(MASK_PASSES):
+        spans = sorted(personal_spans(text, prefixes))
+        if not spans:
+            break
+        out: list[str] = []
+        pos = 0
+        for start, end, kind in spans:
+            if start < pos:
+                continue
+            out += [text[pos:start], PLACEHOLDERS[kind]]
+            pos = end
+            counts[kind] = counts.get(kind, 0) + 1
+        text = "".join(out) + text[pos:]
+    return text, counts
+
+
 def scan(text: str | None, prefixes: Sequence[str] | None = None) -> str | None:
     text = text or ""
     return "secret" if find_secrets(text) else personal(text, prefixes)

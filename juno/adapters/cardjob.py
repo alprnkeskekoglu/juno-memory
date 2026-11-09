@@ -7,7 +7,7 @@ from typing import Any
 
 from juno import config, paths
 from juno.adapters import fs, ledgerio, store
-from juno.core import ledger
+from juno.core import ledger, privacy
 from juno.core.ledger import Segment
 
 SESSION_VARS = (
@@ -234,3 +234,12 @@ def late_run(cfg: config.Config, seg: Segment) -> bool:
         return False
     start_run(cfg, seg.sid, "late", transcript)
     return True
+
+
+def card_failure(cfg: config.Config, sid: object) -> str | None:
+    """Short, privacy-safe reason the last card job rejected its card, or None."""
+    job = read_job(cfg, sid)
+    error = " ".join(str(job.get("error") or "").split())
+    if job.get("status") != "failed" or not error.startswith("invalid:"):
+        return None
+    return None if privacy.scan(error) else error[:80]

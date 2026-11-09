@@ -1,7 +1,9 @@
 import json
 import os
+import time
 import unittest
 
+from juno import config
 from tests.support.hooks import OTHER_SID, HookCase, git
 
 TASK = (
@@ -311,6 +313,9 @@ class SessionEvents(HookCase):
         self.assertIn(f"Juno previous segment {OTHER_SID[:8]}", first)
         self.assertIn("`juno card ", first)
         self.assertNotIn("Improve its stub", first)
+        self.assertNotIn("card job failed", first)
+        stub = self.read("handoffs/r.md")
+        self.assertIn("Segment ended without a card; Juno wrote this stub", stub)
         card = self.read("handoffs/r.md")
         self.assertEqual(card.count(f"· stub · {OTHER_SID[:8]}"), 1)
         again = self.context(
@@ -318,6 +323,23 @@ class SessionEvents(HookCase):
         )
         self.assertNotIn("previous segment", again)
         self.assertEqual(self.read("handoffs/r.md").count("stub ·"), 1)
+
+    def test_failed_card_job_is_named_in_stub_and_announcement(self) -> None:
+        from juno.adapters import cardjob
+        from tests.test_ledger import write_ledger
+
+        write_ledger(self.sb.state, OTHER_SID, 20, age=7200)
+        cfg = config.load(dict(self.env))
+        error = "invalid: private data (id)"
+        job = {"sid": OTHER_SID, "status": "failed", "error": error, "t": time.time()}
+        cardjob.write_job(cfg, OTHER_SID, job)
+        first = self.context(
+            self.hook("session_start", self.payload("SessionStart", source="startup"))
+        )
+        self.assertIn("card job failed (invalid: private data (id))", first)
+        stub = self.read("handoffs/r.md")
+        self.assertIn("Card job failed (invalid: private data (id)); Juno wrote this stub", stub)
+        self.assertNotIn("ended without a card;", stub)
 
     def test_recent_segment_is_left_alone(self) -> None:
         from tests.test_ledger import write_ledger

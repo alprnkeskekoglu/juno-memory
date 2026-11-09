@@ -56,10 +56,12 @@ def stub_card(
     now: float,
     excerpt_chars: int,
     prefixes: Sequence[str] | None = None,
+    failure: str | None = None,
 ) -> str:
     excerpt = " ".join(redact(seg.last_msg).split())[:excerpt_chars]
     if not excerpt or privacy.scan(excerpt, prefixes):
         excerpt = "-"
+    lead = f"Card job failed ({failure})" if failure else "Segment ended without a card"
     return (
         "\n".join(
             [
@@ -67,7 +69,7 @@ def stub_card(
                 "auto: true",
                 "Repos: " + (", ".join(target["repos"]) or "-"),
                 "Tickets: " + (", ".join(target["tickets"]) or "-"),
-                "Segment ended without a card; Juno wrote this stub "
+                f"{lead}; Juno wrote this stub "
                 f"({seg.tools} tool calls, {seg.turns} user turns, {seg.edit_total} edits).",
                 "Last assistant message: " + excerpt,
                 "Learned: none",
@@ -77,11 +79,14 @@ def stub_card(
     )
 
 
-def previous_segment_line(seg: Segment, paths: list[str], now: float | None = None) -> str:
+def previous_segment_line(
+    seg: Segment, paths: list[str], now: float | None = None, failure: str | None = None
+) -> str:
+    why = f"; its card job failed ({failure}) and the card was dropped" if failure else ""
     return (
-        f"Juno previous segment {seg.sid[:8]} ended without a current card "
+        f"Juno previous segment {seg.sid[:8]} ended without a current card{why} "
         f"(repos: {', '.join(seg.repos) or '-'}; tickets: {', '.join(seg.tickets) or '-'}). "
         f"Its stub card in {', '.join(paths)} is improved by the stub pass; vault Edit and Write "
         'are refused. `juno card --label L --learned "..." "<done>" "<next>"` writes only '
-        "this session's own card."
+        "this session's own card, not the previous segment's."
     )

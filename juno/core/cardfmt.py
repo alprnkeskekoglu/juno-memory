@@ -208,6 +208,26 @@ def validate_card(
     return "\n".join(line.rstrip() for line in lines) + "\n"
 
 
+PRIVATE_FAILURE_RE = re.compile(r"^invalid: private data \((?:id|phone|email)\)$")
+
+
+def mask_private(
+    card: str, seg8: str, reason: str, prefixes: Sequence[str] | None = None
+) -> tuple[str, dict[str, int]]:
+    """Mask the personal spans of a card that failed with private data; secrets never."""
+    if not PRIVATE_FAILURE_RE.match(reason):
+        return card, {}
+    head, sep, rest = card.partition("\n")
+    suffix = f" · {seg8}"
+    if head.endswith(suffix):
+        head = head[: -len(suffix)]
+    else:
+        suffix = ""
+    masked, counts = privacy.mask(head + sep + rest, prefixes)
+    first, sep2, tail = masked.partition("\n")
+    return first + suffix + sep2 + tail, counts
+
+
 def fix_links(card: str) -> tuple[str, int]:
     lines: list[str | None] = list(card.splitlines())
     unlinked = 0

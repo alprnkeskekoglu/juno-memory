@@ -58,9 +58,9 @@ class OneWritePath(CardCase):
     def test_card_run_refuses_private_data(self) -> None:
         self.dirty()
         row = self.run_card(card(body="Mailed jane.doe@corp.com about it."))
-        self.assertEqual(row["status"], "failed")
-        self.assertIn("private data", str(row["error"]))
-        self.assertEqual(self.handoff(), "")
+        self.assertEqual((row["status"], row["masked"]), ("ok", {"email": 1}))
+        self.assertIn("Mailed <email> about it.", self.handoff())
+        self.assertNotIn("jane.doe", self.handoff())
 
     def test_stub_is_logged_and_undoable(self) -> None:
         self.dirty()

@@ -113,6 +113,66 @@ class Cards(unittest.TestCase):
         self.assertIn("finished ABC-123456", routing.stub_card(seg, target, 0.0, 300, ABC))
 
 
+class Mask(unittest.TestCase):
+    def test_personal_spans_are_masked_and_rescan_clean(self) -> None:
+        cases = {
+            "Jira 2169327 moved": ("Jira <id> moved", {"id": 1}),
+            "ids 2169327 and 7654321": ("ids <id> and <id>", {"id": 2}),
+            "mail jane.doe@corp.com now": ("mail <email> now", {"email": 1}),
+            "call +49 170 1234567 now": ("call <phone> now", {"phone": 1}),
+            "see https://app/u?email=jane.doe%40corp.com ok": ("see <email> ok", {"email": 1}),
+            "see https://app/u?uid=123456789 ok": ("see <id> ok", {"id": 1}),
+        }
+        for text, (want, counts) in cases.items():
+            with self.subTest(text=text):
+                self.assertIsNotNone(privacy.scan(text, ABC))
+                out, got = privacy.mask(text, ABC)
+                self.assertEqual((out, got), (want, counts))
+                self.assertIsNone(privacy.scan(out, ABC))
+
+    def test_protected_spans_are_left_alone(self) -> None:
+        for text in (
+            "https://github.com/o/r/pull/1234567",
+            "https://x.slack.com/archives/C0AAAAAAAAA/p1793112507638039",
+            "https://jira.example.com/browse/ABC-123456?focusedId=42",
+            "fixed ABC-123456 and abc-654321",
+            "branch feature/ABC-444444-fix",
+            "Committed as 3590742",
+            "cherry-picked 1234567 and [main (root-commit) 1234567]",
+            "nothing here, 42 items",
+        ):
+            with self.subTest(text=text):
+                self.assertIsNone(privacy.scan(text, ABC))
+                self.assertEqual(privacy.mask(text, ABC), (text, {}))
+
+    def test_protected_spans_survive_next_to_findings(self) -> None:
+        text = "ABC-123456 touched 2169327; https://x.io/p/9 by a@b.co"
+        self.assertEqual(
+            privacy.mask(text, ABC)[0], "ABC-123456 touched <id>; https://x.io/p/9 by <email>"
+        )
+
+    def test_secrets_are_not_masked(self) -> None:
+        text = "key ghp_" + "b" * 36
+        self.assertEqual(privacy.mask(text, ABC), (text, {}))
+        self.assertEqual(privacy.scan(text, ABC), "secret")
+
+    def test_stub_names_the_card_failure(self) -> None:
+        seg = Segment("57fb7685-9be8-4bc7-a435-47aa50ccd35f")
+        target = {"key": "-", "repos": [], "tickets": []}
+        plain = routing.stub_card(seg, target, 0.0, 300, ABC)
+        self.assertIn("Segment ended without a card; Juno wrote this stub", plain)
+        failed = routing.stub_card(seg, target, 0.0, 300, ABC, "invalid: private data (id)")
+        self.assertIn("Card job failed (invalid: private data (id)); Juno wrote this stub", failed)
+        self.assertNotIn("ended without a card", failed)
+
+    def test_previous_segment_line_names_the_card_failure(self) -> None:
+        seg = Segment("57fb7685-9be8-4bc7-a435-47aa50ccd35f")
+        line = routing.previous_segment_line(seg, ["handoffs/r.md"], None, "invalid: heading")
+        self.assertIn("card job failed (invalid: heading)", line)
+        self.assertIn("not the previous segment's", line)
+        self.assertNotIn("card job failed", routing.previous_segment_line(seg, ["x.md"]))
+
+
 class WritePaths(WriteCase):
     TICKETS = True
 
