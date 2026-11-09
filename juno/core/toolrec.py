@@ -3,6 +3,7 @@ import re
 from typing import Any
 
 from juno.core import fold, prompts
+from juno.core.detect import Tickets
 from juno.core.redact import redact
 
 WRITE_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
@@ -142,3 +143,59 @@ def ask_rows(tool_in: dict[str, Any], response: object) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+TICKET_FIELDS = frozenset(
+    {"issueidorkey", "issuekey", "key", "issue_key", "issue_id_or_key", "ticket", "ticketkey"}
+)
+RESPONSE_SCAN_CHARS = 8192
+MAX_TOOL_KEYS = 5
+RESPONSE_KEY_RE = re.compile(r'"key"\s*:\s*"([^"\\]{1,40})"')
+
+
+def whole_key(tickets: Tickets, value: object) -> str | None:
+    if not isinstance(value, str) or tickets.pattern is None or len(value) > 40:
+        return None
+    match = tickets.pattern.fullmatch(value.strip())
+    return match.group(0).upper() if match else None
+
+
+def response_text(response: object) -> str:
+    """Leading text of a tool response (a string, or MCP content blocks), capped."""
+    if isinstance(response, dict):
+        response = response.get("content", response.get("text"))
+    if isinstance(response, str):
+        return response[:RESPONSE_SCAN_CHARS]
+    out = ""
+    if isinstance(response, list):
+        for part in response[:20]:
+            text = part.get("text") if isinstance(part, dict) else part
+            if isinstance(text, str):
+                out += text[: RESPONSE_SCAN_CHARS - len(out)]
+            if len(out) >= RESPONSE_SCAN_CHARS:
+                break
+    return out
+
+
+def tool_ticket_keys(
+    tool: object, tool_in: dict[str, Any], response: object, tickets: Tickets
+) -> list[str]:
+    """Ticket keys an MCP tool call names (input id fields) or, for a create call, returns."""
+    if not tickets.enabled or not isinstance(tool, str) or not tool.startswith("mcp__"):
+        return []
+    found: list[str] = []
+    for name, value in tool_in.items():
+        if isinstance(name, str) and name.casefold() in TICKET_FIELDS:
+            key = whole_key(tickets, value)
+            if key and key not in found:
+                found.append(key)
+    if "create" in tool.casefold():
+        if isinstance(response, dict):
+            key = whole_key(tickets, response.get("key"))
+            if key and key not in found:
+                found.append(key)
+        for raw in RESPONSE_KEY_RE.findall(response_text(response)):
+            key = whole_key(tickets, raw)
+            if key and key not in found:
+                found.append(key)
+    return found[:MAX_TOOL_KEYS]

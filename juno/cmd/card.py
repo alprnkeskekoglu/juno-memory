@@ -1,10 +1,11 @@
 import argparse
+import os
 from collections.abc import Mapping
 
 from juno import config
-from juno.adapters import gate
+from juno.adapters import gate, ledgerio
 from juno.cmd import gateio, write
-from juno.core import cardfmt, routing, writegate
+from juno.core import cardfmt, cardtarget, routing, writegate
 from juno.core.errors import Refused
 
 MIN_LINES, MAX_LINES = 2, 5
@@ -16,6 +17,16 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--learned", required=True, help="one sentence, or none")
     parser.add_argument("--decision", help="one line, only if the user decided something")
     parser.add_argument("--links", help="wikilinks, e.g. '[[repo]], [[KEY]]'")
+    parser.add_argument(
+        "--tickets",
+        help="ticket keys for the card (override), e.g. 'ABC-1,ABC-2'; each must have been seen "
+        "in this segment (typed, a tool call, a touched branch) or be a [[KEY]] in --links",
+    )
+    parser.add_argument(
+        "--repos",
+        help="repos for the card (override), comma separated; each must be touched in this "
+        "segment or have a vault profile",
+    )
     parser.add_argument("lines", nargs="+", help="2-5 lines: done, where it stopped, next")
 
 
@@ -50,8 +61,16 @@ def build(cfg: config.Config, args: argparse.Namespace, target: routing.Target, 
 
 def do(cfg: config.Config, args: argparse.Namespace) -> int:
     seg = write.guard(cfg)
-    target = routing.card_targets(seg)[0]
+    linked = cardtarget.link_keys(seg, args.links)
+    tickets = cardtarget.explicit_tickets(seg, args.tickets, linked)
+    repos = cardtarget.explicit_repos(
+        seg, args.repos, lambda name: os.path.isfile(gate.vault_file(cfg, f"projects/{name}.md"))
+    )
+    fresh = [k for k in linked if k not in seg.tickets]
+    target = cardtarget.pick(seg, linked, tickets, repos)
     card = build(cfg, args, target, seg.sid[:8])
+    if fresh:
+        ledgerio.append(cfg, seg.sid, {"ev": "keys", "keys": fresh})
     rel = str(target["path"])
     name = rel.rsplit("/", 1)[-1][:-3]
     with write.locked(cfg):

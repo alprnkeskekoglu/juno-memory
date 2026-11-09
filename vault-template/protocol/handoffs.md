@@ -8,4 +8,6 @@ When I ask for a card mid-session, run `juno card` (see [[core]]); it picks the 
 - else repo -> `handoffs/<repo>.md`;
 - else `handoffs/misc.md`.
 
+`--tickets K1,K2` and `--repos r1,r2` name the card's tickets and repos explicitly: a ticket must have been seen in this segment (or be linked in `--links`), a repo touched in it or have a profile; otherwise Juno refuses.
+
 The heading time is the card's last update, as Juno gives it. Instead of `misc.md`, the automatic run may pick a topic file. To improve a stub card, run `juno card` again: it replaces the stub and drops `auto: true`.

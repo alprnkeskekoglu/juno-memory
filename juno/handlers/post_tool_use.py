@@ -68,6 +68,12 @@ def tool_record(
     target = toolrec.write_target(tool_in) if tool in toolrec.WRITE_TOOLS else None
     if target:
         mark_write(cfg, rec, store.resolve(target, cwd), found, payload.get("session_id"))
+    if not rec["agent"] and isinstance(tool, str) and tool.startswith("mcp__"):
+        keys = toolrec.tool_ticket_keys(
+            tool, tool_in, payload.get("tool_response"), repos.tickets_from(cfg)
+        )
+        if keys:
+            rec["keys"] = keys
     if tool == "Bash":
         response = payload.get("tool_response")
         stdout = response.get("stdout") if isinstance(response, dict) else ""
