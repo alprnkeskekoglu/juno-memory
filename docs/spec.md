@@ -385,6 +385,7 @@ The vault-writing verbs are `rule add|remove|move|triggers|accept|reject`, `thre
 - **The quote is required** for `rule add|remove|move|triggers` and for `backlog add|add-to|edit|set|done|drop` [plan: rules "changed only with the user's quote"], [v1 backlog: 4].
 - `snapshot` needs no quote. **Decided here.** Reason: the user's CLAUDE.md lets Claude snapshot without asking once the tests pass, v1 ran with quotes optional (`guards = false`), and a snapshot changes no memory.
 - `rule accept` keeps the v1 check that each id appears in a typed prompt or chosen answer of the segment, plus the re-verification against the source ledger. **Decided here.** Reason: the SessionStart nudge puts the ids into the AskUserQuestion labels, so the check costs the user nothing and keeps acceptance in the user's hands. The same applies to `thread close` and `backlog accept`; not to `thread keep`, `backlog reject` or `rule reject`, because a multiSelect answer carries only the chosen ids (Phase 2 finding).
+- `thread close --line N --was TEXT --evidence QUOTE` closes one open thread line directly when the user asks. **Decided here.** Reason: `forget` refuses threads.md, and a candidate id exists only for lines the scan flagged. The line must be a thread line containing `--was` (8+ characters); the evidence is the user's own words (`gate.anchor` with `user_only`, as `decision` and `self`; repo:/ticket: anchors are refused). It writes through the gate (verb `thread-close`, a write id, `juno undo <id>` restores the line) and records `thread_closed`. It cannot be mixed with candidate ids.
 
 ### 8.3 Accepted gaps
 
@@ -408,7 +409,7 @@ The shim is `juno <verb>`. Each verb with `--json` prints one JSON object. Exit 
 | `rule move --from S --to S [--triggers] --quote Q N` | `rules/` | [v1: Rules policy] Move |
 | `rule triggers --scope topic:<slug> --add "a,b" --quote Q` | `rules/` | [v1: Rules policy] Topic triggers |
 | `rule pending [--json]` / `accept <id...>` / `reject <id...>` | `rules/`, queue | [v1: Rules policy] Candidates |
-| `thread pending [--json]` / `close <id...>` / `keep <id...>` | `threads.md`, queue | [v1: Session-end cards] Thread close candidates |
+| `thread pending [--json]` / `close <id...>` / `close --line N --was TEXT --evidence QUOTE` / `keep <id...>` | `threads.md`, queue | [v1: Session-end cards] Thread close candidates |
 | `backlog add\|add-to\|edit\|list\|show\|set\|log\|done\|drop\|accept\|reject` | `backlog/`, `tasks/<K>.md` Notes line, queue | [v1 backlog: 5. CLI]; the body file must be under `/tmp` or the state dir |
 | `search "<q>" [--repo] [--ticket] [--since D] [--until D] [--limit 5] [--archive] [--json]` | index only | section 12.1 |
 | `recap [--days 7 \| --week] [--ticket] [--json]` | - | [v1: Phase 2 item 4] |

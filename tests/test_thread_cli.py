@@ -1,4 +1,5 @@
 import json
+import re
 import unittest
 
 from juno.adapters import queues
@@ -132,6 +133,78 @@ class Candidates(WriteCase):
         code, _ = self.juno("thread", "close", self.A, env={"CLAUDE_CODE_AGENT_ID": "a"})
         self.assertEqual(code, 2)
         self.assertIn("retry policy", self.get("threads.md"))
+
+
+class DirectClose(WriteCase):
+    QUOTE = "please close the retry policy thread now"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.put("threads.md", THREADS)
+        self.prompt(self.QUOTE, "pid00002")
+
+    def close(self, *extra: str, line: str = "3", was: str = "retry policy") -> tuple[int, str]:
+        return self.juno("thread", "close", "--line", line, "--was", was, *extra)
+
+    def test_closes_with_a_quote_and_undo_restores(self) -> None:
+        code, out = self.close("--evidence", self.QUOTE)
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("retry policy", self.get("threads.md"))
+        self.assertIn("partner answer", self.get("threads.md"))
+        self.assertTrue(any(e.get("ev") == "thread_closed" for e in self.events()))
+        match = re.search(r"juno undo (w-[0-9a-f]+)", out)
+        assert match
+        code, out = self.juno("undo", match.group(1))
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.get("threads.md"), THREADS)
+
+    def test_refuses_without_a_verbatim_quote(self) -> None:
+        for evidence in ("close it please, this was never typed", "too short"):
+            code, out = self.close("--evidence", evidence)
+            self.assertEqual(code, 2, out)
+        self.assertEqual(self.get("threads.md"), THREADS)
+
+    def test_refuses_repo_and_ticket_anchors(self) -> None:
+        self.assertEqual(self.close("--evidence", "repo:app")[0], 2)
+        self.assertEqual(self.close("--evidence", "ticket:ABC-7")[0], 2)
+        self.assertEqual(self.get("threads.md"), THREADS)
+
+    def test_wrong_was_or_line(self) -> None:
+        code, out = self.close("--evidence", self.QUOTE, was="something unrelated")
+        self.assertEqual((code, "does not contain --was" in out), (2, True))
+        self.assertEqual(self.close("--evidence", self.QUOTE, line="99")[0], 2)
+        self.assertEqual(self.get("threads.md"), THREADS)
+
+    def test_line_must_be_a_thread_line(self) -> None:
+        code, out = self.close("--evidence", self.QUOTE, line="1", was="# Threads")
+        self.assertEqual(code, 2, out)
+        self.put("threads.md", THREADS + "- plain bullet that is not a thread line\n")
+        code, out = self.close("--evidence", self.QUOTE, line="5", was="plain bullet that")
+        self.assertEqual((code, "not a thread line" in out), (2, True))
+
+    def test_refused_in_a_subagent(self) -> None:
+        code, _ = self.juno(
+            "thread", "close", "--line", "3", "--was", "retry policy", "--evidence", self.QUOTE,
+            env={"CLAUDE_CODE_AGENT_ID": "a"},
+        )  # fmt: skip
+        self.assertEqual(code, 2)
+        self.assertEqual(self.get("threads.md"), THREADS)
+
+    def test_forms_are_exclusive_and_complete(self) -> None:
+        code, out = self.juno(
+            "thread", "close", "t111111", "--line", "3", "--was", "retry policy",
+            "--evidence", self.QUOTE,
+        )  # fmt: skip
+        self.assertEqual((code, "not both" in out), (2, True))
+        self.assertEqual(self.juno("thread", "close", "--line", "3")[0], 2)
+        self.assertEqual(self.juno("thread", "close")[0], 2)
+        self.assertEqual(self.get("threads.md"), THREADS)
+
+    def test_forget_points_at_the_direct_form(self) -> None:
+        code, out = self.juno(
+            "forget", "threads.md:3", "--was", "retry policy", "--evidence", self.QUOTE
+        )
+        self.assertEqual((code, "--line" in out), (2, True))
 
 
 if __name__ == "__main__":

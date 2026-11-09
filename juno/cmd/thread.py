@@ -5,9 +5,9 @@ from collections.abc import Mapping
 
 from juno import config
 from juno.adapters import fs, gate, ledgerio, queues, store
-from juno.cmd import write
+from juno.cmd import fix, gateio, write
 from juno.cmd.write import Refused
-from juno.core import fold
+from juno.core import fold, writegate
 from juno.core.vaultfmt import THREAD_RE
 
 TEXT_CHARS = (10, 160)
@@ -25,9 +25,21 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     lst.add_argument("--json", action="store_true")
     pend = sub.add_parser("pending", help="list pending thread close candidates")
     pend.add_argument("--json", action="store_true")
-    for name in ("close", "keep"):
-        verb = sub.add_parser(name, help=f"{name} thread candidates")
-        verb.add_argument("ids", nargs="+", metavar="ID")
+    close = sub.add_parser(
+        "close",
+        help="close thread candidates by id, or one thread line directly "
+        "(--line N --was TEXT --evidence YOUR_WORDS)",
+    )
+    close.add_argument("ids", nargs="*", metavar="ID", help="candidate ids from `thread pending`")
+    close.add_argument("--line", type=int, help="line number in threads.md (direct form)")
+    close.add_argument("--was", help="part of that line as it is now (direct form)")
+    close.add_argument(
+        "--evidence",
+        help="your own words, typed or chosen this segment, 20+ characters, verbatim "
+        "(direct form; repo:/ticket: anchors are not accepted)",
+    )
+    keep = sub.add_parser("keep", help="keep thread candidates")
+    keep.add_argument("ids", nargs="+", metavar="ID")
 
 
 def threads_path(cfg: config.Config) -> str:
@@ -120,7 +132,32 @@ def remove_lines(cfg: config.Config, path: str, items: list[queues.Item]) -> set
     return closed
 
 
+def close_line(cfg: config.Config, args: argparse.Namespace) -> int:
+    seg = write.guard(cfg)
+    if args.ids:
+        raise Refused("give candidate ids or --line, not both")
+    if args.line is None or not args.was or not args.evidence:
+        raise Refused("the direct form needs --line, --was and --evidence together")
+    evidence = gate.anchor(cfg, seg, args.evidence, user_only=True)
+    with write.locked(cfg):
+        rel, lines, index = fix.locate(cfg, f"threads.md:{args.line}", args.was, forget=False)
+        gone = lines[index]
+        if not THREAD_RE.match(gone.rstrip()):
+            raise Refused(f"line {args.line} of threads.md is not a thread line")
+        del lines[index]
+        res = gate.commit(
+            cfg, seg, "thread-close", rel, writegate.join(lines), evidence, run_cap=False
+        )
+    ledgerio.record(cfg, seg, {"ev": "thread_closed", "count": 1, "id": res.id})
+    print(f"Juno: thread closed: {gone}")
+    return gateio.report(res, "thread removed from")
+
+
 def do_close(cfg: config.Config, args: argparse.Namespace) -> int:
+    if args.line is not None or args.was or args.evidence:
+        return close_line(cfg, args)
+    if not args.ids:
+        raise Refused("give candidate ids, or --line N --was TEXT --evidence YOUR_WORDS")
     seg = write.guard(cfg)
     ids = queues.clean_ids(queues.THREADS, args.ids)
     with queues.locked(cfg, queues.THREADS):

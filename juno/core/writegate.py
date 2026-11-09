@@ -124,7 +124,9 @@ def check_target(rel: str, forget: bool) -> None:
     if top in FORGET_DENIED or rel in FIX_DENIED_FILES:
         raise Refused(f"{rel} is not corrected through fix/forget (rules use `juno rule`)")
     if forget and rel == "threads.md":
-        raise Refused("close threads with `juno thread close`")
+        raise Refused(
+            "close threads with `juno thread close` (--line N --was TEXT --evidence YOUR_WORDS)"
+        )
 
 
 def check_line_fix(line: str) -> None:
