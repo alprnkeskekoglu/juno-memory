@@ -122,7 +122,7 @@ def content_checks(cfg: config.Config, view: DiskVault) -> list[Check]:
         for rel, text in markdown_files(cfg.vault).items()
         if kind_of(rel) not in NEVER_INJECTED_KINDS and kind_of(rel) != "archive"
     }
-    out = dv.privacy_checks(files, cfg.get_list("jira", "prefixes"))
+    out = dv.privacy_checks(files, cfg.privacy_prefixes())
     out += dv.link_checks(files)
     out += dv.note_checks({n: view.read(f"notes/{n}") for n in view.names("notes")})
     knowledge: dict[str, tuple[str, bool]] = {}

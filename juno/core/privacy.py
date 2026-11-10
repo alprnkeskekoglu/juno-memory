@@ -7,7 +7,7 @@ from juno.core.redact import find_secrets
 
 EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[A-Za-z][\w.-]*")
 PHONE_RE = re.compile(r"\+\d[\d ()-]{7,}\d|\b\d{3}[ .-]\d{3}[ .-]?\d{2}[ .-]?\d{2}\b")
-LONG_ID_RE = re.compile(r"(?<![\w.])\d{6,}(?!\w|\.\w)")
+LONG_ID_RE = re.compile(r"(?<![\w.])\d{6,20}(?!\w|\.\w)")
 GIT_HASH_RE = re.compile(
     r"\b(?:commit(?:ted|s)?(?:\s+(?:as|in|at|is))?|sha1?|hash|revision|rev|cherry-pick(?:ed)?"
     r"|revert(?:ed)?|reset|checkout|merged?)\s*[:=]?\s*[`(]?\s*\d{7,12}\b"
@@ -19,7 +19,7 @@ NUMBER_UNIT_RE = re.compile(
     r"(?<![\w.])\d{6,} ?(?:bytes|B|KB|MB|GB|ms|s|sec|seconds)(?!\w)", re.I
 )
 OBJECT_ID_RE = re.compile(
-    r"\b(?:comment|review|issue|run|PR|pull|build|job) ?#?\d{6,}(?!\w|\.\w)", re.I
+    r"\b(?:comment|review|issue|run|PR|pull|build|job)\s*[#(:=]?\s*\d{6,}(?!\w|\.\w)", re.I
 )
 URL_RE = re.compile(r"https?://[^\s<>\"')\]]+")
 GENERIC_TICKET_RE = re.compile(r"\b[A-Z][A-Z0-9]{1,9}-[0-9]+\b")

@@ -43,7 +43,7 @@ def checked_key(cfg: config.Config, raw: str) -> tuple[str, str | None]:
 
 def updates_from(cfg: config.Config, key: str, args: argparse.Namespace) -> taskfile.Updates | str:
     updates: taskfile.Updates = {}
-    prefixes = cfg.get_list("jira", "prefixes")
+    prefixes = cfg.privacy_prefixes()
     steps = (
         ("title", args.title, lambda raw: taskfile.clean_title(raw, prefixes)),
         ("status", args.status, taskfile.clean_status),

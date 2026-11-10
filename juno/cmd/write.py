@@ -18,7 +18,7 @@ REFUSED = 2
 
 
 def clean_line(cfg: config.Config, text: str | None, label: str) -> str:
-    return privacy.clean_line(text, label, cfg.get_list("jira", "prefixes"))
+    return privacy.clean_line(text, label, cfg.privacy_prefixes())
 
 
 def lock_path(cfg: config.Config) -> str:

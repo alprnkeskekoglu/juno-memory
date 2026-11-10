@@ -24,6 +24,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "projects": [],
         "no_ticket_branches": ["develop", "master", "main", "HEAD"],
     },
+    "privacy": {"allow_prefixes": []},
     "repos": {
         "roots": ["~/projects", "~/code", "~/src"],
         "overview_roots": [],
@@ -273,6 +274,13 @@ class Config:
         value = self.values[section][key]
         assert isinstance(value, list)
         return [str(item) for item in value]
+
+    def privacy_prefixes(self) -> list[str]:
+        """[jira] prefixes plus [privacy] allow_prefixes, for the privacy scan only.
+
+        Empty jira prefixes stay empty: every WORD-digits key is already exempt then."""
+        jira = self.get_list("jira", "prefixes")
+        return [*jira, *self.get_list("privacy", "allow_prefixes")] if jira else jira
 
     def language_list(self, key: str) -> list[str]:
         if ("language", key) in self.explicit:

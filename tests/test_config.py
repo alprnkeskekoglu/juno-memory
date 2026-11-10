@@ -16,7 +16,7 @@ thresholds.meaningful_tool_calls thresholds.meaningful_user_turns thresholds.dir
 thresholds.dirty_tool_calls thresholds.reminder_spacing_turns thresholds.active_ticket_days
 thresholds.thread_stale_days thresholds.stale_days thresholds.stub_quiet_seconds
 thresholds.hook_error_repeat thresholds.hook_error_window_hours retention.ledger_days
-retention.backup_days retention.shadow_days retention.asks_days retention.usage_days retention.arm_segments_days retention.error_log_bytes shadow.enabled shadow.budget_ms
+retention.backup_days retention.shadow_days retention.asks_days retention.usage_days retention.arm_segments_days retention.error_log_bytes privacy.allow_prefixes shadow.enabled shadow.budget_ms
 handoff.mode handoff.model handoff.budget_usd handoff.daily_budget_usd handoff.min_run_usd
 handoff.timeout_seconds handoff.digest_chars handoff.extract handoff.claude_bin handoff.launch_path
 threads.scan threads.stale_days threads.gh threads.gh_owner threads.gh_calls

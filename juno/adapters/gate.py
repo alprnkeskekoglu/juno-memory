@@ -17,7 +17,7 @@ class Result:
 
 
 def prefixes(cfg: config.Config) -> list[str]:
-    return cfg.get_list("jira", "prefixes")
+    return cfg.privacy_prefixes()
 
 
 def scan_text(cfg: config.Config, text: str, label: str) -> str:

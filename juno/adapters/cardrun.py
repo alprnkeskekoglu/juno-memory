@@ -152,7 +152,7 @@ def write_valid_card(
     chosen, body = cardfmt.split_file_line(card_text)
     body, out["links_unlinked"] = cardfmt.fix_links(body)
     body = cardfmt.normalise_heading(body, seg.sid[:8], str(targets[0]["key"]), stamp)
-    prefixes = cfg.get_list("jira", "prefixes")
+    prefixes = cfg.privacy_prefixes()
     key = str(targets[0]["key"])
     try:
         body = cardfmt.validate_card(body, seg.sid[:8], key, stamp, prefixes)

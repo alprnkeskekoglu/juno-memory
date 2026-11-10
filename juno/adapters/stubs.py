@@ -37,7 +37,7 @@ def write_stub(cfg: config.Config, seg: Segment, now: float) -> list[str]:
                         target,
                         now,
                         cfg.get_int("caps", "stub_excerpt_chars"),
-                        cfg.get_list("jira", "prefixes"),
+                        cfg.privacy_prefixes(),
                         cardjob.card_failure(cfg, seg.sid),
                     )
                     new = append_card(store.read_text(path), card, os.path.basename(path)[:-3])

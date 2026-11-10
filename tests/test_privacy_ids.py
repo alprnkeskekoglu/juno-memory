@@ -1,7 +1,9 @@
+import json
 import unittest
 
 from juno.core import doctor_vault as dv
 from juno.core import privacy
+from tests.support.write import WriteCase
 
 ABC = ("ABC",)
 CLEAN = (
@@ -66,6 +68,71 @@ class DoctorCardHeading(unittest.TestCase):
         self.assertEqual(dv.privacy_checks({"h.md": label})[0][0], "WARN")
         note = "not a heading · 25414656\n"
         self.assertEqual(dv.privacy_checks({"h.md": note})[0][0], "WARN")
+
+
+ALLOW = ("ABC", "TC", "XY")
+ALLOWED = ("TC-123456 steps 1, 4", "KEY (XY-1234567890)")
+OBJECTS = (
+    "a comment (1234567) and",
+    "run: 12345678",
+    "issue=1234567",
+    "build : 7654321",
+    "PR(1234567)",
+    "role example-service-20260101120000000000000001",
+)
+STILL = (
+    "CUSTOMER-123456789",
+    "USER-5551234567",
+    "customer-123456789",
+    "role-5551234567",
+    "call 5551234567",
+    "call 55512345678",
+    "ref 123456789012",
+    "customer 123456789",
+    "ZZ-123456",
+    "TCX-123456",
+)
+
+
+class AllowPrefixesAndObjectIds(unittest.TestCase):
+    def test_allow_prefixes_exempt_only_listed_keys(self) -> None:
+        for text in ALLOWED:
+            self.assertIsNone(privacy.scan(text, ALLOW), text)
+            self.assertEqual(privacy.personal_spans(text, ALLOW), [], text)
+            self.assertEqual(privacy.scan(text, ABC), "id", text)
+
+    def test_object_ids_and_long_digit_runs_are_exempt(self) -> None:
+        for text in OBJECTS:
+            for prefixes in (None, ABC, ALLOW):
+                self.assertIsNone(privacy.scan(text, prefixes), text)
+                self.assertEqual(privacy.mask(text, prefixes), (text, {}), text)
+
+    def test_personal_ids_stay_flagged(self) -> None:
+        for text in STILL:
+            self.assertIsNotNone(privacy.scan(text, ALLOW), text)
+            self.assertTrue(privacy.personal_spans(text, ALLOW), text)
+
+    def test_twenty_digits_are_still_ids_but_hyphen_names_are_not_blanket_exempt(self) -> None:
+        self.assertEqual(privacy.scan("x-" + "1" * 20), "id")
+        self.assertEqual(privacy.scan("a " + "1" * 21), None)
+        self.assertEqual(privacy.scan("customer-" + "1" * 21), None)
+        self.assertEqual(privacy.scan("customer-" + "1" * 9), "id")
+
+
+class DoctorAllowPrefixes(WriteCase):
+    def privacy_status(self) -> str:
+        code, out = self.juno("doctor", "--json", *self.sb.install_args())
+        found = [c["status"] for c in json.loads(out)["checks"] if c["name"] == "privacy"]
+        return found[0]
+
+    def test_config_allow_prefixes_reaches_the_doctor_scan(self) -> None:
+        self.set_config('[jira]\nprefixes = ["ABC"]\n')
+        self.put("notes/n.md", "case TC-123456 steps 1, 4\n")
+        self.assertEqual(self.privacy_status(), "WARN")
+        self.set_config('[privacy]\nallow_prefixes = ["TC"]\n')
+        self.assertEqual(self.privacy_status(), "PASS")
+        self.put("notes/m.md", "case ZZ-123456\n")
+        self.assertEqual(self.privacy_status(), "WARN")
 
 
 if __name__ == "__main__":
