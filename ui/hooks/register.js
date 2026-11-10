@@ -1,4 +1,4 @@
-// Display only: no tool.call/prompt hooks, no writes, no processes.
+// Display only: no tool.call/prompt hooks, no writes. The one process is `juno doctor`, run on a press of the hook-error item.
 const MAC_REL = '/Library/Application Support/juno'
 const XDG_REL = '/.local/state/juno'
 const POLL_MS = 2000
@@ -277,8 +277,8 @@ function rightSegments(usage, o, nowMs, level, cache) {
 
 function cardMarker(status, g, level) {
   if (status.card_auto) return null
-  if (level === 'tiny') return status.card_dirty ? seg(g.dot, { c: ORANGE }) : seg(g.ok, { c: GREEN, dim: true })
-  return status.card_dirty ? seg(`${g.dot} dirty`, { c: ORANGE }) : seg(`card ${g.ok}`, { c: GREEN, dim: true })
+  if (level === 'tiny') return status.card_dirty ? seg(g.dot, { c: ORANGE, press: 'card-dirty' }) : seg(g.ok, { c: GREEN, dim: true })
+  return status.card_dirty ? seg(`${g.dot} dirty`, { c: ORANGE, press: 'card-dirty' }) : seg(`card ${g.ok}`, { c: GREEN, dim: true })
 }
 
 function leftSegments(status, o, level, modelText, mine) {
@@ -322,10 +322,10 @@ export function line2Items(status, usage, nowMs, seen, o = {}) {
   const g = glyphs(o)
   const items = []
   if (status?.errors_24h > 0) {
-    items.push(seg(`${g.warn} ${status.errors_24h} hook errors in 24h ${g.dash} juno doctor`, { c: 'red' }))
+    items.push(seg(`${g.warn} ${status.errors_24h} hook errors in 24h ${g.dash} juno doctor`, { c: 'red', press: 'doctor' }))
   }
   if (status?.card_dirty && !status.card_auto) {
-    items.push(seg(`${g.mark} handoff card out of date${status.card_path ? ': ' + status.card_path : ''}`, { c: ORANGE }))
+    items.push(seg(`${g.mark} handoff card out of date${status.card_path ? ': ' + status.card_path : ''}`, { c: ORANGE, press: 'card-stale' }))
   }
   const fresh = (at) => typeof at === 'number' && nowMs - at >= 0 && nowMs - at < FRESH_MS
   if (status && fresh(seen?.ruleAt)) items.push(seg(ruleText(status.last_rule), { c: GREEN }))
@@ -500,16 +500,103 @@ export function bandChildren(rows, theirs) {
   return theirs ? [...rows, theirs] : rows
 }
 
-function toText(Text, s, color) {
+function toTextProps(s, color) {
   const props = { children: s.t }
   if (color && s.c) props.color = s.c
   if (color && s.dim) props.dimColor = true
   if (s.bold) props.bold = true
-  return Text(props)
+  return props
 }
 
-function drawRow(Box, Text, segs, color) {
-  return Box({ flexDirection: 'row', children: segs.map((s) => toText(Text, s, color)) })
+function toText(Text, s, color) {
+  return Text(toTextProps(s, color))
+}
+
+function drawRow(Box, Text, segs, color, ctl) {
+  return Box({ flexDirection: 'row', children: segs.map((s) => (ctl && s.press ? toButton(ctl, Text, s, color) : toText(Text, s, color))) })
+}
+
+// A pressable segment: the same Text (colour kept) underlined, inside a plain Button (no brackets; the focus inverts it).
+function toButton(ctl, Text, s, color) {
+  const label = Text({ ...toTextProps(s, color), underline: true })
+  return ctl.Button({ key: s.press, plain: true, onPress: () => ctl.press(s.press), children: [label] })
+}
+
+// Pane content (pure). Each returns { dim, text }: a dim one-line message, or the text to show.
+const PANE_MAX_CHARS = 20000
+const clip = (t, rows) => {
+  const lines = String(t).split('\n')
+  const kept = lines.slice(0, Math.max(1, rows > 0 ? rows : 200)).join('\n')
+  return [...kept].length > PANE_MAX_CHARS ? [...kept].slice(0, PANE_MAX_CHARS).join('') : kept
+}
+
+// text: the card file's text, null when it could not be read, undefined while it is being read.
+export function cardPaneContent(text, path, rows) {
+  if (text === undefined) return { dim: true, text: 'reading…' }
+  if (typeof text !== 'string') return { dim: true, text: `Card file not found${path ? ': ' + path : ''}` }
+  if (text.trim() === '') return { dim: true, text: 'Card file is empty' }
+  return { dim: false, text: clip(text, rows) }
+}
+
+// view: { running } | { result: { exitCode, stdout, stderr } } | { error }.
+export function doctorPaneContent(view, rows) {
+  if (view?.running) return { dim: true, text: 'running\u2026' }
+  if (view?.error) return { dim: true, text: `juno doctor could not run: ${String(view.error).split('\n')[0]}` }
+  const r = view?.result
+  if (!r) return { dim: true, text: 'no output' }
+  const parts = [r.stdout]
+  if (r.exitCode !== 0) parts.push(r.stderr)
+  const text = parts.filter((x) => typeof x === 'string' && x.trim() !== '').join('\n').replace(/\s+$/, '')
+  return text ? { dim: false, text: clip(text, rows) } : { dim: true, text: 'no output' }
+}
+
+let cardView = { text: null, path: '' } // set on press; the pane draws it
+let doctorView = { running: false }
+const PANES = { 'juno-card': 'Juno card', 'juno-doctor': 'Juno doctor' }
+
+async function openCard($, path) {
+  cardView = { text: undefined, path }
+  try { await $.ui.open({ id: 'juno-card', title: PANES['juno-card'] }) } catch {}
+  try { cardView = { text: await $.fs.read(path), path } } catch { cardView = { text: null, path } }
+  try { $.ui.invalidate('ui.render') } catch {}
+}
+
+async function openDoctor($) {
+  if (!doctorView.running) {
+    doctorView = { running: true }
+    try { await $.ui.open({ id: 'juno-doctor', title: PANES['juno-doctor'] }) } catch {}
+    try { $.ui.invalidate('ui.render') } catch {}
+    try { doctorView = { result: await $.process.run(['juno', 'doctor'], { timeoutMs: 60000 }) } } catch (err) { doctorView = { error: err?.message ?? err } }
+    try { $.ui.invalidate('ui.render') } catch {}
+  } else {
+    try { await $.ui.open({ id: 'juno-doctor', title: PANES['juno-doctor'] }) } catch {}
+  }
+}
+
+// What a press does; never throws.
+function pressHandler($) {
+  return (key) => {
+    try {
+      if (key === 'doctor') void openDoctor($)
+      else if (key === 'card-dirty' || key === 'card-stale') {
+        const path = model?.status?.card_path
+        void openCard($, typeof path === 'string' ? path : '')
+      }
+    } catch {}
+  }
+}
+
+function drawPane($, e, id, content) {
+  const { Box, Text, Button } = $.ui.resolve(e)
+  const rows = Math.max(1, (e.viewport?.rows ?? 24) - 4)
+  const c = content(rows)
+  return Box({
+    flexDirection: 'column',
+    children: [
+      Button({ key: 'dismiss', role: 'dismiss', label: 'Dismiss', onPress: () => { try { void $.ui.close({ id }) } catch {} } }),
+      Text({ children: c.text, ...(c.dim ? { dimColor: true } : {}) }),
+    ],
+  })
 }
 
 // Agent strip: one band line while subagents of the main loop run or have just finished.
@@ -642,12 +729,13 @@ export function register(on) {
     try {
       const props = e.props ?? e
       if (props.hasSurvey || !model) return next(e)
-      const { Box, Text } = $.ui.resolve(e)
+      const { Box, Text, Button } = $.ui.resolve(e)
+      const ctl = Button ? { Button, press: pressHandler($) } : undefined
       const o = { cols: props.bodyColumns, ascii: model.caps.ascii, fine: model.caps.fine }
       const color = model.caps.color
-      const rows = [drawRow(Box, Text, formatLine1(model, o), color)]
+      const rows = [drawRow(Box, Text, formatLine1(model, o), color, ctl)]
       const l2 = formatLine2(model, o)
-      if (l2.length) rows.push(drawRow(Box, Text, l2, color))
+      if (l2.length) rows.push(drawRow(Box, Text, l2, color, ctl))
       try {
         const strip = agentStrip(agentTracked, model.now, o)
         if (strip.length) rows.push(drawRow(Box, Text, strip, color))
@@ -657,5 +745,13 @@ export function register(on) {
     } catch {
       return next(e)
     }
+  })
+
+  // Panes opened by a press on a band item; each draws only what a press loaded.
+  on('ui.render', { component: 'Pane', requestId: 'juno-card' }, async ($, e, next) => {
+    try { return drawPane($, e, 'juno-card', (rows) => cardPaneContent(cardView.text, cardView.path, rows)) } catch { return next(e) }
+  })
+  on('ui.render', { component: 'Pane', requestId: 'juno-doctor' }, async ($, e, next) => {
+    try { return drawPane($, e, 'juno-doctor', (rows) => doctorPaneContent(doctorView, rows)) } catch { return next(e) }
   })
 }

@@ -1,6 +1,6 @@
 # juno-ui
 
-Display-only Claude Code mod for Juno. It draws a band above the prompt (the `ui.render` hook on `{ component: 'AbovePrompt' }`, styled `Text` segments in a `Box`) from this session's status file and `$.session.usage()`. It never blocks tools, injects context, writes files or runs processes, and it does not use `$.ui.status`. Any error shows ` juno │ ?` (dim).
+Display-only Claude Code mod for Juno. It draws a band above the prompt (the `ui.render` hook on `{ component: 'AbovePrompt' }`, styled `Text` segments in a `Box`) from this session's status file and `$.session.usage()`. It never blocks tools, injects context or writes files, and it runs a process only when the person presses the hook-error item (`juno doctor`) and never otherwise; it does not use `$.ui.status`. Any error shows ` juno │ ?` (dim).
 
 ## Status files
 
@@ -28,6 +28,8 @@ Line 2, only when something needs attention, ` ╰ ` then items joined by `  · 
 3. `+ rule added (<scope>) <first 50 chars>` (green, 60 s)
 4. `▸ handoff reminder sent` (60 s)
 5. `⚠ <limit> at <p>%` for each window at 90% or more
+
+Pressable items (underlined; Tab or click, then Enter): `● dirty` and `▸ handoff card out of date` open the pane `juno-card` with the card file's text (read with `$.fs.read`; a dim line when the file is missing), and `⚠ N hook errors` opens `juno-doctor`, which runs `juno doctor` once per press (never on a poll) and shows its stdout, plus stderr on a non-zero exit. Each pane has a Dismiss button.
 
 Narrow terminals (width is `bodyColumns` of the band): under 110 columns the meters' dots go, under 80 the reset, pace and cache go, under 60 the cost goes too. Line 2 is cut with `…`.
 
