@@ -7,7 +7,7 @@ from juno import config
 from juno.adapters import fs, gate, ledgerio, queues, store
 from juno.cmd import fix, gateio, write
 from juno.cmd.write import Refused
-from juno.core import fold, writegate
+from juno.core import fold, threadscan, writegate
 from juno.core.vaultfmt import THREAD_RE
 
 TEXT_CHARS = (10, 160)
@@ -82,6 +82,18 @@ def do_add(cfg: config.Config, args: argparse.Namespace) -> int:
         preset = write.preset(cfg)
         if fold.fold(text, preset) in fold.fold("\n".join(open_lines), preset):
             print("Juno: thread already open")
+            return 0
+        near = threadscan.near_index(lines, tags, text, preset)
+        if near is not None:
+            line = threadscan.reword(lines[near], text)
+            if line == lines[near].rstrip():
+                print("Juno: thread already open")
+                return 0
+            lines[near] = line
+            gate.commit(
+                cfg, seg, "thread", "threads.md", writegate.join(lines), f"segment {seg.sid[:8]}"
+            )
+            print(f"Juno: near-duplicate thread updated in threads.md:\n{line}")
             return 0
         if len(open_lines) >= MAX_LINES:
             raise Refused(
