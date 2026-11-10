@@ -33,12 +33,6 @@ Pressable items (underlined; Tab or click, then Enter): `● dirty` and `▸ han
 
 Narrow terminals (width is `bodyColumns` of the band): under 110 columns the meters' dots go, under 80 the reset, pace and cache go, under 60 the cost goes too. Line 2 is cut with `…`.
 
-Line 3, only while subagents of the main loop run or finished in the last 60 s (its own line, after line 2 when that shows):
-
-     ╰ agents 2 · ◐ sonnet fix-cap 2:14  ·  ◐ haiku log-scan 0:40  ·  ✓ haiku research
-
-`agents N` counts running agents. Each item is a glyph, the model family (left out when unknown), the agent's `description` cut to 18 characters with `…`, and for running agents the time since first seen running. `◐` running (blue), `✓` finished (dim green), `✗` failed or killed (red), `◌` idle teammate (dim); finished and failed items drop 60 s after first seen so. ASCII: `*`, `ok`, `x`, `.`. Under 80 columns the times go, under 60 only `agents N` stays. The list comes from `$.agent.list()` on each poll (status, description, parentId; sub-agents of agents are not listed); the model comes from the `agent.spawn` answer, so agents started before the mod loaded show no model, and times restart on reload. Any error hides the line.
-
 `JUNO_UI_FINE_BARS=1` opts into the eighth-block bar instead of dots. `NO_COLOR` set: no colours. A non-UTF-8 locale, `TERM=dumb` or `JUNO_UI_ASCII=1`: ASCII bars `[###--]` and ASCII symbols. `JUNO_UI_DEBUG=1` logs the raw `rateLimits` and the resolved status paths.
 
 ## Trial
