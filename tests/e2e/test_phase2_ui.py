@@ -111,6 +111,8 @@ class StatusJsonLoader(Case):
             packs_injected=1,
             packs_cap=4,
             rules_added_segment=0,
+            writes=0,
+            write_cap=50,
             errors_24h=3,
             last_error=None,
         )

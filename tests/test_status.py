@@ -5,9 +5,9 @@ import unittest
 from unittest import mock
 
 from juno import config
-from juno.adapters import fs
+from juno.adapters import fs, gate, writelog
 from juno.adapters import status as io
-from juno.core import status
+from juno.core import status, writegate
 from juno.core.ledger import Segment
 from tests.support import SandboxCase
 
@@ -29,6 +29,8 @@ def build(sid: str | None = SID, previous: dict | None = None, **over: object) -
         "packs_injected": 1,
         "packs_cap": 4,
         "rules_added_segment": 0,
+        "writes": 0,
+        "write_cap": 50,
         "errors_24h": 0,
         "last_error": None,
     }
@@ -55,6 +57,8 @@ class Build(unittest.TestCase):
                     "packs_injected",
                     "packs_cap",
                     "rules_added_segment",
+                    "writes",
+                    "write_cap",
                     "rules_added_seq",
                     "last_rule",
                     "last_reminder_seq",
@@ -162,6 +166,18 @@ class Update(SandboxCase):
         again = io.update(self.cfg, self.seg, reminded=True)
         self.assertEqual((again["rules_added_seq"], again["last_reminder_seq"]), (1, 1))
         self.assertEqual(again["last_rule"], {"scope": "global", "text": "a"})
+
+    def test_writes_and_cap_come_from_the_write_log_and_the_gate(self) -> None:
+        first = io.update(self.cfg, self.seg)
+        self.assertEqual((first["writes"], first["write_cap"]), (0, writegate.RUN_MAX))
+        for n in range(3):
+            writelog.append(self.cfg, {"id": f"w-{n:08x}", "sid": SID, "verb": "note"})
+        writelog.append(self.cfg, {"id": "w-000000f", "sid": OLD_SID, "verb": "note"})
+        self.seg.cap_raised = 10
+        got = io.update(self.cfg, self.seg)
+        self.assertEqual((got["writes"], got["write_cap"]), (3, gate.run_limit(self.cfg, self.seg)))
+        self.assertEqual(got["write_cap"], writegate.RUN_MAX + 10)
+        self.assertEqual(io.read_status(self.sb.state, SID)["writes"], 3)
 
     def test_error_log_feeds_the_summary(self) -> None:
         stamp = time.strftime("%Y-%m-%dT%H:%M:%S")

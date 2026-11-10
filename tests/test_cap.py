@@ -1,6 +1,7 @@
 import unittest
 
 from juno.adapters import ledgerio, writelog
+from juno.adapters import status as status_io
 from tests.test_writegate_cli import QUOTE, Base
 
 
@@ -44,6 +45,20 @@ class CapRaise(Base):
         env = {"CLAUDE_CODE_SESSION_ID": other}
         ledgerio.append(self.cfg, other, {"ev": "prompt", "pid": "p1", "part": 0, "text": "hi"})
         self.assertIn("limit 3", self.ok_env(env, "cap", "show"))
+
+    def status(self) -> dict:
+        return status_io.read_status(self.cfg.state, self.sid)
+
+    def test_status_follows_every_write_and_the_cap_raise(self) -> None:
+        self.set_config("[caps]\nrun_max = 3\n")
+        self.ok("capture", "Yet another loose thought here")
+        got = self.status()
+        self.assertEqual((got["writes"], got["write_cap"]), (1, 3))
+        self.ok("capture", "A second loose thought, distinct")
+        self.assertEqual(self.status()["writes"], 2)
+        self.ok("cap", "raise", "--by", "2", "--evidence", QUOTE)
+        got = self.status()
+        self.assertEqual((got["writes"], got["write_cap"]), (2, 5))
 
     def test_raise_is_refused_in_agent_context(self) -> None:
         out = self.refused(

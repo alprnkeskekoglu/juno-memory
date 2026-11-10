@@ -26,8 +26,8 @@ let usageNow // latest usage from session.measure, shared with the poll
 let cacheTotals = { read: 0, all: 0 } // main-loop prompt tokens: cache-read and total, from turn.complete
 let modelId // main loop model id, re-read from $.session.model() on each poll
 
-const UNICODE = { bar: '│', branch: '╰', warn: '⚠', mark: '▸', dot: '●', ok: '✓', up: '⇡', proj: '→', ell: '…', dash: '—' }
-const ASCII = { bar: '|', branch: '`-', warn: '!', mark: '>', dot: '*', ok: 'ok', up: '+', proj: '->', ell: '...', dash: '--' }
+const UNICODE = { bar: '│', branch: '╰', warn: '⚠', mark: '▸', dot: '●', ok: '✓', up: '⇡', pen: '✎', proj: '→', ell: '…', dash: '—' }
+const ASCII = { bar: '|', branch: '`-', warn: '!', mark: '>', dot: '*', ok: 'ok', up: '+', pen: 'w', proj: '->', ell: '...', dash: '--' }
 const glyphs = (o) => (o?.ascii ? ASCII : UNICODE)
 
 // Default: five dots. Filled = round(percent / 20), but under 10% none, so 6% shows 0 and 10% shows 1.
@@ -270,6 +270,22 @@ function cardMarker(status, g, level) {
   return status.card_dirty ? seg(`${g.dot} dirty`, { c: ORANGE }) : seg(`card ${g.ok}`, { c: GREEN, dim: true })
 }
 
+// Vault writes this segment against its cap, from the status record; null when either field is absent or malformed.
+export function writeState(status) {
+  const used = status?.writes
+  const cap = status?.write_cap
+  if (!Number.isInteger(used) || !Number.isInteger(cap) || used < 0 || cap <= 0) return null
+  return { used, cap, level: used >= cap ? 'full' : used / cap >= 0.8 ? 'hot' : 'ok' }
+}
+
+function writeMarker(status, g, level) {
+  const w = writeState(status)
+  if (!w || level === 'tiny') return null
+  const text = `${g.pen}${level === 'min' ? '' : ' '}${w.used}/${w.cap}`
+  if (w.level === 'full') return seg(`${text} ${g.warn}`, { c: 'red', bold: true })
+  return w.level === 'hot' ? seg(text, { c: ORANGE }) : seg(text, { dim: true })
+}
+
 function leftSegments(status, o, level, modelText, mine) {
   const g = glyphs(o)
   const head = [seg(' juno', { bold: true }), seg(` ${g.bar} `, { dim: true })]
@@ -282,6 +298,7 @@ function leftSegments(status, o, level, modelText, mine) {
     modelText && seg(modelText, { dim: true }),
     label && seg(String(label)),
     cardMarker(status, g, level),
+    mine && writeMarker(status, g, level),
   ].filter(Boolean)
   return [...head, ...items.flatMap((x, i) => (i ? [seg(' · ', { dim: true }), x] : [x]))]
 }
@@ -314,6 +331,9 @@ export function line2Items(status, usage, nowMs, seen, o = {}) {
   if (status?.card_dirty && !status.card_auto) {
     items.push(seg(`${g.mark} handoff card out of date${status.card_path ? ': ' + status.card_path : ''}`, { c: ORANGE }))
   }
+  if (!o.hideWrites && writeState(status)?.level === 'full') {
+    items.push(seg(`${g.warn} vault write cap reached ${g.dash} juno cap raise --by N`, { c: 'red' }))
+  }
   const fresh = (at) => typeof at === 'number' && nowMs - at >= 0 && nowMs - at < FRESH_MS
   if (status && fresh(seen?.ruleAt)) items.push(seg(ruleText(status.last_rule), { c: GREEN }))
   if (status && fresh(seen?.reminderAt)) items.push(seg(`${g.mark} handoff reminder sent`))
@@ -327,7 +347,7 @@ export function line2Items(status, usage, nowMs, seen, o = {}) {
 export function formatLine2(m, o = {}) {
   if (m?.error) return []
   const g = glyphs(o)
-  const items = line2Items(m?.status ?? null, m?.usage, m?.now ?? 0, m?.seen, o)
+  const items = line2Items(m?.status ?? null, m?.usage, m?.now ?? 0, m?.seen, { ...o, hideWrites: m?.mine !== true })
   if (!items.length) return []
   const joined = items.flatMap((s, i) => (i ? [seg('  ·  ', { dim: true }), s] : [s]))
   return fit([seg(` ${g.branch} `, { dim: true }), ...joined], o.cols, o)

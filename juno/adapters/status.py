@@ -5,7 +5,7 @@ from collections.abc import Iterator, Mapping
 from typing import Any
 
 from juno import config
-from juno.adapters import fs, store
+from juno.adapters import fs, gate, store, writelog
 from juno.core import routing
 from juno.core import status as core_status
 from juno.core.ledger import Segment
@@ -110,6 +110,8 @@ def update(
         packs_injected=seg.full_packs,
         packs_cap=cfg.get_int("caps", "max_full_packs"),
         rules_added_segment=seg.rules_added,
+        writes=writelog.live_count(writelog.read(cfg), seg.sid),
+        write_cap=gate.run_limit(cfg, seg),
         errors_24h=errors,
         last_error=last_error,
         rule=rule,

@@ -1,3 +1,4 @@
+import contextlib
 import os
 import time
 from dataclasses import dataclass
@@ -138,4 +139,8 @@ def commit(
     if card:
         rec["card"] = rel
     ledgerio.record(cfg, seg, rec)
+    from juno.adapters import status  # late: status reads the gate's cap
+
+    with contextlib.suppress(OSError):
+        status.update(cfg, seg)
     return Result(wid, rel, True)
