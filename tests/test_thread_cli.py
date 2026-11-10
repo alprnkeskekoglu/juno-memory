@@ -93,11 +93,16 @@ class Stale(WriteCase):
     def setUp(self) -> None:
         super().setUp()
         day = 86400
-        stamps = [time.strftime("%Y-%m-%d", time.localtime(time.time() - n * day)) for n in (30, 8, 2)]
+        stamps = [
+            time.strftime("%Y-%m-%d", time.localtime(time.time() - n * day)) for n in (30, 8, 2)
+        ]
         self.put(
             "threads.md",
             "# Threads\n\n"
-            + "".join(f"- [app] Open question number {n} here · since {d}\n" for n, d in enumerate(stamps)),
+            + "".join(
+                f"- [app] Open question number {n} here · since {d}\n"
+                for n, d in enumerate(stamps)
+            ),
         )
 
     def listed(self, *extra: str) -> list[str]:
@@ -108,7 +113,9 @@ class Stale(WriteCase):
     def test_default_is_seven_days_and_read_only(self) -> None:
         before = self.get("threads.md")
         rows = self.listed()
-        self.assertEqual([("number 0" in r, "number 1" in r) for r in rows], [(True, False), (False, True)])
+        self.assertEqual(len(rows), 2)
+        self.assertIn("number 0", rows[0])
+        self.assertIn("number 1", rows[1])
         self.assertEqual(self.get("threads.md"), before)
 
     def test_days_option_and_plain_output(self) -> None:
