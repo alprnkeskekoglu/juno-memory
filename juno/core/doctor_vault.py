@@ -7,6 +7,7 @@ from typing import Any
 
 from juno.core import privacy, topics
 from juno.core.vaultfmt import (
+    CARD_HEAD_RE,
     WIKILINK_RE,
     card_field,
     injected_rules,
@@ -193,10 +194,20 @@ def retire_checks(
     return out
 
 
+def without_seg(text: str) -> str:
+    """Drop the trailing ` · <seg8>` of card headings, as cardfmt.validate_card does."""
+    lines = text.split("\n")
+    for i, line in enumerate(lines):
+        head = CARD_HEAD_RE.match(line)
+        if head and re.fullmatch(r"[0-9a-f]{8}", head.group(4)):
+            lines[i] = line[: head.start(4) - 3]
+    return "\n".join(lines)
+
+
 def privacy_checks(files: Mapping[str, str], prefixes: Sequence[str] | None = None) -> list[Check]:
     hits: list[tuple[str, list[str]]] = []
     for rel, text in sorted(files.items()):
-        found = privacy.kinds(text, prefixes)
+        found = privacy.kinds(without_seg(text), prefixes)
         if found:
             hits.append((rel, found))
     out: list[Check] = [

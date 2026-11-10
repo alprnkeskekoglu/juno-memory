@@ -14,6 +14,13 @@ GIT_HASH_RE = re.compile(
     r"|\[[^\]\s]+(?: \([^)\n]*\))? \d{7,12}\]",
     re.I,
 )
+RUN_ID_RE = re.compile(r"\b[A-Z][A-Z0-9]{1,9}-20\d{2}(?:0[1-9]|1[0-2])\d{2,8}\b")
+NUMBER_UNIT_RE = re.compile(
+    r"(?<![\w.])\d{6,} ?(?:bytes|B|KB|MB|GB|ms|s|sec|seconds)(?!\w)", re.I
+)
+OBJECT_ID_RE = re.compile(
+    r"\b(?:comment|review|issue|run|PR|pull|build|job) ?#?\d{6,}(?!\w|\.\w)", re.I
+)
 URL_RE = re.compile(r"https?://[^\s<>\"')\]]+")
 GENERIC_TICKET_RE = re.compile(r"\b[A-Z][A-Z0-9]{1,9}-[0-9]+\b")
 PERCENT_RE = re.compile(r"%([0-9A-Fa-f]{2})")
@@ -24,6 +31,11 @@ def ticket_re(prefixes: Sequence[str] | None) -> re.Pattern[str]:
     if not names:
         return GENERIC_TICKET_RE
     return re.compile(r"\b(?:" + "|".join(names) + r")-[0-9]+\b", re.I)
+
+
+def exempt_res(prefixes: Sequence[str] | None) -> tuple[re.Pattern[str], ...]:
+    """Patterns blanked before the personal checks: ticket keys, commit words, units, object ids."""
+    return (ticket_re(prefixes), GIT_HASH_RE, RUN_ID_RE, NUMBER_UNIT_RE, OBJECT_ID_RE)
 
 
 def unquote(text: str) -> str:
@@ -53,7 +65,10 @@ def personal(text: str, prefixes: Sequence[str] | None = None) -> str | None:
         problem = url_problem(url)
         if problem:
             return problem
-    return personal_kind(GIT_HASH_RE.sub(" ", ticket_re(prefixes).sub(" ", URL_RE.sub(" ", text))))
+    text = URL_RE.sub(" ", text)
+    for pattern in exempt_res(prefixes):
+        text = pattern.sub(" ", text)
+    return personal_kind(text)
 
 
 PLACEHOLDERS = {"id": "<id>", "phone": "<phone>", "email": "<email>"}
@@ -81,7 +96,7 @@ def personal_spans(
         if problem:
             spans.append((m.start(), m.end(), problem))
     chars = [(c, i) for i, c in enumerate(text)]
-    for pattern in (URL_RE, ticket_re(prefixes), GIT_HASH_RE):
+    for pattern in (URL_RE, *exempt_res(prefixes)):
         chars = blank(chars, pattern)
     for kind, pattern in (("email", EMAIL_RE), ("phone", PHONE_RE), ("id", LONG_ID_RE)):
         flat = "".join(c for c, _ in chars)
