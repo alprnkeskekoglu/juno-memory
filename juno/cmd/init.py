@@ -146,17 +146,29 @@ def init_shim(
     return None
 
 
-def plugin_status(settings: str) -> str:
+def installed_plugins(settings: str) -> dict[str, list[dict[str, Any]]]:
     claude = os.path.dirname(settings)
     raw = fs.read_bytes(os.path.join(claude, "plugins", "installed_plugins.json"))
-    installed = False
-    if raw:
-        try:
-            data = json.loads(raw.decode("utf-8"))
-            plugins = data.get("plugins", {}) if isinstance(data, dict) else {}
-            installed = any(str(key).startswith("juno@") for key in plugins)
-        except ValueError:
-            pass
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except ValueError:
+        return {}
+    plugins = data.get("plugins", {}) if isinstance(data, dict) else {}
+    if not isinstance(plugins, dict):
+        return {}
+    out: dict[str, list[dict[str, Any]]] = {}
+    for key, entries in plugins.items():
+        if isinstance(entries, dict):
+            entries = [entries]
+        if isinstance(entries, list):
+            out[str(key)] = [e for e in entries if isinstance(e, dict)]
+    return out
+
+
+def plugin_status(settings: str) -> str:
+    installed = any(key.startswith("juno@") for key in installed_plugins(settings))
     if installed:
         return "plugin: juno is installed"
     root = paths.plugin_root()
