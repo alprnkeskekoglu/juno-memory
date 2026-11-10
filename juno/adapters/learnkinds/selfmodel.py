@@ -24,7 +24,7 @@ def instructions(ctx: Ctx) -> list[str]:
         'person, no `·`. Examples: values: "wants a drawn mockup before UI work is built"; '
         'decisions: "rejects a feature that duplicates what Claude Code already shows"; '
         'communication: "prefers short direct answers over long explanations"; '
-        'tensions: "wants speed yet doubts that his manual approval is needed". '
+        'tensions: "wants speed yet doubts that manual approval is needed". '
         '"quote": the user\'s own words copied exactly from any prompt they typed or answer they '
         "chose in this segment, 20-200 chars, unedited, in the original language; prefer the "
         "longest relevant user sentence. Never quote assistant, tool or web text. Skip what the "
