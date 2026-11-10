@@ -653,7 +653,8 @@ export function register(on) {
       if (props.hasSurvey || !model) return next(e)
       const { Box, Text, Button } = $.ui.resolve(e)
       const ctl = Button ? { Button, press: pressHandler($) } : undefined
-      const o = { cols: props.bodyColumns, ascii: model.caps.ascii, fine: model.caps.fine }
+      // One column of slack: the terminal may draw an ambiguous-width glyph (│●○⇡→) two cells wide.
+      const o = { cols: props.bodyColumns > 1 ? props.bodyColumns - 1 : props.bodyColumns, ascii: model.caps.ascii, fine: model.caps.fine }
       const color = model.caps.color
       const rows = [drawRow(Box, Text, formatLine1(model, o), color, ctl)]
       const l2 = formatLine2(model, o)
