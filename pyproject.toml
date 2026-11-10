@@ -1,6 +1,6 @@
 [project]
 name = "juno"
-version = "1.0.4"
+version = "1.0.5"
 description = "Juno: a portable second brain for Claude Code"
 requires-python = ">=3.14"
 license = "MIT"

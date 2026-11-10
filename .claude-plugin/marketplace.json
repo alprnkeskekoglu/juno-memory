@@ -8,13 +8,13 @@
       "name": "juno",
       "source": "./",
       "description": "Juno: a portable second brain for Claude Code (memory vault, hooks, CLI).",
-      "version": "1.0.4"
+      "version": "1.0.5"
     },
     {
       "name": "juno-ui",
       "source": "./ui",
       "description": "Display-only Juno band above the prompt. Reads status.json; never blocks, injects or writes.",
-      "version": "1.0.4"
+      "version": "1.0.5"
     }
   ]
 }
