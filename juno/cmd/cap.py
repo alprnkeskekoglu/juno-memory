@@ -1,8 +1,9 @@
 import argparse
+import contextlib
 from collections.abc import Mapping
 
 from juno import config
-from juno.adapters import gate, ledgerio, writelog
+from juno.adapters import gate, ledgerio, status, writelog
 from juno.cmd import gateio, write
 from juno.core.errors import Refused
 
@@ -35,6 +36,8 @@ def raise_cap(cfg: config.Config, args: argparse.Namespace) -> int:
         raise Refused(f"--by must be between 1 and {MAX_RAISE}")
     gate.anchor(cfg, seg, args.evidence, user_only=True)
     ledgerio.record(cfg, seg, {"ev": "cap_raise", "by": args.by})
+    with contextlib.suppress(OSError):
+        status.update(cfg, seg)
     print(f"Juno: write cap raised by {args.by} to {gate.run_limit(cfg, seg)} for this segment")
     return 0
 
