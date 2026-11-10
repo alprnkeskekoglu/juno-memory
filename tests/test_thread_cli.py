@@ -4,6 +4,7 @@ import time
 import unittest
 
 from juno.adapters import queues
+from juno.core import candidates
 from tests.support.write import WriteCase
 
 LINE = "- [app] Decide on the retry policy for the sync job · since 2026-10-01"
@@ -186,6 +187,28 @@ class Candidates(WriteCase):
         self.assertNotIn("retry policy", self.get("threads.md"))
         self.assertIn("partner answer", self.get("threads.md"))
         self.assertEqual(self.queue_status(queues.THREADS)[self.A], "closed")
+
+    def test_session_end_candidate_closes_on_the_users_choice_only(self) -> None:
+        cid = candidates.thread_id(LINE2)
+        proposal = {
+            "line": LINE2,
+            "reason": "answered by the partner this segment",
+            "evidence": "x",
+        }
+        queues.update(
+            self.cfg,
+            queues.THREADS,
+            lambda q: candidates.add_proposals(q, [proposal], "s" * 32, 2.0),
+        )
+        self.assertIn("answered by the partner", self.juno("thread", "pending")[1])
+        code, out = self.juno("thread", "close", cid)
+        self.assertEqual((code, "did not choose" in out), (2, True))
+        self.assertIn("partner answer", self.get("threads.md"))
+        self.answer(f"{cid} · the partner answer thread is done")
+        code, out = self.juno("thread", "close", cid)
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("partner answer", self.get("threads.md"))
+        self.assertEqual(self.queue_status(queues.THREADS)[cid], "closed")
 
     def test_line_edited_meanwhile_is_reported_gone(self) -> None:
         self.put("threads.md", THREADS.replace("retry policy", "retry rules"))
