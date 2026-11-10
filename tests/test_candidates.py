@@ -115,8 +115,36 @@ class Nudges(CardCase):
         self.assertIn("`juno rule accept <ids>`", text)
         self.assertIn("multiSelect true", text)
         self.assertIn("Juno thread close candidates (1 pending", text)
-        self.assertIn("`juno thread close <ids>`", text)
+        self.assertNotIn("juno thread close", text)
+        self.assertIn("protocol/vault-files.md", text)
         self.assertIn("PR r#1 merged", text)
+
+    def test_thread_block_lists_id_clipped_text_and_reason_and_no_instruction(self) -> None:
+        long = "Does the retry policy for the sync job survive a restart " + "of the worker " * 8
+        line = f"- [app] {long.strip()} · since 2026-11-01"
+        item = {
+            "id": candidates.thread_id(line),
+            "line": line,
+            "signals": ["fixed in this session"],
+            "reason": "fixed in this session",
+            "t": 1.0,
+            "status": "pending",
+        }
+        shown = candidates.threads_nudge([item])
+        self.assertEqual(
+            shown.splitlines()[1],
+            f"- {item['id']} · {long.strip()[:99].rstrip()}… · reason: fixed in this session",
+        )
+        self.assertIn("1 pending", shown.splitlines()[0])
+        self.assertIn("protocol/vault-files.md", shown.splitlines()[0])
+        for word in ("AskUserQuestion", "multiSelect", "juno thread close", "ask the user"):
+            self.assertNotIn(word, shown)
+        self.assertEqual(candidates.threads_nudge([]), "")
+
+    def test_scan_candidates_show_their_signals_as_the_reason(self) -> None:
+        line = "- [app] Ask finance · since 2026-01-01"
+        item = {"id": candidates.thread_id(line), "line": line, "signals": ["PR a#1 merged", "old"]}
+        self.assertIn("reason: PR a#1 merged; old", candidates.threads_nudge([item]))
 
     def test_nothing_when_empty_or_after_compact(self) -> None:
         self.assertNotIn("candidates", self.start())

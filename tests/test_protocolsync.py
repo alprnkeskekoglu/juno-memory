@@ -35,6 +35,24 @@ class Core(unittest.TestCase):
         self.assertIn("juno cap show", text)
         self.assertIn("juno cap raise --by N", text)
 
+    def test_template_has_the_thread_close_candidates_rule(self) -> None:
+        text = template()
+        self.assertIn("Thread close candidates", text)
+        (rule,) = [r for r in text.splitlines() if r.startswith("- Thread close candidates")]
+        for part in (
+            "start of the conversation",
+            "AskUserQuestion",
+            "multiSelect",
+            "juno thread close <ids>",
+            "juno thread keep",
+            "never close without",
+        ):
+            self.assertIn(part, rule)
+        # core.md (at its budget warning line) already names vault-files.md; the CONTEXT block
+        # header points at this rule by name.
+        with open(os.path.join(REPO, "vault-template", "core.md"), encoding="utf-8") as handle:
+            self.assertIn("protocol/vault-files.md", handle.read())
+
     def test_classify(self) -> None:
         new, old = template(), old_text()
         self.assertEqual(protocolsync.classify(NAME, new, new), "current")

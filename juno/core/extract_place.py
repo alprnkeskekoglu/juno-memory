@@ -19,12 +19,13 @@ from juno.core.extract import (
     check_fact,
     clean_triggers,
     pitfall_item,
-    related,
     thread_tags,
 )
-from juno.core.textchecks import SECOND_PERSON_RE, as_list, text_field
+from juno.core.textchecks import SECOND_PERSON_RE, anchored, as_list, text_field
 
 GOTCHAS_CAP = 25
+CLOSE_REASON_CHARS = (8, 160)
+CLOSE_EVIDENCE_CHARS = (4, 200)
 KNOWLEDGE_FILE_CHARS = 8000
 PITFALLS_HEADER = [
     "# Pitfalls",
@@ -257,14 +258,23 @@ def apply_pitfalls(
     return "\n".join(lines) + "\n", written, dict(dropped)
 
 
-def closable(lines: list[str], raw: object, tags: dict[str, str]) -> int | None:
-    if not isinstance(raw, str) or not raw.strip():
+def close_proposal(lines: list[str], raw: object, digest: str) -> dict[str, str] | None:
+    """A thread the segment shows resolved: a candidate for the user to decide, never a close."""
+    if not isinstance(raw, dict):
         return None
-    wanted = raw.strip()
-    for index, line in enumerate(lines):
-        if line.rstrip() == wanted and related(line, tags):
-            return index
-    return None
+    line = text_field(raw.get("line"))
+    reason = text_field(raw.get("reason"))
+    evidence = text_field(raw.get("evidence"))
+    if not any(row.rstrip() == line for row in lines if row.startswith("- ")):
+        return None
+    if not (
+        CLOSE_REASON_CHARS[0] <= len(reason) <= CLOSE_REASON_CHARS[1]
+        and CLOSE_EVIDENCE_CHARS[0] <= len(evidence) <= CLOSE_EVIDENCE_CHARS[1]
+    ):
+        return None
+    if privacy.scan(reason) or privacy.scan(evidence) or not anchored(evidence, digest):
+        return None
+    return {"line": line, "reason": reason, "evidence": evidence}
 
 
 def open_line(lines: list[str], item: object, tags: dict[str, str], today: str) -> str | None:
@@ -299,18 +309,18 @@ def near_open(lines: list[str], item: object, tags: dict[str, str]) -> tuple[int
 
 
 def apply_threads(
-    text: str, threads: dict[str, Any], tags: dict[str, str], today: str
+    text: str, threads: dict[str, Any], tags: dict[str, str], today: str, digest: str = ""
 ) -> tuple[str | None, dict[str, Any]]:
-    out: dict[str, Any] = {"opened": [], "closed": [], "dropped": 0}
+    out: dict[str, Any] = {"opened": [], "closed": [], "proposals": [], "dropped": 0}
     opens, closes = as_list(threads.get("open")), as_list(threads.get("close"))
     lines = text.splitlines()
     out["dropped"] = max(0, len(closes) - THREAD_CLOSES) + max(0, len(opens) - THREAD_OPENS)
     for raw in closes[:THREAD_CLOSES]:
-        index = closable(lines, raw, tags)
-        if index is None:
+        proposal = close_proposal(lines, raw, digest)
+        if proposal is None:
             out["dropped"] += 1
         else:
-            out["closed"].append(lines.pop(index))
+            out["proposals"].append(proposal)
     out["updated"] = []
     for item in opens[:THREAD_OPENS]:
         spot = near_open(lines, item, tags)
