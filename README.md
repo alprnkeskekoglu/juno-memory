@@ -35,6 +35,8 @@ Everything runs locally with the Python standard library. There are no runtime d
    claude plugin install juno@juno-local
    ```
 
+   In a terminal, `init` also asks once whether to show the optional Juno status band (the `juno-ui` plugin) and prints its command: `claude plugin install juno-ui@juno-local`.
+
 4. Check the result with `juno doctor`.
 
 To remove Juno, run `juno uninstall`. It reverts exactly what `init` changed in your Claude settings (it restores the original bytes when nothing else touched the file, otherwise it removes only the recorded entries), and removes the `juno` command. It never deletes your vault or the state directory. Remove the plugin itself with `claude plugin uninstall juno@juno-local`.

@@ -5,6 +5,7 @@ import tomllib
 import unittest
 from unittest import mock
 
+from juno.cmd import init
 from juno.core import shim
 from tests.support import SandboxCase, realistic_settings
 
@@ -174,6 +175,88 @@ class Init(SandboxCase):
         with open(os.path.join(plugins, "installed_plugins.json"), "w", encoding="utf-8") as handle:
             json.dump({"plugins": {"juno@juno-local": [{"installPath": "/x"}]}}, handle)
         self.assertIn("plugin: juno is installed", self.init()[1])
+
+
+class StatusBand(SandboxCase):
+    CMD = "claude plugin install juno-ui@juno-local"
+
+    def install_plugins(self, *keys: str) -> None:
+        plugins = os.path.join(os.path.dirname(self.sb.settings), "plugins")
+        os.makedirs(plugins, exist_ok=True)
+        with open(os.path.join(plugins, "installed_plugins.json"), "w", encoding="utf-8") as handle:
+            json.dump({"plugins": {key: [{"installPath": "/x"}] for key in keys}}, handle)
+
+    def run_init(self, answer: str | None, tty: bool = True) -> tuple[str, list[str]]:
+        asked: list[str] = []
+
+        def fake_input(question: str) -> str:
+            asked.append(question)
+            if "status band" in question:
+                if answer is None:
+                    raise EOFError
+                return answer
+            return ""
+
+        with (
+            mock.patch.object(init, "interactive", return_value=tty),
+            mock.patch("builtins.input", fake_input),
+        ):
+            code, out = self.sb.cli("init", *self.sb.install_args())
+        self.assertEqual(code, 0, out)
+        return out, [q for q in asked if "status band" in q]
+
+    def test_already_installed_is_not_asked(self) -> None:
+        self.install_plugins("juno@juno-local", "juno-ui@juno-local")
+        out, asked = self.run_init("y")
+        self.assertEqual(asked, [])
+        self.assertIn("status band: juno-ui is installed", out)
+
+    def test_non_interactive_prints_a_hint_only(self) -> None:
+        self.install_plugins("juno@juno-local")
+        out, asked = self.run_init("y", tty=False)
+        self.assertEqual(asked, [])
+        self.assertIn(f"status band: optional; install with: {self.CMD}", out)
+        self.assertFalse(os.path.exists(os.path.join(self.sb.state, "status-band-asked")))
+
+    def test_non_interactive_hint_carries_the_marketplace_prefix_when_needed(self) -> None:
+        out, _ = self.run_init(None, tty=False)
+        line = [x for x in out.splitlines() if x.startswith("status band:")][0]
+        self.assertIn("claude plugin marketplace add", line)
+        self.assertTrue(line.endswith(self.CMD))
+
+    def test_yes_and_empty_print_the_command(self) -> None:
+        self.install_plugins("juno@juno-local")
+        for answer in ("", "y", "YES"):
+            with self.subTest(answer=answer):
+                self.setUp()
+                self.install_plugins("juno@juno-local")
+                out, asked = self.run_init(answer)
+                self.assertEqual(len(asked), 1)
+                self.assertTrue(asked[0].endswith("[Y/n] "))
+                self.assertIn(f"status band: run: {self.CMD}", out)
+
+    def test_yes_before_the_plugin_adds_the_marketplace(self) -> None:
+        out, _ = self.run_init("y")
+        line = [x for x in out.splitlines() if x.startswith("status band: run:")][0]
+        self.assertIn("claude plugin marketplace add", line)
+        self.assertTrue(line.endswith(self.CMD))
+
+    def test_no_leaves_it_off(self) -> None:
+        out, asked = self.run_init("n")
+        self.assertEqual(len(asked), 1)
+        self.assertIn(f"status band: left off; install later with {self.CMD}", out)
+
+    def test_eof_counts_as_no(self) -> None:
+        out, asked = self.run_init(None)
+        self.assertEqual(len(asked), 1)
+        self.assertIn("status band: left off", out)
+        self.assertTrue(os.path.exists(os.path.join(self.sb.state, "status-band-asked")))
+
+    def test_asked_once(self) -> None:
+        self.run_init("n")
+        out, asked = self.run_init("y")
+        self.assertEqual(asked, [])
+        self.assertIn("status band: optional; install with:", out)
 
 
 if __name__ == "__main__":
