@@ -10,7 +10,7 @@ from juno.core import topics
 from juno.core.ledger import safe_id
 
 INDEX_FILE = "triggers.json"
-INDEX_VERSION = 2
+INDEX_VERSION = 3
 
 
 def preset_of(cfg: config.Config) -> str:
@@ -130,7 +130,8 @@ def for_text(
     if not hits:
         return ""
     view = view or DiskVault(cfg)
-    return topics.render(view, topics.ordered(hits), claimer(cfg, sid, agent), budget)
+    again = frozenset(h[0] for h in hits if topics.repeats(h, text, preset))
+    return topics.render(view, topics.ordered(hits), claimer(cfg, sid, agent), budget, 0, again)
 
 
 def for_tool(cfg: config.Config, payload: dict[str, Any], budget: int) -> str:

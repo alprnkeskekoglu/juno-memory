@@ -28,6 +28,17 @@ PATTERN_KEYS = {"Glob": "pattern", "Grep": "glob"}
 PITFALL_LINE_CHARS = 800
 GENERAL_LINES = 5
 GENERAL_CHARS = 1200
+PITFALL_CAP = 3
+EVIDENCE_TOKEN = re.compile(r"[\w./-]+")
+EVIDENCE_TAIL = re.compile(r";\s*segment\b.*$", re.I)
+# Plain words common enough that hitting them says nothing, alone or together: a pitfall
+# fires only when one of its triggers is NOT in this set. Everything else (multi-word terms, flags,
+# paths, names with _ . - or digits) counts as specific.
+GENERIC_TRIGGERS = frozenset(
+    """git gh status run version update upgrade grep juno tests test commit config branch push
+    pull log diff add check build install deploy checkout ref tag format zsh bash shell repo
+    repos scope file files claude knowledge vault ls cd cat sed echo""".split()
+)
 
 Entry = list[Any]
 _patterns: dict[str, re.Pattern[str]] = {}
@@ -62,6 +73,19 @@ def trigger_problem(trigger: str) -> str | None:
         return f"trigger {trigger!r} needs a letter or digit"
     if "·" in trigger or any(not ch.isprintable() for ch in trigger):
         return f"trigger {trigger!r} has a '·' or a control character"
+    return None
+
+
+def is_specific(trigger: str) -> bool:
+    return trigger not in GENERIC_TRIGGERS
+
+
+def triggers_problem(triggers: list[str]) -> str | None:
+    if triggers and not any(is_specific(t) for t in triggers):
+        return (
+            "triggers are all generic words (" + ", ".join(triggers) + "); add a specific one "
+            "(a flag, a path, a tool or error term) so the pitfall does not fire on every call"
+        )
     return None
 
 
@@ -105,7 +129,12 @@ def pitfall_line(line: str, preset: str = "none") -> dict[str, Any] | None:
     triggers = [] if raw == "-" else split_triggers(raw, preset)
     if raw != "-" and (not triggers or any(trigger_problem(t) for t in triggers)):
         return None
-    return {"text": parts[0].strip(), "triggers": triggers[:MAX_TRIGGERS], "date": parts[3].strip()}
+    return {
+        "text": parts[0].strip(),
+        "triggers": triggers[:MAX_TRIGGERS],
+        "date": parts[3].strip(),
+        "evidence": parts[2].strip(),
+    }
 
 
 def pitfall_lines(text: str, preset: str = "none") -> list[dict[str, Any]]:
@@ -134,6 +163,7 @@ def build_entries(files: list[tuple[str, str]], preset: str = "none") -> list[En
                             relpath,
                             found["triggers"],
                             found["text"],
+                            found["evidence"],
                         ]
                     )
             continue
@@ -180,15 +210,54 @@ def pattern(trigger: str) -> re.Pattern[str]:
     return compiled
 
 
+def matched_triggers(entry: Entry, haystack: str) -> list[str]:
+    return [t for t in entry[2] if t in haystack and pattern(t).search(haystack)]
+
+
+def pitfall_score(found: list[str]) -> int:
+    return sum(3 if is_specific(t) else 1 for t in found)
+
+
 def matches(entries: list[Entry], text: str, preset: str = "none") -> list[Entry]:
     if not entries or not text:
         return []
     haystack = fold.fold(text[:SCAN_CHARS], preset)
-    return [
-        entry
-        for entry in entries
-        if any(t in haystack and pattern(t).search(haystack) for t in entry[2])
-    ]
+    hits: list[Entry] = []
+    spots: list[int] = []
+    scores: list[int] = []
+    for entry in entries:
+        found = matched_triggers(entry, haystack)
+        if not found:
+            continue
+        if len(entry) > 3:
+            if not any(is_specific(t) for t in found):
+                continue
+            spots.append(len(hits))
+            scores.append(pitfall_score(found))
+        hits.append(entry)
+    ranked = sorted(range(len(spots)), key=lambda i: -scores[i])
+    picked = [hits[spots[i]] for i in ranked]
+    for spot, entry in zip(spots, picked):
+        hits[spot] = entry
+    return hits
+
+
+def evidence_tokens(evidence: str, preset: str = "none") -> list[str]:
+    folded = fold.fold(EVIDENCE_TAIL.sub("", evidence), preset)
+    found: list[str] = []
+    for token in EVIDENCE_TOKEN.findall(folded):
+        token = token.strip("./-")
+        if len(token) >= 6 and re.search(r"[_./\d-]", token) and token not in found:
+            found.append(token)
+    return found
+
+
+def repeats(entry: Entry, text: str, preset: str = "none") -> bool:
+    """True when the call carries a distinctive part of the pitfall's error evidence."""
+    if len(entry) < 5:
+        return False
+    haystack = fold.fold(text[:SCAN_CHARS], preset)
+    return any(t in haystack and pattern(t).search(haystack) for t in evidence_tokens(entry[4]))
 
 
 def tool_text(tool: object, tool_in: dict[str, Any]) -> str:
@@ -301,11 +370,15 @@ def render(
     claim: Callable[[str], bool],
     budget: int,
     used: int = 0,
+    again: frozenset[str] = frozenset(),
 ) -> str:
     rules: list[str] = []
     notes: list[str] = []
+    pitfalls = 0
     for hit in hits:
         name, relpath = hit[0], hit[1]
+        if len(hit) > 3 and pitfalls >= PITFALL_CAP:
+            continue
         is_topic = name.startswith("topic-")
         if is_topic:
             block = topic_block(view, name, relpath)
@@ -317,8 +390,9 @@ def render(
             block = knowledge_block(view, relpath)
         label = RULES_LABEL if is_topic else CONTEXT_LABEL
         extra = len(block) + 1 + (len(label) + 2 if not (rules if is_topic else notes) else 0)
-        if not block or used + extra > budget or not claim(name):
+        if not block or used + extra > budget or not (claim(name) or name in again):
             continue
+        pitfalls += len(hit) > 3
         (rules if is_topic else notes).append(block)
         used += extra
     parts: list[str] = []

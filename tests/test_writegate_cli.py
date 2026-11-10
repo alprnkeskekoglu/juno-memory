@@ -115,6 +115,12 @@ class Pitfall(Base):
         self.assertEqual(found["triggers"], ["terraform", "plan"])
         self.assertIn(f"segment {self.sid[:8]}", line)
 
+    def test_only_generic_triggers_are_refused(self) -> None:
+        out = self.refused(
+            "pitfall", "--triggers", "git,status", "--evidence", QUOTE, "Check the tree first"
+        )
+        self.assertIn("generic", out)
+
     def test_evidence_must_be_anchored(self) -> None:
         text = "Run terraform plan before apply on shared state"
         out = self.refused("pitfall", "--evidence", "something nobody said in the session", text)
