@@ -102,10 +102,39 @@ class Surfaces(StaleCase):
         plist = os.path.join(self.sb.home, "Library", "LaunchAgents", "dev.juno.stale-weekly.plist")
         os.makedirs(os.path.dirname(plist))
         open(plist, "w").close()
+        old = self.world_now() - 9 * 86400
+        os.utime(plist, (old, old))
         fixer = dashboard_collect.coverage_stalefix(src, self.world_now())
         self.assertTrue(fixer["overdue"])
         out = dashboard_grade.grade_stale({"stale": 0, "total": 1, "fixer": fixer}, src.t)
         self.assertEqual(out["level"], "yellow")
+
+    def install_plist(self, age_days: float) -> None:
+        plist = os.path.join(self.sb.home, "Library", "LaunchAgents", "dev.juno.stale-weekly.plist")
+        os.makedirs(os.path.dirname(plist))
+        open(plist, "w").close()
+        t = self.world_now() - age_days * 86400
+        os.utime(plist, (t, t))
+
+    def test_fresh_install_with_no_ok_run_is_not_overdue(self) -> None:
+        self.install_plist(1)
+        fixer = dashboard_collect.coverage_stalefix(dash_cmd.sources(self.cfg()), self.world_now())
+        self.assertTrue(fixer["installed"])
+        self.assertFalse(fixer["overdue"])
+
+    def test_old_install_with_no_ok_run_is_overdue(self) -> None:
+        self.install_plist(9)
+        fixer = dashboard_collect.coverage_stalefix(dash_cmd.sources(self.cfg()), self.world_now())
+        self.assertTrue(fixer["overdue"])
+
+    def test_old_ok_run_is_overdue_even_after_a_recent_install(self) -> None:
+        self.install_plist(1)
+        runs = os.path.join(self.sb.state, "jobs", "stale-weekly")
+        os.makedirs(runs, exist_ok=True)
+        with open(os.path.join(runs, "runs.jsonl"), "w") as f:
+            f.write(json.dumps({"t": self.world_now() - 9 * 86400, "status": "ok"}) + "\n")
+        fixer = dashboard_collect.coverage_stalefix(dash_cmd.sources(self.cfg()), self.world_now())
+        self.assertTrue(fixer["overdue"])
 
     def test_dashboard_without_a_fixer_block_is_unchanged(self) -> None:
         src = dash_cmd.sources(self.cfg())

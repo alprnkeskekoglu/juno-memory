@@ -376,13 +376,25 @@ def schedule_installed(src: Sources) -> bool:
     return os.path.exists(agent) or os.path.exists(unit)
 
 
+def schedule_installed_at(src: Sources) -> float | None:
+    agent = os.path.join(src.home, "Library", "LaunchAgents", f"{schedule.LABEL}.plist")
+    unit = os.path.join(src.home, ".config", "systemd", "user", f"{schedule.UNIT}.timer")
+    for path in (agent, unit):
+        try:
+            return os.path.getmtime(path)
+        except OSError:
+            continue
+    return None
+
+
 def coverage_stalefix(src: Sources, now: float) -> Block:
     rows, _ = read_jsonl(os.path.join(src.state, *stalerow.RUNS_DIR, stalerow.RUNS_FILE))
     stamped = [r for r in rows if isinstance(r.get("t"), (int, float))]
     seen = [r for r in stamped if r.get("status") in ("ok", "failed", "refused", "budget")]
     last_ok = [r for r in stamped if r.get("status") == "ok"]
     installed = schedule_installed(src)
-    overdue = installed and (not last_ok or now - last_ok[-1]["t"] > stalerow.OVERDUE_DAYS * 86400)
+    since = last_ok[-1]["t"] if last_ok else schedule_installed_at(src)
+    overdue = installed and since is not None and now - since > stalerow.OVERDUE_DAYS * 86400
     keep = ("day", "status", "fixed", "archived", "unsure", "reason", "run")
     return {
         "last": {k: seen[-1].get(k) for k in keep} if seen else None,
