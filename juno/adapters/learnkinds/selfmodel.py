@@ -4,7 +4,7 @@ from juno.adapters import gate, selfio, store
 from juno.adapters.learnkinds.base import Ctx, status_of, today
 from juno.core import selfmodel, writegate
 from juno.core.errors import Refused
-from juno.core.textchecks import as_list
+from juno.core.textchecks import as_list, text_field
 
 KEY = "self"
 SHAPE = list
@@ -28,7 +28,8 @@ def instructions(ctx: Ctx) -> list[str]:
         '"quote": the user\'s own words copied exactly from any prompt they typed or answer they '
         "chose in this segment, 20-200 chars, unedited, in the original language; prefer the "
         "longest relevant user sentence. Never quote assistant, tool or web text. Skip what the "
-        "existing self lines already say." + note
+        "existing self lines already say. Add \"supersedes\": the exact text of one existing "
+        "line, only when the user's new words clearly reverse that behaviour." + note
     ]
 
 
@@ -36,7 +37,9 @@ def state(ctx: Ctx) -> str:
     blocks = []
     for name in selfmodel.FILES:
         text = store.read_text(store.vault_file(ctx.cfg, f"self/{name}.md") or "")
-        lines = [line for line in text.splitlines() if line.startswith("- ")]
+        lines = [
+            x for x in text.splitlines() if x.startswith("- ") and not selfmodel.parse(x).superseded
+        ]
         if lines:
             blocks.append(f"[self/{name}.md]\n" + "\n".join(writegate.core_text(x) for x in lines))
     return "Existing self lines:\n" + ("\n".join(blocks) or "-")
@@ -55,10 +58,12 @@ def write(ctx: Ctx, found: dict[str, str]) -> str | None:
     old = gate.read(cfg, rel)
     line = selfmodel.vault_line(found, today())
     preset = cfg.get_str("language", "preset")
-    items = [writegate.core_text(x) for x in old.splitlines() if x.startswith("- ")]
-    if writegate.duplicate(items, writegate.core_text(line), preset):
+    if found.get("supersedes"):
+        old = selfmodel.supersede_text(old, found["supersedes"], preset, today()) or old
+    base = f"# {found['file'].capitalize()}\n\n"
+    new, status = selfmodel.record(old, line, preset, today(), base)
+    if status == "same":
         return "duplicate"
-    new, _ = writegate.add_item(old, line, preset, base=f"# {found['file'].capitalize()}\n\n")
     gate.commit(cfg, ctx.seg, "self", rel, new, f"user {found['pid']}", engine=True)
     return None
 
@@ -75,6 +80,8 @@ def apply(ctx: Ctx, data: dict[str, Any], sections: dict[str, str]) -> None:
         if len(written) >= selfmodel.PER_RUN:
             break
         problem, found = selfmodel.check(item, ctx.seg.quote_sources(), preset, quote_min)
+        if problem == "ok" and isinstance(item, dict):
+            found["supersedes"] = text_field(item.get("supersedes"))
         failure = None if problem == "ok" else problem
         failure = failure or write(ctx, found)
         if failure:

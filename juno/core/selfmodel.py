@@ -1,8 +1,9 @@
 import re
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
-from juno.core import extract, inject, privacy
+from juno.core import extract, fold, inject, privacy, writegate
 from juno.core.redact import redact
 from juno.core.textchecks import SECOND_PERSON_RE, text_field
 
@@ -13,6 +14,10 @@ TEXT_CHARS = (10, 200)
 QUOTE_CHARS = 200
 IDENTITY_RE = re.compile(r"(?i)(?<![\w-])(?:i am|i'm|(?:the )?user (?:is|was|are))(?![\w-])")
 DATE_RE = re.compile(r" · (\d{4}-\d{2}-\d{2}) · ")
+FIELDS_RE = re.compile(
+    r"(?: · seen (\d+)×)?(?: · last (\d{4}-\d{2}-\d{2}))?(?: · superseded (\d{4}-\d{2}-\d{2}))?$"
+)
+QUOTE_RE = re.compile(r' · "(.*)"$')
 TURN_CHARS = 160
 TURNS_MAX = 60
 TURNS_TOTAL_CHARS = 8000
@@ -62,26 +67,116 @@ def ask_digest(rows: Sequence[Mapping[str, Any]]) -> str:
     return f"this segment: {len(rows)} questions, Recommended picked {picked}, Other {other}"
 
 
-def newest(files: Sequence[str], limit: int) -> list[str]:
-    found: list[tuple[str, int, str]] = []
-    for text in files:
-        for line in text.splitlines():
-            if line.startswith("- "):
-                match = DATE_RE.search(line)
-                found.append((match.group(1) if match else "", len(found), line))
-    return [line for _, _, line in sorted(found, reverse=True)[:limit]]
+@dataclass(frozen=True)
+class Entry:
+    text: str
+    quote: str
+    born: str
+    seen: int
+    last: str
+    superseded: str
+
+
+def parse(line: str) -> Entry:
+    """Lines without the seen/last/superseded fields are seen once, last on their own date."""
+    match = FIELDS_RE.search(line)
+    body = line[: match.start()] if match else line
+    born = DATE_RE.search(body)
+    quote = QUOTE_RE.search(body)
+    seen = int(match.group(1)) if match and match.group(1) else 1
+    day = born.group(1) if born else ""
+    return Entry(
+        writegate.core_text(body),
+        quote.group(1) if quote else "",
+        day,
+        seen,
+        (match.group(2) if match and match.group(2) else "") or day,
+        (match.group(3) if match and match.group(3) else ""),
+    )
+
+
+def bump(line: str, today: str) -> str:
+    entry = parse(line)
+    match = FIELDS_RE.search(line)
+    out = (line[: match.start()] if match else line) + f" · seen {entry.seen + 1}×"
+    out += f" · last {max(entry.last, today)}"
+    return out + (f" · superseded {entry.superseded}" if entry.superseded else "")
+
+
+def mark_superseded(line: str, today: str) -> str:
+    return line + f" · superseded {today}"
+
+
+def active(index: int, lines: list[str]) -> bool:
+    return lines[index].startswith("- ") and not parse(lines[index]).superseded
+
+
+def supersede_text(text: str, old: str, preset: str, today: str) -> str | None:
+    lines = text.splitlines()
+    wanted = fold.fold(old, preset)
+    for i in range(len(lines)):
+        if active(i, lines) and fold.fold(writegate.core_text(lines[i]), preset) == wanted:
+            lines[i] = mark_superseded(lines[i], today)
+            return writegate.join(lines)
+    return None
+
+
+def record(text: str, line: str, preset: str, today: str, base: str = "") -> tuple[str, str]:
+    """Add a self line, or bump the support of an active near-duplicate. Returns (text, status)."""
+    lines = (text or base).splitlines()
+    live = [i for i in range(len(lines)) if active(i, lines)]
+    found = writegate.duplicate(
+        [writegate.core_text(lines[i]) for i in live], writegate.core_text(line), preset
+    )
+    if found:
+        at = live[found[0]]
+        if parse(lines[at]).quote == parse(line).quote:
+            return text, "same"
+        lines[at] = bump(lines[at], today)
+        return writegate.join(lines), "bumped"
+    rows = [i for i, x in enumerate(lines) if x.startswith("- ")]
+    spot = rows[-1] + 1 if rows else len(lines)
+    while not rows and spot > 0 and not lines[spot - 1].strip():
+        spot -= 1
+    lines.insert(spot, line)
+    return writegate.join(lines), "added"
+
+
+def ranked(files: Sequence[str]) -> list[str]:
+    found = [x for text in files for x in text.splitlines() if x.startswith("- ")]
+    found = [x for x in found if not parse(x).superseded]
+    found.sort(key=lambda x: parse(x).last, reverse=True)
+    found.sort(key=lambda x: parse(x).seen, reverse=True)
+    return found
+
+
+def summary(files: Sequence[str]) -> tuple[int, int, int]:
+    rows = [parse(x) for text in files for x in text.splitlines() if x.startswith("- ")]
+    live = [r for r in rows if not r.superseded]
+    return len(rows), len(rows) - len(live), max((r.seen for r in live), default=0)
+
+
+def summary_text(files: Sequence[str]) -> str:
+    total, gone, top = summary(files)
+    return f"{total} lines ({gone} superseded), top line seen {top}×"
 
 
 def block(files: Sequence[str], max_lines: int, max_chars: int) -> str:
     kept: list[str] = []
+    rows = ranked(files)
     used = len(inject.CONTEXT_LABEL) + len(HEADER) + 2
-    for line in newest(files, max_lines):
+    for line in rows:
         shown = inject.neutralize(re.sub(r" · src: user \S+", "", line))
-        if used + len(shown) + 1 > max_chars:
+        if len(kept) < max_lines and used + len(shown) + 1 <= max_chars:
+            kept.append(shown)
+            used += len(shown) + 1
+    hint = ""
+    while kept and len(rows) > len(kept):
+        hint = f"(+{len(rows) - len(kept)} more in self/)"
+        if used + len(hint) + 1 <= max_chars:
             break
-        kept.append(shown)
-        used += len(shown) + 1
-    return inject.context_block([HEADER + ":", *kept]) if kept else ""
+        used -= len(kept.pop()) + 1
+    return inject.context_block([HEADER + ":", *kept, *([hint] if hint else [])]) if kept else ""
 
 
 def label_turns(texts: Sequence[str]) -> tuple[list[tuple[int, str]], int]:

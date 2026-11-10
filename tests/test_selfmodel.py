@@ -119,7 +119,7 @@ class Kinds(CardCase):
         ]
         result, _ = self.learn({"self": [item(text=t) for t in texts]})
         self.assertEqual(len(result["self"]["written"]), 3)
-        again, sections = self.learn({"self": [item(text=texts[0] + " today")]})
+        again, sections = self.learn({"self": [item(text=texts[0])]})
         self.assertEqual(
             (sections["self"], again["self"]["dropped"]), ("dropped:duplicate", {"duplicate": 1})
         )

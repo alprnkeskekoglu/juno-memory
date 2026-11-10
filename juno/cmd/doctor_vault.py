@@ -5,13 +5,13 @@ import time
 from typing import Any
 
 from juno import config
-from juno.adapters import cardjob, learned, ledgerio, protocolio, queues, repos, store
+from juno.adapters import cardjob, learned, ledgerio, protocolio, queues, repos, selfio, store
 from juno.adapters import status as status_io
 from juno.adapters.vaultview import DiskVault, scan_metas
 from juno.cmd import backlog as backlog_cmd
 from juno.core import backlog as bl
 from juno.core import doctor_vault as dv
-from juno.core import retire, topics
+from juno.core import retire, selfmodel, topics
 from juno.core.doctor_vault import Check
 from juno.core.vaultfmt import (
     NEVER_INJECTED_KINDS,
@@ -233,6 +233,11 @@ def error_checks(cfg: config.Config) -> list[Check]:
     return dv.error_checks(count, last, len(status_io.repeated_errors(cfg)))
 
 
+def self_checks(cfg: config.Config) -> list[Check]:
+    files = selfio.texts(cfg)
+    return [("INFO", "self", selfmodel.summary_text(files))] if selfmodel.summary(files)[0] else []
+
+
 def probe(cfg: config.Config) -> Check:
     from juno.handlers import pre_tool_use
 
@@ -253,5 +258,6 @@ def collect(cfg: config.Config, run_probe: bool) -> list[Check]:
     out += backlog_checks(cfg)
     out += runs_checks(cfg)
     out += shadow_checks(cfg)
+    out += self_checks(cfg)
     out += dv.synthetic_checks(ledgerio.synthetic_report(cfg))
     return out

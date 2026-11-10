@@ -29,8 +29,11 @@ def segment_asks(cfg: config.Config, sid: str) -> list[dict[str, Any]]:
     return [r for r in asklog.read(cfg.state) if r["sid"] == sid]
 
 
+def texts(cfg: config.Config) -> list[str]:
+    return [store.read_text(store.vault_file(cfg, f"self/{n}.md") or "") for n in selfmodel.FILES]
+
+
 def model_block(cfg: config.Config) -> str:
-    texts = [store.read_text(store.vault_file(cfg, f"self/{n}.md") or "") for n in selfmodel.FILES]
     return selfmodel.block(
-        texts, cfg.get_int("self", "max_lines"), cfg.get_int("self", "max_chars")
+        texts(cfg), cfg.get_int("self", "max_lines"), cfg.get_int("self", "max_chars")
     )
