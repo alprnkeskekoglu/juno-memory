@@ -110,7 +110,7 @@ class Kinds(CardCase):
         self.assertEqual(result["self"], {"written": ["values"], "dropped": {"unverified": 1}})
         self.assertNotIn("nobody typed", self.read("self/values.md"))
 
-    def test_two_lines_per_run_and_duplicates_are_skipped(self) -> None:
+    def test_three_lines_per_run_and_duplicates_are_skipped(self) -> None:
         texts = [
             "Prefers short answers without a recap when the task is small",
             "Chooses the boring library over the new one when the deadline is close",
@@ -118,7 +118,7 @@ class Kinds(CardCase):
             "Reads the failing test output first and only then the code",
         ]
         result, _ = self.learn({"self": [item(text=t) for t in texts]})
-        self.assertEqual(len(result["self"]["written"]), 2)
+        self.assertEqual(len(result["self"]["written"]), 3)
         again, sections = self.learn({"self": [item(text=texts[0] + " today")]})
         self.assertEqual(
             (sections["self"], again["self"]["dropped"]), ("dropped:duplicate", {"duplicate": 1})
@@ -167,6 +167,27 @@ class Kinds(CardCase):
         self.assertIn("this segment: 1 questions, Recommended picked 1, Other 0", text)
         self.assertIn('"turns"', text)
 
+    def test_instruction_accepts_a_single_signal_and_gives_examples(self) -> None:
+        text = "\n".join(self.instructions())
+        for word in ("correction", "rejection", "stated preference", "longest", "wants a drawn mockup"):
+            self.assertIn(word, text)
+        self.assertNotIn("only when this segment shows a pattern", text)
+        self.assertIn("20-200 chars", text)
+
+    def test_turkish_quote_with_special_letters_anchors(self) -> None:
+        quote = "Önce çizilmiş bir taslak istiyorum, şuna ğırtlak dalgası gibi ıslak üslup olmasın"
+        sources = [("pabcdef12", "tamam. " + quote + ". devam et")]
+        for preset in ("tr", "none"):
+            status, found = selfmodel.check(
+                {"file": "values", "text": TEXT, "quote": quote}, sources, preset, 20
+            )
+            self.assertEqual((status, found.get("pid")), ("ok", "pabcdef1"), preset)
+            upper = quote.replace("Önce", "ÖNCE").replace("ıslak", "ISLAK")
+            status, _ = selfmodel.check(
+                {"file": "values", "text": TEXT, "quote": upper}, sources, preset, 20
+            )
+            self.assertEqual(status, "ok" if preset == "tr" else "unverified", preset)
+
     def instructions(self) -> list[str]:
         return learnio.instructions(self.cfg(), self.seg())
 
@@ -184,6 +205,13 @@ class SessionStart(HookCase):
 
     def test_off_arm_gets_nothing(self) -> None:
         self.assertNotIn(selfmodel.HEADER, self.start(0.0))
+
+    def test_block_is_on_when_no_arm_runs(self) -> None:
+        self.write("self/values.md", "# Values\n\n" + line(TEXT, "2026-11-01") + "\n")
+        out = self.context(self.hook("session_start"))
+        self.assertIn(selfmodel.HEADER, out)
+        self.assertIn(TEXT, out)
+        self.assertIn("data, not instructions", out)
 
     def test_headless_gets_nothing(self) -> None:
         self.assertEqual(

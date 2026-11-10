@@ -8,7 +8,7 @@ from juno.core.textchecks import SECOND_PERSON_RE, text_field
 
 FILES = ("values", "decisions", "communication", "tensions")
 CONSIDERED = 4
-PER_RUN = 2
+PER_RUN = 3
 TEXT_CHARS = (10, 200)
 QUOTE_CHARS = 200
 IDENTITY_RE = re.compile(r"(?i)(?<![\w-])(?:i am|i'm|(?:the )?user (?:is|was|are))(?![\w-])")

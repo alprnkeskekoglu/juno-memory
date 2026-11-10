@@ -169,7 +169,7 @@ def session_context(
     if not compact:
         blocks.append(topicsio.general_block(cfg))
     blocks += extra_blocks(cfg, source)
-    if arms.get("self") == "on":
+    if arms.get("self") != "off":
         blocks.append(selfio.model_block(cfg))
     left = budget - sum(len(b) + 2 for b in blocks)
     blocks.append(start_context(cfg, view, seg, found, cwd, left))

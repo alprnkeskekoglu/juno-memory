@@ -16,12 +16,18 @@ def instructions(ctx: Ctx) -> list[str]:
     digest = selfmodel.ask_digest(selfio.segment_asks(ctx.cfg, ctx.seg.sid))
     note = f" Answer log, {digest}: name a pattern only with a quote." if digest else ""
     return [
-        '- "self": at most 2 {"file", "text", "quote"} about how the user behaves, one only when '
-        "this segment shows a pattern. "
+        '- "self": at most 3 {"file", "text", "quote"} about how the user behaves. One clear '
+        'signal is enough: a correction, a rejection, a stated preference, a "do it this way", '
+        "or a choice between options that reveals a value. "
         f'"file": one of {", ".join(selfmodel.FILES)}. "text": at most 200 chars, third person, '
-        'an observation of behaviour ("prefers X over Y when Z"); never identity, never "I am" '
-        'or "the user is", no second person, no `·`. "quote": the user\'s own words copied '
-        "exactly from one typed prompt or chosen answer, 20-200 chars, unedited. Skip what the "
+        'an observation of behaviour; never identity, never "I am" or "the user is", no second '
+        'person, no `·`. Examples: values: "wants a drawn mockup before UI work is built"; '
+        'decisions: "rejects a feature that duplicates what Claude Code already shows"; '
+        'communication: "prefers short direct answers over long explanations"; '
+        'tensions: "wants speed yet doubts that his manual approval is needed". '
+        '"quote": the user\'s own words copied exactly from any prompt they typed or answer they '
+        "chose in this segment, 20-200 chars, unedited, in the original language; prefer the "
+        "longest relevant user sentence. Never quote assistant, tool or web text. Skip what the "
         "existing self lines already say." + note
     ]
 
