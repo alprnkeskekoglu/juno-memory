@@ -471,6 +471,7 @@ async function refresh($, measured) {
     const nowMs = await $.clock.now()
     const { status, mine, sid } = await readStatus($, nowMs)
     await readModel($)
+    await readAgents($, nowMs)
     if (measured) usageNow = measured
     const usage = usageNow ?? (await $.session.usage())
     const caps = model?.caps ?? (await readCaps($))
@@ -511,6 +512,97 @@ function drawRow(Box, Text, segs, color) {
   return Box({ flexDirection: 'row', children: segs.map((s) => toText(Text, s, color)) })
 }
 
+// Agent strip: one band line while subagents of the main loop run or have just finished.
+const AGENT_FRESH_MS = 60 * 1000
+const AGENT_DESC_MAX = 18
+const AGENT_KINDS = {
+  pending: 'run', running: 'run', waiting: 'run', idle: 'idle', completed: 'done', failed: 'fail', killed: 'fail',
+}
+const AGENT_ORDER = { run: 0, idle: 1, done: 2, fail: 3 }
+const UNICODE_AGENT = { run: '◐', done: '✓', fail: '✗', idle: '◌' }
+const ASCII_AGENT = { run: '*', done: 'ok', fail: 'x', idle: '.' }
+const agentModels = {} // agent id -> model as agent.spawn answered it
+let agentTracked = {} // agent id -> { desc, kind, model, since, endAt }
+
+// AgentStatus -> 'run' | 'idle' | 'done' | 'fail'; null for an unknown value.
+export function agentKind(status) {
+  return AGENT_KINDS[status] ?? null
+}
+
+// A model id or alias as its family name (haiku/sonnet/opus/fable), '' when unknown.
+export function agentModelLabel(id) {
+  const m = typeof id === 'string' ? /(haiku|sonnet|opus|fable)/i.exec(id) : null
+  return m ? m[1].toLowerCase() : ''
+}
+
+// prev: tracked map; list: $.agent.list() result; models: id -> model string. Returns a new tracked map.
+// Main loop only (no parentId). `since` is the first running sighting, `endAt` the first finished one.
+export function trackAgents(prev, list, nowMs, models) {
+  const out = {}
+  const seen = new Set()
+  for (const a of Array.isArray(list) ? list : []) {
+    if (!a || typeof a.id !== 'string' || a.id === '' || a.parentId) continue
+    const kind = agentKind(a.status)
+    if (!kind) continue
+    seen.add(a.id)
+    const old = prev?.[a.id]
+    const desc = String(a.description || a.name || a.type || '').replace(/\s+/g, ' ').trim()
+    const model = old?.model || agentModelLabel(models?.[a.id])
+    const finished = kind === 'done' || kind === 'fail'
+    const since = kind === 'run' ? (old?.kind === 'run' ? old.since : nowMs) : (old?.since ?? null)
+    const wasFinished = old && (old.kind === 'done' || old.kind === 'fail') && old.endAt != null
+    out[a.id] = { desc, kind, model, since, endAt: finished ? (wasFinished ? old.endAt : nowMs) : null }
+  }
+  // An agent that vanished from the list while running counts as finished now; finished ones age out.
+  for (const [id, old] of Object.entries(prev ?? {})) {
+    if (seen.has(id) || !old) continue
+    if (old.kind === 'run') out[id] = { ...old, kind: 'done', endAt: nowMs }
+    else if ((old.kind === 'done' || old.kind === 'fail') && old.endAt != null) out[id] = old
+  }
+  for (const [id, a] of Object.entries(out)) {
+    if (a.endAt != null && nowMs - a.endAt >= AGENT_FRESH_MS) delete out[id]
+  }
+  return out
+}
+
+function clock(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
+// tracked: the map from trackAgents; o: { cols, ascii }. Segments of the strip line, [] when there is nothing to show.
+export function agentStrip(tracked, nowMs, o = {}) {
+  const items = Object.values(tracked ?? {})
+    .filter((a) => a && (a.endAt == null || nowMs - a.endAt < AGENT_FRESH_MS))
+    .sort((a, b) => AGENT_ORDER[a.kind] - AGENT_ORDER[b.kind] || (a.since ?? a.endAt ?? 0) - (b.since ?? b.endAt ?? 0))
+  if (!items.some((a) => a.kind !== 'idle')) return []
+  const running = items.filter((a) => a.kind === 'run').length
+  const g = glyphs(o)
+  const level = levelFor(o.cols)
+  const marks = o.ascii ? ASCII_AGENT : UNICODE_AGENT
+  const color = { run: 'blue', done: GREEN, fail: 'red', idle: undefined }
+  const head = [seg(` ${g.branch} `, { dim: true }), seg(`agents ${running}`)]
+  if (level === 'tiny') return fit(head, o.cols, o)
+  const parts = items.map((a) => {
+    const desc = [...a.desc].length > AGENT_DESC_MAX ? [...a.desc].slice(0, AGENT_DESC_MAX - 1).join('') + g.ell : a.desc
+    const text = [a.model, desc].filter(Boolean).join(' ')
+    const glyph = seg(marks[a.kind], { c: color[a.kind], dim: a.kind === 'done' || a.kind === 'idle' ? true : undefined })
+    const out = [glyph, seg(' ' + text, a.kind === 'idle' ? { dim: true } : undefined)]
+    if (a.kind === 'run' && a.since != null && (level === 'full' || level === 'num')) out.push(seg(' ' + clock(nowMs - a.since), { dim: true }))
+    return out
+  })
+  const joined = parts.flatMap((p, i) => (i ? [seg('  ·  ', { dim: true }), ...p] : p))
+  return fit([...head, seg(' · ', { dim: true }), ...joined], o.cols, o)
+}
+
+async function readAgents($, nowMs) {
+  try {
+    agentTracked = trackAgents(agentTracked, await $.agent.list(), nowMs, agentModels)
+  } catch {
+    agentTracked = {}
+  }
+}
+
 export function register(on) {
   on('session.start', async ($, e, next) => {
     try {
@@ -540,6 +632,12 @@ export function register(on) {
     return next(e)
   })
 
+  on('agent.spawn', async ($, e, next) => {
+    const res = await next(e)
+    try { if (res?.agentId && res.model) agentModels[res.agentId] = res.model } catch {}
+    return res
+  })
+
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     try {
       const props = e.props ?? e
@@ -550,6 +648,10 @@ export function register(on) {
       const rows = [drawRow(Box, Text, formatLine1(model, o), color)]
       const l2 = formatLine2(model, o)
       if (l2.length) rows.push(drawRow(Box, Text, l2, color))
+      try {
+        const strip = agentStrip(agentTracked, model.now, o)
+        if (strip.length) rows.push(drawRow(Box, Text, strip, color))
+      } catch {}
       const theirs = await next(e)
       return Box({ flexDirection: 'column', children: bandChildren(rows, theirs) })
     } catch {
