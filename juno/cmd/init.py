@@ -146,17 +146,25 @@ def init_shim(
     return None
 
 
-def installed_plugins(settings: str) -> list[str]:
+def installed_plugins(settings: str) -> dict[str, list[dict[str, Any]]]:
     claude = os.path.dirname(settings)
     raw = fs.read_bytes(os.path.join(claude, "plugins", "installed_plugins.json"))
-    if raw:
-        try:
-            data = json.loads(raw.decode("utf-8"))
-            plugins = data.get("plugins", {}) if isinstance(data, dict) else {}
-            return [str(key) for key in plugins]
-        except ValueError:
-            pass
-    return []
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except ValueError:
+        return {}
+    plugins = data.get("plugins", {}) if isinstance(data, dict) else {}
+    if not isinstance(plugins, dict):
+        return {}
+    out: dict[str, list[dict[str, Any]]] = {}
+    for key, entries in plugins.items():
+        if isinstance(entries, dict):
+            entries = [entries]
+        if isinstance(entries, list):
+            out[str(key)] = [e for e in entries if isinstance(e, dict)]
+    return out
 
 
 def install_command(plugin_id: str, with_marketplace: bool) -> str:

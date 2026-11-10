@@ -129,6 +129,80 @@ def check_plugin(cfg: config.Config, settings: str) -> list[Check]:
     return [("PASS", "plugin root", root), (level, "plugin", status)]
 
 
+def checkout_version(path: str) -> str:
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return str(json.load(handle).get("version", ""))
+    except (OSError, ValueError, AttributeError):
+        return ""
+
+
+def checkout_head(root: str, env: Mapping[str, str]) -> str:
+    try:
+        done = subprocess.run(
+            ["git", "-C", root, "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=dict(env),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return done.stdout.strip() if done.returncode == 0 else ""
+
+
+def check_plugin_cache(cfg: config.Config, settings: str) -> list[Check]:
+    root = cfg.get_str("runtime", "plugin_root")
+    plugins = init.installed_plugins(settings)
+    wanted = [k for k in plugins if k.startswith(("juno@", "juno-ui@"))]
+    if not root or not wanted:
+        return []
+    head = checkout_head(root, cfg.env)
+    out: list[Check] = []
+    for key in sorted(wanted):
+        ui = key.startswith("juno-ui@")
+        source = os.path.join(root, "ui") if ui else root
+        have = checkout_version(os.path.join(source, ".claude-plugin", "plugin.json"))
+        for entry in plugins[key]:
+            path = str(entry.get("installPath", ""))
+            if path and os.path.realpath(path) == os.path.realpath(source):
+                out.append(("PASS", "plugin cache", f"{key} reads straight from {source}"))
+                continue
+            version = str(entry.get("version", ""))
+            sha = str(entry.get("gitCommitSha", ""))
+            if not have:
+                out.append(("INFO", "plugin cache", f"cannot read the checkout version of {key}"))
+                continue
+            shown = f"{version or '?'} ({sha[:7] or 'no sha'})"
+            if version != have:
+                now = f"{have} ({head[:7] or 'no git'})"
+                out.append(
+                    (
+                        "WARN",
+                        "plugin cache",
+                        f"cache for {key} is at {shown}, checkout is {now}; "
+                        f"run claude plugin update {key}",
+                    )
+                )
+            elif not head or not sha:
+                out.append(
+                    ("INFO", "plugin cache", f"{key} is at {shown}; commit not comparable (no git)")
+                )
+            elif head.startswith(sha) or sha.startswith(head):
+                out.append(("PASS", "plugin cache", f"{key} matches the checkout {shown}"))
+            else:
+                out.append(
+                    (
+                        "WARN",
+                        "plugin cache",
+                        f"cache for {key} is at {shown}, checkout is {have} ({head[:7]}); "
+                        f"same version, so update will not refresh it; run "
+                        f"claude plugin uninstall {key} && claude plugin install {key}",
+                    )
+                )
+    return out
+
+
 def check_shim(args: argparse.Namespace, cfg: config.Config) -> list[Check]:
     target = os.path.join(common.bin_dir(args, cfg), "juno")
     raw = fs.read_bytes(target)
@@ -211,6 +285,7 @@ def collect(args: argparse.Namespace, cfg: config.Config) -> list[Check]:
         first
         + check_paths(cfg)
         + check_plugin(cfg, settings)
+        + check_plugin_cache(cfg, settings)
         + check_shim(args, cfg)
         + check_settings(cfg, settings)
         + check_output_style(cfg, settings)
