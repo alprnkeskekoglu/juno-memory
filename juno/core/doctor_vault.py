@@ -53,13 +53,16 @@ def card_checks(cards: Sequence[Mapping[str, Any]]) -> list[Check]:
         out.append(("PASS", "cards", f"{len(cards)} card headings parsed"))
     for card in valid:
         if card.get("auto"):
-            out.append(
-                ("WARN", "stubs", f"{card['path']}: stub card {card['seg']} waits for a real card")
-            )
+            seg = card["seg"]
+            said = f"{card['path']}: stub card {seg} waits for a real card; "
+            said += f"`juno card --segment {seg} ...` writes it, `juno card dismiss {seg}` drops it"
+            out.append(("WARN", "stubs", said))
     counts = Counter((c["path"], c["seg"]) for c in valid)
     for (path, seg), n in sorted(counts.items()):
         if n > 1:
-            out.append(("WARN", "duplicate cards", f"{path}: {n} cards for segment {seg}"))
+            name = str(path).removeprefix("handoffs/").removesuffix(".md")
+            said = f"{path}: {n} cards for segment {seg}; `juno card merge {name} {seg}` joins them"
+            out.append(("WARN", "duplicate cards", said))
     return out
 
 
