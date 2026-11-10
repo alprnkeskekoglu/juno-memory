@@ -5,7 +5,7 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from juno.core import privacy, threadscan, topics
+from juno.core import pitfalldup, privacy, threadscan, topics
 from juno.core.vaultfmt import (
     CARD_HEAD_RE,
     WIKILINK_RE,
@@ -276,6 +276,18 @@ def pitfall_checks(text: str, preset: str) -> list[Check]:
         )
         for n in bad
     ]
+    twins = pitfalldup.pairs(text, preset)
+    if twins:
+        shown = ", ".join(f"{a}/{b}" for a, b in twins[:5]) + (", ..." if len(twins) > 5 else "")
+        out.append(
+            (
+                "WARN",
+                "pitfalls",
+                f"pitfalls.md: {len(twins)} near-duplicate pair{'s' if len(twins) > 1 else ''} "
+                f"(lines {shown}); keep the better one and remove the other with "
+                "juno forget pitfalls.md:<line> --was '<fragment>' --evidence '<why>'",
+            )
+        )
     return out or [("PASS", "pitfalls", f"pitfalls.md: {len(lines)} lines")]
 
 

@@ -3,7 +3,7 @@ from collections import Counter
 from collections.abc import Callable
 from typing import Any
 
-from juno.core import fold, privacy, threadscan, topics
+from juno.core import fold, pitfalldup, privacy, threadscan, topics
 from juno.core.extract import (
     FACTS_CONSIDERED,
     FACTS_PER_FILE,
@@ -235,6 +235,14 @@ def apply_pitfalls(
             problem = "capped"
         if problem or value is None:
             dropped[problem or "invalid"] += 1
+            continue
+        near = pitfalldup.find(lines, value["text"], value["evidence"])
+        if near is not None:
+            lines[near] = pitfalldup.merge(
+                lines[near], value["text"], value["triggers"], value["evidence"], sid8, today
+            )
+            known.add(key)
+            written.append({"text": value["text"][:160], "triggers": value["triggers"]})
             continue
         trig = ", ".join(value["triggers"]) or "-"
         lines.append(

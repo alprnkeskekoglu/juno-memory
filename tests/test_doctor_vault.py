@@ -84,8 +84,25 @@ class Pure(unittest.TestCase):
         line = "- Use tabs · triggers: tabs · evidence · 2026-01-01"
         self.assertEqual(dv.pitfall_checks(line + "\n", "none")[0][0], "PASS")
         self.assertEqual(dv.pitfall_checks("- broken\n", "none")[0][0], "WARN")
-        many = "\n".join([line] * 61)
+        many = "\n".join(
+            f"- w{i:03d}a w{i:03d}b w{i:03d}c w{i:03d}d w{i:03d}e · triggers: t{i} · e{i} · d"
+            for i in range(61)
+        )
         self.assertEqual(dv.pitfall_checks(many, "none")[0][0], "PASS")
+
+    def test_near_duplicate_pitfall_pairs_are_flagged(self) -> None:
+        err = "(eval):1: == not found"
+        text = (
+            "# Pitfalls\n\n"
+            f"- zsh expands an unquoted == in echo ==== as equals expansion; quote it · triggers: zsh · {err}; segment a · 2026-11-01\n"
+            "- A grep in a guessed path failed; locate the file repo-wide first · triggers: grep · e; segment a · 2026-11-01\n"
+            f"- Separator lines of equals signs break there · triggers: echo · {err}; segment b · 2026-11-01\n"
+        )
+        out = dv.pitfall_checks(text, "none")
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0][:2], ("WARN", "pitfalls"))
+        self.assertIn("1 near-duplicate pair (lines 3/5)", out[0][2])
+        self.assertIn("juno forget pitfalls.md:<line>", out[0][2])
 
     def test_threads(self) -> None:
         now = time.mktime(time.strptime("2026-11-07", "%Y-%m-%d"))

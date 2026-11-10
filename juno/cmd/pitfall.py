@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from juno import config
 from juno.adapters import gate
 from juno.cmd import gateio, write
-from juno.core import topics, writegate
+from juno.core import pitfalldup, topics, writegate
 from juno.core.errors import Refused
 
 REL = "pitfalls.md"
@@ -29,9 +29,16 @@ def do(cfg: config.Config, args: argparse.Namespace) -> int:
     shown = ", ".join(found[: topics.MAX_TRIGGERS]) or "-"
     line = f"- {text} · triggers: {shown} · {evidence}; segment {seg.sid[:8]} · {write.today()}"
     with write.locked(cfg):
-        new, _ = writegate.add_item(
-            gate.read(cfg, REL), line, write.preset(cfg), base="# Pitfalls\n\n"
-        )
+        current = gate.read(cfg, REL)
+        rows = current.splitlines()
+        near = pitfalldup.find(rows, text, evidence, write.preset(cfg))
+        if near is not None:
+            rows[near] = pitfalldup.merge(
+                rows[near], text, found, evidence, seg.sid[:8], write.today(), write.preset(cfg)
+            )
+            new = writegate.join(rows)
+        else:
+            new, _ = writegate.add_item(current, line, write.preset(cfg), base="# Pitfalls\n\n")
         res = gate.commit(cfg, seg, "pitfall", REL, new, evidence)
     return gateio.report(res, "pitfall written to")
 

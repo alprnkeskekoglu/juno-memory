@@ -115,6 +115,20 @@ class Pitfall(Base):
         self.assertEqual(found["triggers"], ["terraform", "plan"])
         self.assertIn(f"segment {self.sid[:8]}", line)
 
+    def test_near_duplicate_updates_instead_of_appending(self) -> None:
+        self.ok(
+            "pitfall", "--triggers", "terraform,plan", "--evidence", QUOTE,
+            "Run terraform plan before apply on shared state",
+        )
+        self.ok(
+            "pitfall", "--triggers", "apply", "--evidence", QUOTE,
+            "Always run terraform plan before apply on shared remote state files",
+        )
+        rows = [x for x in self.get("pitfalls.md").splitlines() if x.startswith("- ")]
+        self.assertEqual(len(rows), 1)
+        self.assertIn("Always run terraform plan", rows[0])
+        self.assertIn("triggers: terraform, plan, apply ·", rows[0])
+
     def test_evidence_must_be_anchored(self) -> None:
         text = "Run terraform plan before apply on shared state"
         out = self.refused("pitfall", "--evidence", "something nobody said in the session", text)
