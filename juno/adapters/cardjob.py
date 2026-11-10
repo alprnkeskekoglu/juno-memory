@@ -226,10 +226,14 @@ def already_ran(cfg: config.Config, seg: Segment) -> bool:
     return isinstance(stamp, (int, float)) and stamp >= (seg.last_t or 0)
 
 
-def late_run(cfg: config.Config, seg: Segment) -> bool:
+def late_transcript(cfg: config.Config, seg: Segment) -> str | None:
     if cfg.get_str("handoff", "mode") != "end" or skip_reason(cfg, seg) or already_ran(cfg, seg):
-        return False
-    transcript = find_transcript(cfg, seg)
+        return None
+    return find_transcript(cfg, seg)
+
+
+def late_run(cfg: config.Config, seg: Segment) -> bool:
+    transcript = late_transcript(cfg, seg)
     if not transcript:
         return False
     start_run(cfg, seg.sid, "late", transcript)

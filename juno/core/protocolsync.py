@@ -14,6 +14,7 @@ SHIPPED: dict[str, tuple[str, ...]] = {
     "handoffs.md": (
         "2a4d8f5cd4bf2ecd58bd2e33bef5fab1020b4a0eb1823b451eef86cfb0f36ef1",
         "73cffd01b5dac3251e426a12695b3c33c58b040d7c34304bebad030e7ba2e77d",
+        "62b26533b3498c75dd32af4c13dcef1cf31366a96229f4f14125d5ce685f6cae",
     ),
     "ideas.md": (
         "722d5ce96d710b3fed6e1b7a1e4cb4c7289cd5d4abded1710107662d5db87b70",

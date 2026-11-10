@@ -4,7 +4,7 @@ from collections.abc import Mapping
 
 from juno import config
 from juno.adapters import gate, ledgerio
-from juno.cmd import gateio, write
+from juno.cmd import cardsettle, gateio, write
 from juno.core import cardfmt, cardtarget, routing, writegate
 from juno.core.errors import Refused
 
@@ -14,7 +14,7 @@ LABEL_MAX = 40
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--label", default="work", help="short label for the heading")
-    parser.add_argument("--learned", required=True, help="one sentence, or none")
+    parser.add_argument("--learned", help="one sentence, or none (required for a card)")
     parser.add_argument("--decision", help="one line, only if the user decided something")
     parser.add_argument("--links", help="wikilinks, e.g. '[[repo]], [[KEY]]'")
     parser.add_argument(
@@ -27,7 +27,20 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="repos for the card (override), comma separated; each must be touched in this "
         "segment or have a vault profile",
     )
-    parser.add_argument("lines", nargs="+", help="2-5 lines: done, where it stopped, next")
+    parser.add_argument(
+        "--segment",
+        help="write the real card of an older segment that only has stub cards (8 hex chars); "
+        "needs --evidence (the user's words); replaces every stub of it",
+    )
+    parser.add_argument(
+        "--evidence", help="with --segment, dismiss or merge: the user's words, or repo:/ticket:"
+    )
+    parser.add_argument(
+        "lines",
+        nargs="+",
+        help="2-5 lines: done, where it stopped, next; or `dismiss <segment>` (archive its "
+        "stubs) or `merge <handoff file> <segment>` (join duplicate cards of a segment)",
+    )
 
 
 def build(cfg: config.Config, args: argparse.Namespace, target: routing.Target, seg_id: str) -> str:
@@ -59,7 +72,26 @@ def build(cfg: config.Config, args: argparse.Namespace, target: routing.Target, 
     return cardfmt.fix_links(card)[0].rstrip("\n") + "\n"
 
 
+def settle(cfg: config.Config, args: argparse.Namespace) -> int | None:
+    sub = args.lines[0] if args.learned is None and not args.segment else ""
+    if sub == "dismiss":
+        return gateio.report(cardsettle.dismiss(cfg, args), "stubs archived from")
+    if sub == "merge":
+        return gateio.report(cardsettle.merge(cfg, args), "duplicate cards merged in")
+    if args.segment:
+        if not args.evidence or args.learned is None:
+            raise Refused("--segment needs --learned and --evidence")
+        res = cardsettle.replace(cfg, args, build)
+        return gateio.report(res, "card for the older segment written to")
+    if args.learned is None:
+        raise Refused("--learned is required (one sentence, or none)")
+    return None
+
+
 def do(cfg: config.Config, args: argparse.Namespace) -> int:
+    done = settle(cfg, args)
+    if done is not None:
+        return done
     seg = write.guard(cfg)
     linked = cardtarget.link_keys(seg, args.links)
     tickets = cardtarget.explicit_tickets(seg, args.tickets, linked)

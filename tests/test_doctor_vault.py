@@ -33,6 +33,10 @@ class Pure(unittest.TestCase):
         self.assertEqual(levels["stubs"], {"WARN"})
         self.assertEqual(levels["duplicate cards"], {"WARN"})
         self.assertTrue(any("lacks Tickets, Learned" in d for _, _, d in out))
+        said = {n: d for _, n, d in out if n in ("stubs", "duplicate cards")}
+        self.assertIn("juno card --segment abcd1234", said["stubs"])
+        self.assertIn("juno card dismiss abcd1234", said["stubs"])
+        self.assertIn("juno card merge a abcd1234", said["duplicate cards"])
 
     def test_rules_provenance_caps_and_kinds(self) -> None:
         files = {
