@@ -490,7 +490,7 @@ class Pitfalls(ExtractCase):
                 {
                     "text": "A grep in a guessed path failed; locate the file repo-wide first",
                     "evidence": "src/money.py",
-                    "triggers": ["grep"],
+                    "triggers": ["grep", "repo-wide"],
                 }
             ]
         )
