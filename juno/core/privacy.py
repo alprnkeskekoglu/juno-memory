@@ -21,6 +21,8 @@ NUMBER_UNIT_RE = re.compile(
 OBJECT_ID_RE = re.compile(
     r"\b(?:comment|review|issue|run|PR|pull|build|job)\s*[#(:=]?\s*\d{6,}(?!\w|\.\w)", re.I
 )
+# The 8-char prompt id on self lines (`src: user 26224046`) can be all digits.
+SELF_SRC_RE = re.compile(r"\bsrc: user [0-9a-f]{8}\b")
 URL_RE = re.compile(r"https?://[^\s<>\"')\]]+")
 GENERIC_TICKET_RE = re.compile(r"\b[A-Z][A-Z0-9]{1,9}-[0-9]+\b")
 PERCENT_RE = re.compile(r"%([0-9A-Fa-f]{2})")
@@ -35,7 +37,7 @@ def ticket_re(prefixes: Sequence[str] | None) -> re.Pattern[str]:
 
 def exempt_res(prefixes: Sequence[str] | None) -> tuple[re.Pattern[str], ...]:
     """Patterns blanked before the personal checks: ticket keys, commit words, units, object ids."""
-    return (ticket_re(prefixes), GIT_HASH_RE, RUN_ID_RE, NUMBER_UNIT_RE, OBJECT_ID_RE)
+    return (ticket_re(prefixes), GIT_HASH_RE, RUN_ID_RE, NUMBER_UNIT_RE, OBJECT_ID_RE, SELF_SRC_RE)
 
 
 def unquote(text: str) -> str:

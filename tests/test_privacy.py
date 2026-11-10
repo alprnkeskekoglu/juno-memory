@@ -62,6 +62,11 @@ class Cards(unittest.TestCase):
             cardfmt.validate_card(text, "abcd1234", "ABC-1", "2026-01-01 00:00", ABC)
         self.assertIn("email", str(caught.exception))
 
+    def test_an_all_digit_self_source_id_is_not_private(self) -> None:
+        line = '- Prefers asking first. · 2026-11-11 · src: user 26224046 · "soralım mı"'
+        self.assertIsNone(privacy.scan(line))
+        self.assertEqual(privacy.scan("call 26224046 today"), "id")
+
     def test_validate_card_allows_ticket_keys_and_digit_only_segment_ids(self) -> None:
         text = (
             "## 2026-01-01 00:00 · ABC-123456 · x · 12345678\nRepos: r\nTickets: ABC-123456\n"
