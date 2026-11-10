@@ -62,6 +62,19 @@ def reword(line: str, text: str) -> str:
     return f"- [{match.group(1)}] {text}{tail}"
 
 
+STALE_DAYS = 7
+
+
+def stale_lines(lines: list[str], now: float, days: int = STALE_DAYS) -> list[str]:
+    """Thread lines whose `since` date is at least `days` days old."""
+    out = []
+    for line in lines:
+        match = SINCE_RE.search(line)
+        if match and age_signal(match.group(1), now, days):
+            out.append(line)
+    return out
+
+
 def task_repos(raw: str) -> list[str]:
     match = LIST_RE.match(raw)
     names = [n.strip().strip("'\"") for n in (match.group(1) if match else raw).split(",")]

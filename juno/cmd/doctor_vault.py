@@ -138,6 +138,7 @@ def content_checks(cfg: config.Config, view: DiskVault) -> list[Check]:
         pending_threads,
         time.time(),
     )
+    out.append(dv.thread_summary(view.read("threads.md"), time.time()))
     return out
 
 

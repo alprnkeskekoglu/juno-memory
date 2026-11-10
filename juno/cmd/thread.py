@@ -1,6 +1,7 @@
 import argparse
 import os
 import re
+import time
 from collections.abc import Mapping
 
 from juno import config
@@ -23,6 +24,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     add.add_argument("text")
     lst = sub.add_parser("list", help="print the open threads")
     lst.add_argument("--json", action="store_true")
+    lst.add_argument("--stale", action="store_true", help="only threads older than --days")
+    lst.add_argument("--days", type=int, default=threadscan.STALE_DAYS, help="age for --stale")
     pend = sub.add_parser("pending", help="list pending thread close candidates")
     pend.add_argument("--json", action="store_true")
     close = sub.add_parser(
@@ -111,7 +114,12 @@ def do_add(cfg: config.Config, args: argparse.Namespace) -> int:
 
 def do_list(cfg: config.Config, args: argparse.Namespace) -> int:
     lines = thread_lines(store.read_text(os.path.join(cfg.vault, "threads.md")))
-    write.emit(args, {"threads": lines}, "\n".join(lines) if lines else "Juno: no open threads.")
+    if args.stale:
+        lines = threadscan.stale_lines(lines, time.time(), max(args.days, 1))
+        empty = f"Juno: no stale threads (older than {args.days} days)."
+    else:
+        empty = "Juno: no open threads."
+    write.emit(args, {"threads": lines}, "\n".join(lines) if lines else empty)
     return 0
 
 

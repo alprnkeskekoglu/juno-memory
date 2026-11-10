@@ -98,6 +98,18 @@ class Pure(unittest.TestCase):
         self.assertEqual(out[-1][0], "INFO")
         self.assertEqual(dv.thread_checks(new, 30, 0, now)[0][0], "PASS")
 
+    def test_thread_summary_line(self) -> None:
+        now = time.mktime(time.strptime("2026-11-11", "%Y-%m-%d"))
+        text = (
+            "- [app] an old open question · since 2026-11-01\n"
+            "- [app] a newer open question · since 2026-11-09\n"
+        )
+        self.assertEqual(
+            dv.thread_summary(text, now),
+            ("INFO", "threads", "2 open, 1 older than 7 days (juno thread list --stale)"),
+        )
+        self.assertEqual(dv.thread_summary("", now)[2][:7], "0 open,")
+
     def test_backlog(self) -> None:
         row = {
             "slug": "a-b-c",

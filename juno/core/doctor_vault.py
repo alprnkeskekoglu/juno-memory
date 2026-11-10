@@ -5,7 +5,7 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from juno.core import privacy, topics
+from juno.core import privacy, threadscan, topics
 from juno.core.vaultfmt import (
     CARD_HEAD_RE,
     WIKILINK_RE,
@@ -277,6 +277,16 @@ def pitfall_checks(text: str, preset: str) -> list[Check]:
         for n in bad
     ]
     return out or [("PASS", "pitfalls", f"pitfalls.md: {len(lines)} lines")]
+
+
+def thread_summary(text: str, now: float, days: int = 7) -> Check:
+    lines = threadscan.thread_lines(text)
+    old = len(threadscan.stale_lines(lines, now, days))
+    return (
+        "INFO",
+        "threads",
+        f"{len(lines)} open, {old} older than {days} days (juno thread list --stale)",
+    )
 
 
 def thread_checks(text: str, stale_days: int, pending: int, now: float) -> list[Check]:

@@ -1,5 +1,6 @@
 import json
 import re
+import time
 import unittest
 
 from juno.adapters import queues
@@ -86,6 +87,37 @@ LOST_FACTS = (
     "Two verified facts (claude setup-token OAuth token, Neal Mohan 2026 letter) are not yet "
     "in the vault because the write cap was reached."
 )
+
+
+class Stale(WriteCase):
+    def setUp(self) -> None:
+        super().setUp()
+        day = 86400
+        stamps = [time.strftime("%Y-%m-%d", time.localtime(time.time() - n * day)) for n in (30, 8, 2)]
+        self.put(
+            "threads.md",
+            "# Threads\n\n"
+            + "".join(f"- [app] Open question number {n} here · since {d}\n" for n, d in enumerate(stamps)),
+        )
+
+    def listed(self, *extra: str) -> list[str]:
+        code, out = self.juno("thread", "list", "--stale", "--json", *extra)
+        self.assertEqual(code, 0, out)
+        return json.loads(out)["threads"]
+
+    def test_default_is_seven_days_and_read_only(self) -> None:
+        before = self.get("threads.md")
+        rows = self.listed()
+        self.assertEqual([("number 0" in r, "number 1" in r) for r in rows], [(True, False), (False, True)])
+        self.assertEqual(self.get("threads.md"), before)
+
+    def test_days_option_and_plain_output(self) -> None:
+        self.assertEqual(len(self.listed("--days", "20")), 1)
+        self.assertEqual(len(self.listed("--days", "1")), 3)
+        code, out = self.juno("thread", "list", "--stale")
+        self.assertEqual((code, out.count("- [app]")), (0, 2))
+        self.put("threads.md", "# Threads\n")
+        self.assertIn("no stale", self.juno("thread", "list", "--stale")[1])
 
 
 class NearDuplicate(WriteCase):
