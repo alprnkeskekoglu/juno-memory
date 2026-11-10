@@ -25,6 +25,7 @@ let model // { status, mine, sid, usage, now, error, seen, caps, modelId }; unde
 let usageNow // latest usage from session.measure, shared with the poll
 let cacheTotals = { read: 0, all: 0 } // main-loop prompt tokens: cache-read and total, from turn.complete
 let modelId // main loop model id, re-read from $.session.model() on each poll
+let effort // main loop reasoning effort level, from the last main-loop turn.step; undefined when unknown
 
 const UNICODE = { bar: '│', branch: '╰', warn: '⚠', mark: '▸', dot: '●', ok: '✓', up: '⇡', proj: '→', ell: '…', dash: '—' }
 const ASCII = { bar: '|', branch: '`-', warn: '!', mark: '>', dot: '*', ok: 'ok', up: '+', proj: '->', ell: '...', dash: '--' }
@@ -76,6 +77,13 @@ export function modelLabel(id, level) {
     ? (level === 'tiny' ? known[1] : `${known[1]} ${known[2]}.${known[3]}`)
     : [...base].slice(0, 20).join('')
   return is1m ? text + '·1M' : text
+}
+
+// The main loop's reasoning effort as dim text after the model; '' when unknown or at the narrowest width.
+const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
+export function effortLabel(value, level) {
+  if (level === 'tiny' || !EFFORT_LEVELS.includes(value)) return ''
+  return value
 }
 
 // Blue below 50, yellow 50-70, orange 70-90, red from 90.
@@ -246,9 +254,12 @@ function rightSegments(usage, o, nowMs, level, cache) {
   if (typeof pct === 'number') groups.push(meter('ctx', pct, o, level))
   const wins = sortedWindows(usage?.rateLimits)
   const byKind = (k) => wins.find((w) => w.kind === k)
+  // A plan with a weekly window and no 5-hour window has no 5h item at all.
+  const noFiveHour = !byKind('five_hour') && !!byKind('seven_day')
   const listed = level === 'tiny' ? ['seven_day'] : ['five_hour', 'seven_day']
   for (const k of ['five_hour', 'seven_day']) {
     if (!listed.includes(k)) continue
+    if (k === 'five_hour' && noFiveHour) continue
     const w = byKind(k)
     groups.push(w
       ? meter(w.label, w.percentUsed, o, level, windowExtras(w, o, nowMs), w.kind === 'seven_day' && weekWarning(w.percentUsed, w.resetsAt, nowMs))
@@ -291,7 +302,9 @@ export function formatLine1(m, o = {}) {
   const g = glyphs(o)
   if (m?.error) return [seg(` juno ${g.bar} ?`, { dim: true })]
   const level = levelFor(o.cols)
-  const left = leftSegments(m?.status ?? null, o, level, modelLabel(m?.modelId, level), m?.mine === true)
+  const modelText = modelLabel(m?.modelId, level)
+  const eff = modelText ? effortLabel(m?.effort, level) : ''
+  const left = leftSegments(m?.status ?? null, o, level, eff ? `${modelText} ${eff}` : modelText, m?.mine === true)
   const right = rightSegments(m?.usage, o, m?.now ?? 0, level, m?.cache)
   if (!right.length) return left
   return fit([...left, seg(`  ${g.bar}  `, { dim: true }), ...right], o.cols, o)
@@ -466,7 +479,7 @@ async function refresh($, measured) {
     if (status) {
       seen = advanceSeen(seen, status, nowMs)
     }
-    model = { status, mine, sid, usage, now: nowMs, error: false, seen, caps, modelId, cache: cacheTotals }
+    model = { status, mine, sid, usage, now: nowMs, error: false, seen, caps, modelId, effort, cache: cacheTotals }
     if ((await $.env.get('JUNO_UI_DEBUG')) === '1') {
       const line = debugLine(usage?.rateLimits)
       if (line !== lastDebug) { lastDebug = line; $.ui.log(line) }
@@ -514,6 +527,12 @@ export function register(on) {
     // The event carries the same figures as $.session.usage().
     await refresh($, { context: e.context, rateLimits: e.rateLimits, cost: e.cost })
     return next(e)
+  })
+
+  on('turn.step', async function* ($, e, next) {
+    // Observe only: the level this main-loop request asks for (absent for a model without effort).
+    if (e.agentId === undefined) effort = EFFORT_LEVELS.includes(e.effort) ? e.effort : undefined
+    return yield* next(e)
   })
 
   on('turn.complete', async ($, e, next) => {

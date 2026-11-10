@@ -10,14 +10,14 @@ The band reads `status/<$.session.id()>.json` and falls back to `status.json` on
 
 Line 1, always:
 
-     juno │ opus 5.5 · ABC-333333 · card ✓  │  ctx ●●○○○ 43%  5h ●○○○○ 12% 3h51  wk ●●●○○ 58% ⇡8  $4.20  cache 91%
+     juno │ opus 5.5 high · ABC-333333 · card ✓  │  ctx ●●○○○ 43%  5h ●○○○○ 12% 3h51  wk ●●●○○ 58% ⇡8  $4.20  cache 91%
 
 With the week running hot (here 68% used at half the window), `wk` turns orange and bold and shows the projected end-of-week usage:
 
-     juno │ opus 5.5 · ABC-333333 · card ✓  │  ctx ●●○○○ 43%  5h ●○○○○ 12% 3h51  wk ●●●○○ 68% ⇡18 →136%  $4.20  cache 91%
+     juno │ opus 5.5 high · ABC-333333 · card ✓  │  ctx ●●○○○ 43%  5h ●○○○○ 12% 3h51  wk ●●●○○ 68% ⇡18 →136%  $4.20  cache 91%
 
-- Left: the model (`opus 5.5`, `·1M` for a 1M-context id, family only under 60 columns, raw for unknown ids), then this session's ticket (else repo), then `card ✓` (dim green) or `● dirty` (orange); with `card_auto` true (`[handoff] mode = "end"`, the card is written at session end) no card marker is shown at all. Missing or older than 10 minutes: ` juno │ idle`. The model is re-read on each poll (2 s), so a `/model` change shows within 2 s.
-- Right, after a `  │  ` separator and left-aligned: `ctx`, `5h`, `wk`, then any other rate-limit window under its raw name. The meter is 5 dots: `●` filled in the threshold colour, `○` empty and dimmed. Filled dots = round(percent / 20), except under 10% none. The number is always printed after the dots. Colour: blue below 50, yellow 50-70, orange 70-90, red from 90 (which also appends `⚠`). `5h` shows its reset countdown; `wk` shows pace against the 7-day window (`⇡<pace>` only when above +2, red above +15). `5h n/a` / `wk n/a` when a window is missing; `ctx` is hidden when absent.
+- Left: the model (`opus 5.5`, `·1M` for a 1M-context id, family only under 60 columns, raw for unknown ids), followed by the main loop's reasoning effort in dim text (`low`, `medium`, `high`, `xhigh` or `max`, taken from the last main-loop `turn.step`, so it is hidden until the first request, for models without effort and under 60 columns; a `/effort` change shows from the next request), then this session's ticket (else repo), then `card ✓` (dim green) or `● dirty` (orange); with `card_auto` true (`[handoff] mode = "end"`, the card is written at session end) no card marker is shown at all. Missing or older than 10 minutes: ` juno │ idle`. The model is re-read on each poll (2 s), so a `/model` change shows within 2 s.
+- Right, after a `  │  ` separator and left-aligned: `ctx`, `5h`, `wk`, then any other rate-limit window under its raw name. The meter is 5 dots: `●` filled in the threshold colour, `○` empty and dimmed. Filled dots = round(percent / 20), except under 10% none. The number is always printed after the dots. Colour: blue below 50, yellow 50-70, orange 70-90, red from 90 (which also appends `⚠`). `5h` shows its reset countdown; `wk` shows pace against the 7-day window (`⇡<pace>` only when above +2, red above +15). `5h n/a` / `wk n/a` when a window is missing, except that `5h` is not shown at all (no item, no warnings) once a `seven_day` window has been read without a `five_hour` one (a plan with only a weekly limit); before the first reading both stay `n/a`; `ctx` is hidden when absent.
 - Weekly warning: `wk` (label orange and bold) and `→<n>%` appear when the 7-day usage is 70% or more, or runs more than 10 points ahead of the elapsed time. `→<n>%` is the linear end-of-week projection, left out until 5% of the window has passed.
 - Last: `$<usd>` is the session cost and `cache <n>%` is the share of this session's main-loop prompt tokens served from the prompt cache, summed from each main-loop `turn.complete` since `session.start`.
 
