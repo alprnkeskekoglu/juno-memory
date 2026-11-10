@@ -415,6 +415,75 @@ class Pitfalls(ExtractCase):
         self.assertEqual(len(row["pitfalls"]["written"]), 1)
         self.assertEqual(row["pitfalls"]["dropped"], {})
 
+    def seed(self, *rows: str) -> None:
+        self.write("pitfalls.md", "# Pitfalls\n\n" + "\n".join(rows) + "\n")
+
+    def pitfall_rows(self) -> list[str]:
+        return [x for x in self.read("pitfalls.md").splitlines() if x.startswith("- ")]
+
+    ZSH_OLD = (
+        "- zsh expands an unquoted == in echo ==== as an equals expansion; quote it or use printf."
+        " · triggers: zsh, echo · stderr; segment aaaa1111 · 2026-11-01"
+    )
+
+    def test_near_duplicate_updates_the_line_instead_of_appending(self) -> None:
+        self.seed(self.ZSH_OLD)
+        self.start("zsh said nope")
+        longer = (
+            "An unquoted echo == separator in zsh fails with equals expansion; quote the "
+            "separator or use printf instead."
+        )
+        row = self.ext(
+            pitfalls=[{"text": longer, "evidence": "zsh said nope", "triggers": ["printf", "zsh"]}]
+        )
+        self.assertEqual(self.sections(row)["pitfalls"], "ok")
+        (kept,) = self.pitfall_rows()
+        self.assertIn(longer, kept)
+        self.assertIn("triggers: zsh, echo, printf ·", kept)
+        self.assertIn(f"segment {SID[:8]}", kept)
+        self.assertNotIn("2026-11-01", kept)
+
+    def test_same_error_evidence_updates_the_line(self) -> None:
+        err = "(eval):1: == not found"
+        self.seed(self.ZSH_OLD.replace("stderr", err))
+        self.start(f"the shell printed {err}")
+        row = self.ext(
+            pitfalls=[
+                {
+                    "text": "Separator lines made of equals signs break in this shell",
+                    "evidence": err,
+                    "triggers": ["separator"],
+                }
+            ]
+        )
+        self.assertEqual(self.sections(row)["pitfalls"], "ok")
+        (kept,) = self.pitfall_rows()
+        self.assertIn("zsh expands an unquoted ==", kept)
+        self.assertIn("triggers: zsh, echo, separator ·", kept)
+        self.assertNotIn("2026-11-01", kept)
+
+    def test_two_near_items_in_one_run_collapse_into_one_line(self) -> None:
+        self.start("zsh said nope")
+        a = {"text": self.ZSH_OLD[2:].split(" · ")[0], "evidence": "zsh said nope"}
+        b = dict(a, text="An unquoted echo == separator in zsh is an equals expansion; use printf.")
+        row = self.ext(pitfalls=[dict(a, triggers=["zsh"]), dict(b, triggers=["printf"])])
+        self.assertEqual(self.sections(row)["pitfalls"], "ok")
+        self.assertEqual(len(self.pitfall_rows()), 1)
+
+    def test_different_pitfall_is_still_appended(self) -> None:
+        self.seed(self.ZSH_OLD)
+        self.start("zsh said nope")
+        self.ext(
+            pitfalls=[
+                {
+                    "text": "A grep in a guessed path failed; locate the file repo-wide first",
+                    "evidence": "src/money.py",
+                    "triggers": ["grep"],
+                }
+            ]
+        )
+        self.assertEqual(len(self.pitfall_rows()), 2)
+
     def test_symlinked_pitfalls_file_is_refused(self) -> None:
         target = os.path.join(self.sb.root, "real-pitfalls.md")
         with open(target, "w", encoding="utf-8") as handle:
