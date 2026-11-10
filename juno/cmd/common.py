@@ -10,6 +10,7 @@ from juno.adapters import fs
 MANIFEST_VERSION = 1
 MARKETPLACE = "juno-local"
 PLUGIN_ID = f"juno@{MARKETPLACE}"
+UI_PLUGIN_ID = f"juno-ui@{MARKETPLACE}"
 
 
 def say(message: str) -> None:

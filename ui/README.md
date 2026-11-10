@@ -50,4 +50,6 @@ Check with `/plugin` ("1 mod active · juno-ui"). Offline check: `claude plugin 
 
     claude plugin install juno-ui@juno-local
 
+`juno init` offers this once and prints the command.
+
 The marketplace entry is `./ui` in `.claude-plugin/marketplace.json`; it installs apart from the `juno` plugin and needs no settings merge.

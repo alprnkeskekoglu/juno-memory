@@ -146,28 +146,35 @@ def init_shim(
     return None
 
 
-def plugin_status(settings: str) -> str:
+def installed_plugins(settings: str) -> list[str]:
     claude = os.path.dirname(settings)
     raw = fs.read_bytes(os.path.join(claude, "plugins", "installed_plugins.json"))
-    installed = False
     if raw:
         try:
             data = json.loads(raw.decode("utf-8"))
             plugins = data.get("plugins", {}) if isinstance(data, dict) else {}
-            installed = any(str(key).startswith("juno@") for key in plugins)
+            return [str(key) for key in plugins]
         except ValueError:
             pass
-    if installed:
+    return []
+
+
+def install_command(plugin_id: str, with_marketplace: bool) -> str:
+    command = f"claude plugin install {plugin_id}"
+    if with_marketplace:
+        return f'claude plugin marketplace add "{paths.plugin_root()}" && {command}'
+    return command
+
+
+def plugin_status(settings: str) -> str:
+    if any(key.startswith("juno@") for key in installed_plugins(settings)):
         return "plugin: juno is installed"
-    root = paths.plugin_root()
-    return (
-        "plugin: not installed; run: "
-        f'claude plugin marketplace add "{root}" && claude plugin install {common.PLUGIN_ID}'
-    )
+    return "plugin: not installed; run: " + install_command(common.PLUGIN_ID, True)
 
 
 ASKED_MARKER = "stale-fix-asked"
 STYLE_MARKER = "output-style-asked"
+BAND_MARKER = "status-band-asked"
 STYLE_CHOICES = {
     "1": "juno:juno",
     "2": "juno:juno-witty",
@@ -207,6 +214,30 @@ def offer_stale_fix(cfg: config.Config, env: Mapping[str, str]) -> None:
             say(line)
     except Refused as error:
         say(f"stale fixer: not scheduled ({error}); then run juno schedule install stale-weekly")
+
+
+def offer_status_band(cfg: config.Config, settings: str) -> None:
+    keys = installed_plugins(settings)
+    if any(key.startswith("juno-ui@") for key in keys):
+        say("status band: juno-ui is installed")
+        return
+    marketplace = not any(key.startswith("juno@") for key in keys)
+    command = install_command(common.UI_PLUGIN_ID, marketplace)
+    marker = os.path.join(cfg.state, BAND_MARKER)
+    if not interactive() or os.path.exists(marker):
+        say(f"status band: optional; install with: {command}")
+        return
+    question = "Show the Juno status band above the prompt (model, limits, card, agents)? [Y/n] "
+    try:
+        answer = input(question).strip().lower()
+    except EOFError:
+        answer = "n"
+    fs.atomic_write(marker, b"asked\n", 0o600)
+    if answer in ("", "y", "yes"):
+        say(f"status band: run: {command}")
+    else:
+        later = install_command(common.UI_PLUGIN_ID, False)
+        say(f"status band: left off; install later with {later}")
 
 
 def offer_output_style(cfg: config.Config, settings: str) -> None:
@@ -303,6 +334,7 @@ def run(args: argparse.Namespace, env: Mapping[str, str]) -> int:
         say("Juno: " + refused)
     say(plugin_status(settings))
     if not dry and not refused:
+        offer_status_band(config.load(env), settings)
         offer_output_style(config.load(env), settings)
         offer_stale_fix(config.load(env), env)
     return 2 if refused else 0
