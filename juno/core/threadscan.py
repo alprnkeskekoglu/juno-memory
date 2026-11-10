@@ -2,7 +2,7 @@ import re
 import time
 from collections.abc import Callable
 
-from juno.core import vaultfmt
+from juno.core import fold, vaultfmt
 
 REF_RE = re.compile(r"(?<![\w/-])(?:([A-Za-z0-9][A-Za-z0-9._-]{0,79})#|PR\s*#?)(\d{1,7})\b")
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
@@ -26,6 +26,53 @@ def parse(line: str) -> tuple[list[str], str, str | None]:
     tags = [t.strip() for t in match.group(1).split(",") if t.strip()]
     since = SINCE_RE.search(line)
     return tags, match.group(2), since.group(1) if since else None
+
+
+NEAR_OVERLAP = 0.7
+NEAR_MIN_WORDS = 6
+
+
+def near(old: str, new: str, preset: str = "none") -> bool:
+    a, b = fold.meaningful_words(old, preset, ()), fold.meaningful_words(new, preset, ())
+    if min(len(a), len(b)) < NEAR_MIN_WORDS:
+        return False
+    return len(a & b) / min(len(a), len(b)) >= NEAR_OVERLAP
+
+
+def near_index(lines: list[str], tags: list[str], text: str, preset: str = "none") -> int | None:
+    """Index of the open thread line sharing a tag whose text is a near-duplicate of `text`."""
+    wanted = {t.casefold() for t in tags}
+    for index, line in enumerate(lines):
+        match = vaultfmt.THREAD_RE.match(line.rstrip())
+        if not match:
+            continue
+        have = {t.strip().casefold() for t in match.group(1).split(",")}
+        body = SINCE_RE.sub("", match.group(2)).rstrip()
+        if have & wanted and near(body, text, preset):
+            return index
+    return None
+
+
+def reword(line: str, text: str) -> str:
+    """The same thread line (tags, since) with its text replaced."""
+    match = vaultfmt.THREAD_RE.match(line.rstrip())
+    assert match is not None
+    since = SINCE_RE.search(match.group(2))
+    tail = f" · since {since.group(1)}" if since else ""
+    return f"- [{match.group(1)}] {text}{tail}"
+
+
+STALE_DAYS = 7
+
+
+def stale_lines(lines: list[str], now: float, days: int = STALE_DAYS) -> list[str]:
+    """Thread lines whose `since` date is at least `days` days old."""
+    out = []
+    for line in lines:
+        match = SINCE_RE.search(line)
+        if match and age_signal(match.group(1), now, days):
+            out.append(line)
+    return out
 
 
 def task_repos(raw: str) -> list[str]:

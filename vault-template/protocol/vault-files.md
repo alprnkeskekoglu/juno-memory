@@ -13,7 +13,7 @@ Part of [[core]]. Every write is a `juno` verb; Edit and Write on vault files ar
 - Procedure, a step sequence that worked: `juno procedure --slug S --title T --evidence E "<step 1>" "<step 2>"` (2-12 steps; the same slug rewrites it).
 - Pitfall, Claude's own recurring mistake and the correct behaviour: `juno pitfall [--triggers a,b] --evidence E "<text>"`. A lesson I state in my own words becomes a rule through `juno rule`.
 - Self, what my own words show about me: `juno self --file values|decisions|communication|tensions --evidence "<my words>" "<line>"`.
-- Thread, a topic outliving this segment: `juno thread add --tag <KEY or repo> "<open question>"`; settle it with `juno thread close <ids>` for a listed candidate, or, when the user explicitly asks, `juno thread close --line <N> --was "<part of the line>" --evidence "<the user's own words, 20+ chars>"` (undo with `juno undo <write id>`).
+- Thread, a topic outliving this segment: `juno thread add --tag <KEY or repo> "<open question>"`; settle it with `juno thread close <ids>` for a listed candidate, or, when the user explicitly asks, `juno thread close --line <N> --was "<part of the line>" --evidence "<the user's own words, 20+ chars>"` (undo with `juno undo <write id>`). `juno thread list --stale [--days N]` (default 7) prints the threads older than that; it only reads, closing is always my call.
 - Loose item to sort later: `juno capture "<text>"`.
 - Write cap: 50 vault writes per segment (`[caps] run_max`). When it refuses, ask me; only after I approve, `juno cap raise --by N --evidence "<my words approving it>"` (N up to 100, my words only, never from a subagent) raises it for this segment. `juno cap show` prints used/limit.
 

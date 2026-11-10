@@ -5,7 +5,7 @@ import time
 from typing import Any
 
 from juno import config
-from juno.adapters import cardjob, learned, ledgerio, queues, repos, store
+from juno.adapters import cardjob, learned, ledgerio, protocolio, queues, repos, store
 from juno.adapters import status as status_io
 from juno.adapters.vaultview import DiskVault, scan_metas
 from juno.cmd import backlog as backlog_cmd
@@ -138,7 +138,33 @@ def content_checks(cfg: config.Config, view: DiskVault) -> list[Check]:
         pending_threads,
         time.time(),
     )
+    out.append(dv.thread_summary(view.read("threads.md"), time.time()))
     return out
+
+
+def protocol_checks(cfg: config.Config) -> list[Check]:
+    out: list[Check] = []
+    for name, state in protocolio.scan(cfg):
+        if state == "outdated":
+            out.append(
+                (
+                    "WARN",
+                    "protocol",
+                    f"protocol/{name} is an older shipped version; "
+                    "run juno migrate --protocol --dry-run, then juno migrate --protocol",
+                )
+            )
+        elif state == "missing":
+            out.append(("WARN", "protocol", f"protocol/{name} is missing; juno migrate --protocol"))
+        elif state == "modified":
+            out.append(
+                (
+                    "INFO",
+                    "protocol",
+                    f"protocol/{name} was edited here and differs from the template; left alone",
+                )
+            )
+    return out or [("PASS", "protocol", "protocol files match the plugin's templates")]
 
 
 def backlog_checks(cfg: config.Config) -> list[Check]:
@@ -222,6 +248,7 @@ def collect(cfg: config.Config, run_probe: bool) -> list[Check]:
     out = error_checks(cfg) + dv.timing_checks(timing_lines(cfg))
     out.append(probe(cfg) if run_probe else ("INFO", "pretooluse", "probe skipped (read-only)"))
     out += vault_checks(cfg)
+    out += protocol_checks(cfg)
     out += stale_cache_checks(cfg)
     out += backlog_checks(cfg)
     out += runs_checks(cfg)

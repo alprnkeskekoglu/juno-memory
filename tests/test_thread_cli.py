@@ -1,5 +1,6 @@
 import json
 import re
+import time
 import unittest
 
 from juno.adapters import queues
@@ -68,6 +69,79 @@ class Add(WriteCase):
         )
         self.assertEqual(code, 2)
         self.assertEqual(self.get("threads.md").count("- ["), 0)
+
+
+OLD_CAP = (
+    "The vault's protocol/vault-files.md still shows the old cap of 30 and lacks the cap "
+    "command; the update path (maybe juno migrate) is unchecked."
+)
+NEW_CAP = (
+    "The vault protocol/vault-files.md still shows the old cap text (limit 30); "
+    "the update path is unchecked."
+)
+PLUGIN_CACHE = (
+    "Plugin cache is still 1.0.3, so the card masking and auto ticket counting fixes need a "
+    "plugin update and a new session; vault snapshot also pending."
+)
+LOST_FACTS = (
+    "Two verified facts (claude setup-token OAuth token, Neal Mohan 2026 letter) are not yet "
+    "in the vault because the write cap was reached."
+)
+
+
+class Stale(WriteCase):
+    def setUp(self) -> None:
+        super().setUp()
+        day = 86400
+        stamps = [
+            time.strftime("%Y-%m-%d", time.localtime(time.time() - n * day)) for n in (30, 8, 2)
+        ]
+        self.put(
+            "threads.md",
+            "# Threads\n\n"
+            + "".join(
+                f"- [app] Open question number {n} here · since {d}\n"
+                for n, d in enumerate(stamps)
+            ),
+        )
+
+    def listed(self, *extra: str) -> list[str]:
+        code, out = self.juno("thread", "list", "--stale", "--json", *extra)
+        self.assertEqual(code, 0, out)
+        return json.loads(out)["threads"]
+
+    def test_default_is_seven_days_and_read_only(self) -> None:
+        before = self.get("threads.md")
+        rows = self.listed()
+        self.assertEqual(len(rows), 2)
+        self.assertIn("number 0", rows[0])
+        self.assertIn("number 1", rows[1])
+        self.assertEqual(self.get("threads.md"), before)
+
+    def test_days_option_and_plain_output(self) -> None:
+        self.assertEqual(len(self.listed("--days", "20")), 1)
+        self.assertEqual(len(self.listed("--days", "1")), 3)
+        code, out = self.juno("thread", "list", "--stale")
+        self.assertEqual((code, out.count("- [app]")), (0, 2))
+        self.put("threads.md", "# Threads\n")
+        self.assertIn("no stale", self.juno("thread", "list", "--stale")[1])
+
+
+class NearDuplicate(WriteCase):
+    def test_near_duplicate_updates_the_existing_line(self) -> None:
+        self.put("threads.md", f"# Threads\n\n- [juno-memory] {OLD_CAP} · since 2026-11-10\n")
+        code, out = self.juno("thread", "add", "--tag", "juno-memory", NEW_CAP)
+        self.assertEqual(code, 0, out)
+        rows = [x for x in self.get("threads.md").splitlines() if x.startswith("- ")]
+        self.assertEqual(rows, [f"- [juno-memory] {NEW_CAP} · since 2026-11-10"])
+        self.assertIn("updated", out)
+
+    def test_distinct_threads_do_not_merge(self) -> None:
+        self.put("threads.md", f"# Threads\n\n- [juno-memory] {PLUGIN_CACHE} · since 2026-11-09\n")
+        for text in (OLD_CAP, LOST_FACTS):
+            self.assertEqual(self.juno("thread", "add", "--tag", "juno-memory", text)[0], 0)
+        rows = [x for x in self.get("threads.md").splitlines() if x.startswith("- ")]
+        self.assertEqual(len(rows), 3)
 
 
 class Candidates(WriteCase):

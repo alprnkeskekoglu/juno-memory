@@ -3,7 +3,7 @@ from collections import Counter
 from collections.abc import Callable
 from typing import Any
 
-from juno.core import fold, privacy, topics
+from juno.core import fold, privacy, threadscan, topics
 from juno.core.extract import (
     FACTS_CONSIDERED,
     FACTS_PER_FILE,
@@ -275,6 +275,21 @@ def open_line(lines: list[str], item: object, tags: dict[str, str], today: str) 
     return f"- [{tag}] {text} · since {today}"
 
 
+def near_open(lines: list[str], item: object, tags: dict[str, str]) -> tuple[int, str] | None:
+    if not isinstance(item, dict):
+        return None
+    tag = tags.get(text_field(item.get("tag")).casefold())
+    text = text_field(item.get("text"))
+    bad = "·" in text or "[" in text or privacy.scan(text) or SECOND_PERSON_RE.search(text)
+    if not tag or not THREAD_CHARS[0] <= len(text) <= THREAD_CHARS[1] or bad:
+        return None
+    index = threadscan.near_index(lines, [tag], text)
+    if index is None:
+        return None
+    line = threadscan.reword(lines[index], text)
+    return None if line == lines[index].rstrip() else (index, line)
+
+
 def apply_threads(
     text: str, threads: dict[str, Any], tags: dict[str, str], today: str
 ) -> tuple[str | None, dict[str, Any]]:
@@ -288,14 +303,19 @@ def apply_threads(
             out["dropped"] += 1
         else:
             out["closed"].append(lines.pop(index))
+    out["updated"] = []
     for item in opens[:THREAD_OPENS]:
-        line = open_line(lines, item, tags, today)
-        if line is None:
+        spot = near_open(lines, item, tags)
+        line = None if spot else open_line(lines, item, tags, today)
+        if spot is not None:
+            lines[spot[0]] = spot[1]
+            out["updated"].append(spot[1])
+        elif line is None:
             out["dropped"] += 1
         else:
             lines.append(line)
             out["opened"].append(line)
-    if not (out["opened"] or out["closed"]):
+    if not (out["opened"] or out["closed"] or out["updated"]):
         return None, out
     if not text.strip():
         lines = ["# Threads", "", *lines]

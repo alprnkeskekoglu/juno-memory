@@ -323,6 +323,18 @@ class Threads(ExtractCase):
         self.assertEqual(row["threads"]["dropped"], 2)
         self.assertEqual(self.sections(row)["threads"], "ok")
 
+    def test_near_duplicate_open_updates_the_line(self) -> None:
+        from tests.test_thread_cli import NEW_CAP, OLD_CAP
+
+        self.write(
+            "threads.md", f"# Threads\n\n- [billing-api] {OLD_CAP} · since 2026-01-01\n"
+        )
+        self.start()
+        row = self.ext(threads={"open": [{"tag": "billing-api", "text": NEW_CAP}]})
+        rows = [x for x in self.read("threads.md").splitlines() if x.startswith("- ")]
+        self.assertEqual(rows, [f"- [billing-api] {NEW_CAP} · since 2026-01-01"])
+        self.assertEqual(self.sections(row)["threads"], "ok")
+
     def test_open_refusals(self) -> None:
         self.start()
         opens = [

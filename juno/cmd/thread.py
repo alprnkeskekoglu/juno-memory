@@ -1,13 +1,14 @@
 import argparse
 import os
 import re
+import time
 from collections.abc import Mapping
 
 from juno import config
 from juno.adapters import fs, gate, ledgerio, queues, store
 from juno.cmd import fix, gateio, write
 from juno.cmd.write import Refused
-from juno.core import fold, writegate
+from juno.core import fold, threadscan, writegate
 from juno.core.vaultfmt import THREAD_RE
 
 TEXT_CHARS = (10, 160)
@@ -23,6 +24,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     add.add_argument("text")
     lst = sub.add_parser("list", help="print the open threads")
     lst.add_argument("--json", action="store_true")
+    lst.add_argument("--stale", action="store_true", help="only threads older than --days")
+    lst.add_argument("--days", type=int, default=threadscan.STALE_DAYS, help="age for --stale")
     pend = sub.add_parser("pending", help="list pending thread close candidates")
     pend.add_argument("--json", action="store_true")
     close = sub.add_parser(
@@ -83,6 +86,18 @@ def do_add(cfg: config.Config, args: argparse.Namespace) -> int:
         if fold.fold(text, preset) in fold.fold("\n".join(open_lines), preset):
             print("Juno: thread already open")
             return 0
+        near = threadscan.near_index(lines, tags, text, preset)
+        if near is not None:
+            line = threadscan.reword(lines[near], text)
+            if line == lines[near].rstrip():
+                print("Juno: thread already open")
+                return 0
+            lines[near] = line
+            gate.commit(
+                cfg, seg, "thread", "threads.md", writegate.join(lines), f"segment {seg.sid[:8]}"
+            )
+            print(f"Juno: near-duplicate thread updated in threads.md:\n{line}")
+            return 0
         if len(open_lines) >= MAX_LINES:
             raise Refused(
                 f"threads.md already has {len(open_lines)} open threads (cap {MAX_LINES})"
@@ -99,7 +114,12 @@ def do_add(cfg: config.Config, args: argparse.Namespace) -> int:
 
 def do_list(cfg: config.Config, args: argparse.Namespace) -> int:
     lines = thread_lines(store.read_text(os.path.join(cfg.vault, "threads.md")))
-    write.emit(args, {"threads": lines}, "\n".join(lines) if lines else "Juno: no open threads.")
+    if args.stale:
+        lines = threadscan.stale_lines(lines, time.time(), max(args.days, 1))
+        empty = f"Juno: no stale threads (older than {args.days} days)."
+    else:
+        empty = "Juno: no open threads."
+    write.emit(args, {"threads": lines}, "\n".join(lines) if lines else empty)
     return 0
 
 

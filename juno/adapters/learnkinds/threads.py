@@ -52,5 +52,5 @@ def apply(ctx: Ctx, data: dict[str, Any], sections: dict[str, str]) -> None:
         store.backup(ctx.cfg, path)
         store.write_text(path, text)
     ctx.result[KEY] = out
-    done = len(out["opened"]) + len(out["closed"])
+    done = len(out["opened"]) + len(out["closed"]) + len(out["updated"])
     sections[KEY] = status_of(proposed, done, {"invalid": out["dropped"]})
