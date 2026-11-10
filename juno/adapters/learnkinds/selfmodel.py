@@ -21,8 +21,11 @@ def instructions(ctx: Ctx) -> list[str]:
         f'"file": one of {", ".join(selfmodel.FILES)}. "text": at most 200 chars, third person, '
         'an observation of behaviour ("prefers X over Y when Z"); never identity, never "I am" '
         'or "the user is", no second person, no `·`. "quote": the user\'s own words copied '
-        "exactly from one typed prompt or chosen answer, 20-200 chars, unedited. Skip what the "
-        "existing self lines already say." + note
+        "exactly from one typed prompt or chosen answer, 20-200 chars, unedited. Record only "
+        "working behaviour (process, format, communication, workflow), never an opinion or "
+        'stance on a topic ("believes X is best", "thinks Y is wrong"). Never health, religion, '
+        "politics, sexuality, ethnicity, immigration or legal status, personal finances, family "
+        "or relationships. Skip what the existing self lines already say." + note
     ]
 
 

@@ -358,6 +358,12 @@ class Self(Base):
             "self", "--file", "values", "--evidence", "repo:app", "Likes a different thing"
         )
 
+    def test_stance_and_sensitive_lines_are_refused(self) -> None:
+        for text in ("Believes this framework is the best one", "Mentions depression at night"):
+            self.refused("self", "--file", "values", "--evidence", QUOTE, text)
+        self.assertEqual(self.get("self/values.md"), "")
+        self.ok("self", "--file", "values", "--evidence", QUOTE, "Prefers short answers")
+
 
 class Card(Base):
     def test_writes_to_the_routed_file_and_replaces_its_own(self) -> None:
