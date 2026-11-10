@@ -90,8 +90,11 @@ class Files(unittest.TestCase):
     def test_mod_only_reads(self) -> None:
         with open(os.path.join(UI, "hooks", "register.js"), encoding="utf-8") as h:
             text = h.read()
-        for needle in ("fs.write", "fs.remove", "fs.mkdir", "$.proc", "child_process"):
+        for needle in ("fs.write", "fs.remove", "fs.mkdir", "child_process"):
             self.assertNotIn(needle, text)
+        # The one process: `juno doctor`, run on a press of the hook-error item.
+        self.assertEqual(text.count("$.proc"), 1)
+        self.assertIn("$.process.run(['juno', 'doctor']", text)
 
 
 if __name__ == "__main__":
