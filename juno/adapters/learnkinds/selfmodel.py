@@ -27,9 +27,13 @@ def instructions(ctx: Ctx) -> list[str]:
         'tensions: "wants speed yet doubts that manual approval is needed". '
         '"quote": the user\'s own words copied exactly from any prompt they typed or answer they '
         "chose in this segment, 20-200 chars, unedited, in the original language; prefer the "
-        "longest relevant user sentence. Never quote assistant, tool or web text. Skip what the "
-        "existing self lines already say. Add \"supersedes\": the exact text of one existing "
-        "line, only when the user's new words clearly reverse that behaviour." + note
+        "longest relevant user sentence. Never quote assistant, tool or web text. Record only "
+        "working behaviour (process, format, communication, workflow), never an opinion or "
+        'stance on a topic ("believes X is best", "thinks Y is wrong"). Never health, religion, '
+        "politics, sexuality, ethnicity, immigration or legal status, personal finances, family "
+        "or relationships. Skip what the existing self lines already say. Add \"supersedes\": "
+        "the exact text of one existing line, only when the user's new words clearly reverse "
+        "that behaviour." + note
     ]
 
 

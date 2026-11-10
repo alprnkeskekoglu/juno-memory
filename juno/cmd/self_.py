@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from juno import config
 from juno.adapters import gate
 from juno.cmd import fix, gateio, write
-from juno.core import selfmodel, writegate
+from juno.core import selfguard, selfmodel, writegate
 from juno.core.errors import Refused
 
 FILES = ("values", "decisions", "communication", "tensions")
@@ -36,10 +36,13 @@ def do(cfg: config.Config, args: argparse.Namespace) -> int:
     text = gate.scan_line(cfg, args.text, "self line")
     pid = gate.anchor(cfg, seg, args.evidence, user_only=True).split()[-1]
     quote = gate.scan_evidence(cfg, args.evidence, "evidence")
+    problem = selfguard.content_problem(text, quote)
+    if problem:
+        raise Refused(f"self line refused ({problem}): record working behaviour only")
     if len(quote) > QUOTE_MAX or "·" in quote:
         raise Refused(f"evidence must be a verbatim part of at most {QUOTE_MAX} characters")
     rel, today = f"self/{args.file}.md", write.today()
-    line = f'- {text} · {today} · src: user {pid} · "{quote}"'
+    line = f'- {text} · {today} · src: user {pid[:8]} · "{quote}"'
     with write.locked(cfg):
         old = supersede(cfg, args, rel, today) if args.supersedes else gate.read(cfg, rel)
         base = f"# {args.file.capitalize()}\n\n"

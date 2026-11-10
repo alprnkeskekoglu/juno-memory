@@ -82,8 +82,9 @@ class Block(unittest.TestCase):
         text = selfmodel.block(["\n".join(rows)], 3, 1200)
         self.assertEqual(text.count("\n- "), 3)
         self.assertTrue(text.rstrip().endswith("(+3 more in self/)"))
-        small = selfmodel.block(["\n".join(rows)], 12, 330)
-        self.assertLessEqual(len(small), 330)
+        budget = len(selfmodel.HEADER) + 330
+        small = selfmodel.block(["\n".join(rows)], 12, budget)
+        self.assertLessEqual(len(small), budget)
         for kept in small.splitlines():
             if kept.startswith("- "):
                 self.assertIn('"', kept[-1:], kept)
@@ -209,6 +210,12 @@ class Cli(WriteCase):
             code, _ = self.juno("self", "--file", "values", *extra, "--evidence", Q3, NEW)
             self.assertNotEqual(code, 0, extra)
         self.assertEqual(len(self.rows()), 1)
+
+    def test_cli_line_keeps_a_short_prompt_id(self) -> None:
+        # A full uuid prompt id trips the privacy id check; the learner already keeps 8 chars.
+        self.prompt(Q1, "26224046-2117-415c-b88a-797b951c5b52")
+        self.say("--evidence", Q1, TEXT)
+        self.assertIn("src: user 26224046 ·", self.rows()[0])
 
     def test_doctor_line(self) -> None:
         self.prompt(Q1, "pid00002")
