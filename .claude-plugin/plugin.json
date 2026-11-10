@@ -1,6 +1,6 @@
 {
   "name": "juno",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Juno: a portable second brain for Claude Code (memory vault, hooks, CLI).",
   "author": {
     "name": "Juno contributors"
