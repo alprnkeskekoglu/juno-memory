@@ -57,7 +57,13 @@ class Matching(unittest.TestCase):
     def test_pitfall_line_parsing(self) -> None:
         good = topics.pitfall_line("- text here · triggers: aa, bb · ev; segment x · 2026-01-01")
         self.assertEqual(
-            good, {"text": "text here", "triggers": ["aa", "bb"], "date": "2026-01-01"}
+            good,
+            {
+                "text": "text here",
+                "triggers": ["aa", "bb"],
+                "date": "2026-01-01",
+                "evidence": "ev; segment x",
+            },
         )
         general = topics.pitfall_line("- general · triggers: - · ev · 2026-01-01")
         self.assertEqual(general and general["triggers"], [])
@@ -295,6 +301,101 @@ class Pitfalls(Base):
         self.bash("echo ===")
         self.write("pitfalls.md", PITFALL.format("Fresh pitfall", "newword", 1))
         self.assertIn("Fresh pitfall", self.context(self.bash("run newword")))
+
+
+VAULT_PITFALLS = (
+    "# Pitfalls\n"
+    + PITFALL.format("Grep guessed path juno/core/env.py", "grep, is_interactive, juno", 1)
+    + PITFALL.format("Locked worktree needs remove -f -f", "worktree, git, branch", 2)
+    + PITFALL.format("Read the suite summary before commit", "git, commit, tests, config.toml", 3)
+    + PITFALL.format("Tie tests to writegate.RUN_MAX", "writegate, run_max, tests, config", 4)
+    + PITFALL.format("Check juno cap show early", "juno, cap, knowledge, vault", 5)
+    + PITFALL.format("Deploy only from a clean tree", "deploy, git, status, commit", 6)
+    + PITFALL.format("CI checkout ref", "gh, run, checkout, ref", 7)
+    + PITFALL.format("Tag format in zsh", "git, zsh, format, tag", 8)
+    + PITFALL.format("Scope across repos", "version, update, repos, scope", 9)
+    + PITFALL.format("claude -p ignores tool limits", "claude, --disallowedtools", 9)
+)
+READ_ONLY = (
+    "cd /Users/x/repo && sed -n 1,40p juno/core/topics.py && cat README.md && "
+    "git status --short && git log -1 && grep -n version pyproject.toml && echo '---'"
+)
+
+
+class SpecificTriggers(Base):
+    def setUp(self) -> None:
+        super().setUp()
+        self.write("pitfalls.md", VAULT_PITFALLS)
+
+    def pitfalls(self, command: str) -> list[str]:
+        text = self.context(self.bash(command))
+        return [ln for ln in text.splitlines() if ln.startswith("[Pitfall")]
+
+    def test_issue_read_only_call_gets_no_pitfall(self) -> None:
+        self.assertEqual(self.pitfalls(READ_ONLY), [])
+        for command in ("git status --short", "git log -1", "grep -rn update juno", "echo '---'"):
+            self.assertEqual(self.pitfalls(command), [], command)
+
+    def test_real_hits_still_fire(self) -> None:
+        got = self.pitfalls("git worktree remove --force .claude/worktrees/agent-x")
+        self.assertEqual(len(got), 1)
+        self.assertIn("Locked worktree", got[0])
+        got = self.pitfalls("claude -p --disallowedTools Bash hi")
+        self.assertIn("claude -p ignores", got[0])
+
+    def test_specific_trigger_among_generic_ones_fires(self) -> None:
+        got = self.pitfalls("juno cap show")
+        self.assertEqual(len(got), 1)
+        self.assertIn("Check juno cap", got[0])
+
+    def test_pure_matching_rules(self) -> None:
+        entries = [
+            ["pitfall-a", "pitfalls.md", ["git", "status"], "a"],
+            ["pitfall-b", "pitfalls.md", ["git", "--force"], "b"],
+            ["topic-c", "rules/topics/c.md", ["git"]],
+        ]
+        names = [e[0] for e in topics.matches(entries, "git log")]
+        self.assertEqual(names, ["topic-c"])
+        names = [e[0] for e in topics.matches(entries, "git status")]
+        self.assertEqual(names, ["topic-c"])
+        names = [e[0] for e in topics.matches(entries, "git push --force")]
+        self.assertEqual(names, ["pitfall-b", "topic-c"])
+
+    def test_more_specific_matches_rank_first(self) -> None:
+        entries = [
+            ["pitfall-a", "pitfalls.md", ["--force"], "a"],
+            ["pitfall-b", "pitfalls.md", ["git", "status", "--force"], "b"],
+        ]
+        names = [e[0] for e in topics.matches(entries, "git status --force")]
+        self.assertEqual(names, ["pitfall-b", "pitfall-a"])
+
+    def test_generic_list_and_write_time_check(self) -> None:
+        self.assertIn("git", topics.GENERIC_TRIGGERS)
+        self.assertFalse(topics.is_specific("git"))
+        for word in ("git push", "--force", "config.toml", "run_max", "worktree"):
+            self.assertTrue(topics.is_specific(word), word)
+        self.assertIsNotNone(topics.triggers_problem(["git", "status"]))
+        self.assertIsNone(topics.triggers_problem(["git", "--force"]))
+        self.assertIsNone(topics.triggers_problem([]))
+
+    def test_cap_of_three_per_call(self) -> None:
+        lines = "".join(
+            PITFALL.format(f"Lesson number {n}", f"zzword{n}, sharedword", 1) for n in range(6)
+        )
+        self.write("pitfalls.md", "# Pitfalls\n" + lines)
+        command = "echo " + " ".join(f"zzword{n}" for n in range(6))
+        self.assertEqual(len(self.pitfalls(command)), topics.PITFALL_CAP)
+        self.assertEqual(topics.PITFALL_CAP, 3)
+
+    def test_error_evidence_reinjects_once_claimed(self) -> None:
+        self.write(
+            "pitfalls.md",
+            "# Pitfalls\n- Locate it repo-wide first · triggers: grep, is_interactive · "
+            "ugrep: juno/core/env.py: No such file; segment abcd1234 · 2026-01-01\n",
+        )
+        self.assertEqual(len(self.pitfalls("grep is_interactive src")), 1)
+        self.assertEqual(self.pitfalls("grep is_interactive src"), [])
+        self.assertEqual(len(self.pitfalls("grep is_interactive juno/core/env.py")), 1)
 
 
 if __name__ == "__main__":

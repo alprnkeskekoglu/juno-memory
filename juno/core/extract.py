@@ -193,6 +193,8 @@ def pitfall_item(item: object, digest: str) -> tuple[str | None, dict[str, Any] 
     triggers = topics.split_triggers(",".join(str(v) for v in as_list(raw)))
     if len(triggers) > PITFALL_TRIGGERS or any(topics.trigger_problem(t) for t in triggers):
         return "trigger", None
+    if topics.triggers_problem(triggers):
+        return "trigger", None
     return None, {"text": text, "evidence": evidence, "triggers": triggers}
 
 

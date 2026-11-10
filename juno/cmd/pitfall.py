@@ -26,6 +26,9 @@ def do(cfg: config.Config, args: argparse.Namespace) -> int:
         problem = topics.trigger_problem(trigger)
         if problem:
             raise Refused(problem)
+    problem = topics.triggers_problem(found)
+    if problem:
+        raise Refused(problem)
     shown = ", ".join(found[: topics.MAX_TRIGGERS]) or "-"
     line = f"- {text} · triggers: {shown} · {evidence}; segment {seg.sid[:8]} · {write.today()}"
     with write.locked(cfg):
