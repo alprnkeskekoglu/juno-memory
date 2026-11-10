@@ -6,7 +6,9 @@ from juno.core.errors import Refused
 from juno.core.redact import find_secrets
 
 EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[A-Za-z][\w.-]*")
-PHONE_RE = re.compile(r"\+\d[\d ()-]{7,}\d|\b\d{3}[ .-]\d{3}[ .-]?\d{2}[ .-]?\d{2}\b")
+PHONE_RE = re.compile(r"\+\d[\d ()-]{7,}\d|\b0?\d{3}[ .-]\d{3}[ .-]?\d{2}[ .-]?\d{2}\b")
+# IBAN: country + check digits glued to the number, which LONG_ID_RE skips (letters before it).
+IBAN_RE = re.compile(r"\b[A-Z]{2}\d{2}(?: ?[A-Z]{4})?(?: ?\d{4}){3,7}(?: ?\d{1,4})?\b")
 LONG_ID_RE = re.compile(r"(?<![\w.])\d{6,20}(?!\w|\.\w)")
 GIT_HASH_RE = re.compile(
     r"\b(?:commit(?:ted|s)?(?:\s+(?:as|in|at|is))?|sha1?|hash|revision|rev|cherry-pick(?:ed)?"
@@ -18,13 +20,46 @@ RUN_ID_RE = re.compile(r"\b[A-Z][A-Z0-9]{1,9}-20\d{2}(?:0[1-9]|1[0-2])\d{2,8}\b"
 NUMBER_UNIT_RE = re.compile(
     r"(?<![\w.])\d{6,} ?(?:bytes|B|KB|MB|GB|ms|s|sec|seconds)(?!\w)", re.I
 )
+# Object word + id, plural too; ids chained with `,`/`and` must be 6-10 digits without a
+# leading zero, so a phone or TCKN cannot ride along.
 OBJECT_ID_RE = re.compile(
-    r"\b(?:comment|review|issue|run|PR|pull|build|job)\s*[#(:=]?\s*\d{6,}(?!\w|\.\w)", re.I
+    r"\b(?:comment|review|issue|run|PR|pull|build|job|rule|alert)s?\s*[#(:=]?\s*\d{6,}"
+    r"(?:\s*(?:,|and|&)\s*#?[1-9]\d{5,9}(?!\w))*(?!\w|\.\w)",
+    re.I,
 )
-# The 8-char prompt id on self lines (`src: user 26224046`) can be all digits.
-SELF_SRC_RE = re.compile(r"\bsrc: user [0-9a-f]{8}\b")
+# The 8-char prompt id on self lines (`src: user 26224046`, `segment 01234567`) can be all digits.
+SELF_SRC_RE = re.compile(r"\b(?:src: user|segment) [0-9a-f]{8}\b")
+# All-digit short git SHAs, only next to a git anchor: a ref (`origin/x`, `main`, `develop`),
+# `branch/x @`, a repo name ending in `repo`, a hex SHA then `to`, or exactly 7 digits in ().
+GIT_CONTEXT_RE = re.compile(
+    r"\b(?:origin/[\w./-]+\s*[@:]?|(?:main|master|develop|HEAD)|\w*repo)\s*[`(]?\s*\d{7,12}\b"
+    r"|\b[\w.-]+/[\w./-]+\s+@\s*\d{7,12}\b"
+    r"|\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,12}\s+to\s+\d{7,12}\b"
+    r"|\(\d{7}\)",
+    re.I,
+)
+# 12-digit AWS account id: after ECR/AWS/`aws account`, or right before a region (`eu-west-1`).
+# The bare word `account` does not exempt (bank accounts).
+AWS_ACCOUNT_RE = re.compile(
+    r"\b(?:ECR|AWS|aws account(?: id)?)\s*[:#]?\s*\d{12}\b"
+    r"|(?<![\w.])\d{12}\s+(?:us|eu|ap|sa|ca|me|af|il|mx)-[a-z]+-\d\b",
+    re.I,
+)
+# A plausible date glued to a hyphenated/path name: `home-cleanup-20260101`.
+DATE_SUFFIX_RE = re.compile(
+    r"(?<=[A-Za-z]-)(?:19|20)\d\d(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])(?!\w|\.\w)"
+)
+# `UPPER_CASE_NAME = 123456`, except names that hint at personal data.
+CONST_RE = re.compile(
+    r"\b(?![A-Z0-9_]*(?:PHONE|TEL|GSM|MOBILE|CELL|TCKN|SSN|IBAN|ACCOUNT|ACCT|CARD|PASS|CUSTOMER"
+    r"|USER|PERSON|(?<![A-Z0-9])(?:ID|TC)(?![A-Z0-9])))"
+    r"[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\s*=\s*`?[1-9]\d{5,12}(?!\w|\.\w)"
+)
 URL_RE = re.compile(r"https?://[^\s<>\"')\]]+")
-GENERIC_TICKET_RE = re.compile(r"\b[A-Z][A-Z0-9]{1,9}-[0-9]+\b")
+# Any `WORD-digits` key, but not prefixes that name personal data and at most 8 digits
+# (`TC-12345678901`, `ID-123456789` stay flagged).
+PERSONAL_KEY = r"(?:ID|TC|TCKN|SSN|IBAN|PASS|PWD|TEL|PHONE|GSM|CARD|ACC|ACCT|VKN|NIN|SIN|CC)"
+GENERIC_TICKET_RE = re.compile(r"\b(?!" + PERSONAL_KEY + r"-)[A-Z][A-Z0-9]{1,9}-[0-9]{1,8}\b")
 PERCENT_RE = re.compile(r"%([0-9A-Fa-f]{2})")
 
 
@@ -37,7 +72,19 @@ def ticket_re(prefixes: Sequence[str] | None) -> re.Pattern[str]:
 
 def exempt_res(prefixes: Sequence[str] | None) -> tuple[re.Pattern[str], ...]:
     """Patterns blanked before the personal checks: ticket keys, commit words, units, object ids."""
-    return (ticket_re(prefixes), GIT_HASH_RE, RUN_ID_RE, NUMBER_UNIT_RE, OBJECT_ID_RE, SELF_SRC_RE)
+    return (
+        GIT_CONTEXT_RE,  # git patterns first: they need ref text (`feature/ABC-1 @`) intact
+        GIT_HASH_RE,
+        ticket_re(prefixes),
+        GENERIC_TICKET_RE,
+        AWS_ACCOUNT_RE,
+        DATE_SUFFIX_RE,
+        CONST_RE,
+        RUN_ID_RE,
+        NUMBER_UNIT_RE,
+        OBJECT_ID_RE,
+        SELF_SRC_RE,
+    )
 
 
 def unquote(text: str) -> str:
@@ -49,7 +96,7 @@ def personal_kind(text: str) -> str | None:
         return "email"
     if PHONE_RE.search(text):
         return "phone"
-    if LONG_ID_RE.search(text):
+    if LONG_ID_RE.search(text) or IBAN_RE.search(text):
         return "id"
     return None
 
@@ -100,7 +147,8 @@ def personal_spans(
     chars = [(c, i) for i, c in enumerate(text)]
     for pattern in (URL_RE, *exempt_res(prefixes)):
         chars = blank(chars, pattern)
-    for kind, pattern in (("email", EMAIL_RE), ("phone", PHONE_RE), ("id", LONG_ID_RE)):
+    checks = (("email", EMAIL_RE), ("phone", PHONE_RE), ("id", LONG_ID_RE), ("id", IBAN_RE))
+    for kind, pattern in checks:
         flat = "".join(c for c, _ in chars)
         hits = [(m.start(), m.end()) for m in pattern.finditer(flat)]
         for a, b in hits:

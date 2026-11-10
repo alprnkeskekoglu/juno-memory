@@ -52,8 +52,73 @@ class LongIdFalsePositives(unittest.TestCase):
             self.assertNotEqual(privacy.mask(text, ABC)[0], text, text)
 
     def test_unit_and_word_must_touch_the_number(self) -> None:
-        for text in ("102400 and bytes", "comment on 5632425", "runs 39486898219", "prun 39486898219"):
+        for text in ("102400 and bytes", "comment on 5632425", "run at 39486898219", "prun 39486898219"):
             self.assertIsNotNone(privacy.scan(text), text)
+
+
+# GitHub issue #10: non-personal numbers that must not be flagged (fake values).
+ISSUE10_CLEAN = (
+    "repro R2 on myrepo 1234567 under PHP 8.1",
+    "on feature/ABC-1 @ 1234567 stopped",
+    "Read at origin/develop 1234567.",
+    "merged (main `12345678`).",
+    "origin/master moved 7a9cccd to 1234567, and",
+    "exact yes/no confirmations (1234567) and",
+    "segment 01234567).",
+    "base images live in ECR 111122223333 us-east-1",
+    "mirror 111122223333 eu-west-1",
+    "moved to ~/.Trash/home-cleanup-20260101. Disk",
+    "Jira comments 1234567 and 1234568, label",
+    "linked task XYZ-123456 through intake",
+    "(alert rule 1234567), with",
+    "`LOCK_SECONDS = 123456` (34 h",
+    "AWS 111122223333 holds it",
+    "PRs 1234567, 1234568 and 1234569",
+)
+ISSUE10_FLAGGED = (
+    "call me at 05321234567",
+    "my account 111122223333",
+    "account 111122223333 in eu-west-1",
+    "TC 12345678901",
+    "TC-12345678901",
+    "ID-123456789",
+    "ID-123456",
+    "SSN-123456",
+    "customer 1234567 complained",
+    "user id 98765432",
+    "IBAN TR330006100519786457841326",
+    "the code is 12345678 ok",
+    "call 0532 123 45 67",
+    "call 532 123 45 67",
+    "to 05321234567",
+    "moved defaced to 05321234567",
+    "commit abc, call @ 05321234567",
+    "comment 5632425 and 05321234567",
+    "customer-20260101123",
+    "PHONE = 05321234567",
+    "PHONE_NUMBER = 5321234567",
+    "USER_ID = 98765432",
+    "segment 05321234567",
+    "(05321234567)",
+    "ECR 05321234567",
+    "TEL-1234567",
+)
+
+
+class Issue10NonPersonalNumbers(unittest.TestCase):
+    def test_issue_inputs_are_not_flagged(self) -> None:
+        for text in ISSUE10_CLEAN:
+            for prefixes in (None, ABC):
+                self.assertEqual(privacy.kinds(text, prefixes), [], text)
+                self.assertEqual(privacy.personal_spans(text, prefixes), [], text)
+                self.assertEqual(privacy.mask(text, prefixes), (text, {}), text)
+
+    def test_personal_numbers_stay_flagged(self) -> None:
+        for text in ISSUE10_FLAGGED:
+            for prefixes in (None, ABC):
+                self.assertTrue(privacy.kinds(text, prefixes), text)
+                self.assertTrue(privacy.personal_spans(text, prefixes), text)
+                self.assertNotEqual(privacy.mask(text, prefixes)[0], text, text)
 
 
 class DoctorCardHeading(unittest.TestCase):
@@ -89,8 +154,8 @@ STILL = (
     "call 55512345678",
     "ref 123456789012",
     "customer 123456789",
-    "ZZ-123456",
-    "TCX-123456",
+    "SSN-123456",
+    "TCKN-123456",
 )
 
 
@@ -131,7 +196,7 @@ class DoctorAllowPrefixes(WriteCase):
         self.assertEqual(self.privacy_status(), "WARN")
         self.set_config('[privacy]\nallow_prefixes = ["TC"]\n')
         self.assertEqual(self.privacy_status(), "PASS")
-        self.put("notes/m.md", "case ZZ-123456\n")
+        self.put("notes/m.md", "case SSN-123456\n")
         self.assertEqual(self.privacy_status(), "WARN")
 
 
