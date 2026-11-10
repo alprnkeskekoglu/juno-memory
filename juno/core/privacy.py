@@ -31,10 +31,11 @@ OBJECT_ID_RE = re.compile(
 SELF_SRC_RE = re.compile(r"\b(?:src: user|segment) [0-9a-f]{8}\b")
 # All-digit short git SHAs, only next to a git anchor: a ref (`origin/x`, `main`, `develop`),
 # `branch/x @`, a repo name ending in `repo`, a hex SHA then `to`, or exactly 7 digits in ().
+# All-digit short SHAs are 7-9 digits here; phone numbers (10-11) never fit.
 GIT_CONTEXT_RE = re.compile(
-    r"\b(?:origin/[\w./-]+\s*[@:]?|(?:main|master|develop|HEAD)|\w*repo)\s*[`(]?\s*\d{7,12}\b"
-    r"|\b[\w.-]+/[\w./-]+\s+@\s*\d{7,12}\b"
-    r"|\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,12}\s+to\s+\d{7,12}\b"
+    r"\b(?:origin/[\w./-]+\s*[@:]?|(?:main|master|develop|HEAD)|\w*repo)\s*[`(]?\s*\d{7,9}\b"
+    r"|\b[\w.-]+/[\w./-]+\s+@\s*\d{7,9}\b"
+    r"|\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,12}\s+to\s+\d{7,9}\b"
     r"|\(\d{7}\)",
     re.I,
 )
