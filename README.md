@@ -20,13 +20,15 @@ Everything runs locally with the Python standard library. There are no runtime d
    ./bin/juno init
    ```
 
-   `init` asks nothing and can be run again safely. Use `./bin/juno init --dry-run` to preview. It does exactly this:
+   `init` can be run again safely; in a terminal it asks a few optional questions once (status band, output style, stale fixer, and importing Claude's own memory). Use `./bin/juno init --dry-run` to preview. It does exactly this:
 
    - writes `juno.toml` (default `~/.config/juno/juno.toml`) with the interpreter and plugin root;
    - creates the state directory (on macOS `~/Library/Application Support/juno`, elsewhere `~/.local/state/juno`);
    - creates an empty vault from `vault-template/` (default `~/juno-vault`) and runs `git init` in it. An existing vault is never overwritten;
    - merges a small set of entries into `~/.claude/settings.json`: the vault as an additional directory, read and edit permissions for it, a deny on editing `rules/` and `.git/`, and `autoMemoryEnabled: false`. The original file is backed up first and every added entry is recorded in `install-manifest.json`;
    - installs a `juno` command at `~/.local/bin/juno`. Make sure that directory is on your PATH.
+
+   Because `init` turns Claude's own auto memory off, it also looks at `~/.claude/projects/*/memory/`. If Claude had remembered notes there, it asks once `Claude's own memory has N notes in M projects. Import them into Juno? [Y/n]`. Run it later with `juno import-memory` (`--dry-run` to preview). Project and reference notes go straight into the vault; feedback and user notes only become rule candidates, and you approve them all with one question at your next session start. Your original files stay untouched and `juno undo --run <id>` reverts the vault writes.
 
 3. Install the plugin in Claude Code. `init` prints the exact commands; they look like this:
 

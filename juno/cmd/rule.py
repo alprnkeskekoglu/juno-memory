@@ -8,7 +8,7 @@ from juno.adapters import fs, ledgerio, queues, store
 from juno.adapters import status as status_io
 from juno.cmd import write
 from juno.cmd.write import Refused
-from juno.core import fold, rulepolicy, topics
+from juno.core import fold, nativememory, rulepolicy, topics
 from juno.core.ledger import Segment
 from juno.core.vaultfmt import RuleEntry, rule_entries, rule_scope
 
@@ -40,7 +40,12 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     pend.add_argument("--json", action="store_true")
     for name in ("accept", "reject"):
         verb = sub.add_parser(name, help=f"{name} rule candidates")
-        verb.add_argument("ids", nargs="+", metavar="ID")
+        verb.add_argument("ids", nargs="*", metavar="ID")
+        verb.add_argument(
+            "--batch",
+            choices=[nativememory.BATCH],
+            help="every pending candidate imported from Claude's native memory",
+        )
 
 
 def vault_path(cfg: config.Config, relpath: str) -> str:
@@ -237,17 +242,33 @@ def do_pending(cfg: config.Config, args: argparse.Namespace) -> int:
     lines = []
     for i in items:
         topic = f" (new topic, triggers: {', '.join(i['triggers'])})" if i.get("triggers") else ""
-        lines.append(
-            f"{i['id']} · {i.get('scope')}{topic} · {i.get('rule')} · "
-            f'src: user {i.get("pid")} (segment {i.get("seg8")}) · "{i.get("quote")}"'
+        src = (
+            f"src: {i.get('source')} (native memory, batch {nativememory.BATCH})"
+            if imported(i)
+            else f'src: user {i.get("pid")} (segment {i.get("seg8")}) · "{i.get("quote")}"'
         )
+        lines.append(f"{i['id']} · {i.get('scope')}{topic} · {i.get('rule')} · {src}")
     write.emit(args, data, "\n".join(lines) if lines else "Juno: no pending rule candidates.")
     return 0
+
+
+def imported(item: queues.Item) -> bool:
+    return item.get("batch") == nativememory.BATCH
 
 
 def accept_one(cfg: config.Config, item: queues.Item) -> tuple[str, str, bool, list[str] | None]:
     scope = rulepolicy.parse_scope(str(item.get("scope") or ""))
     rule = rule_text(cfg, str(item.get("rule") or ""))
+    if imported(item):
+        source = str(item.get("source") or "")
+        if not nativememory.SOURCE_RE.match(source):
+            raise Refused(f"rule candidate {item['id']} has no valid import source")
+        text = read(cfg, scope.relpath)
+        line = rulepolicy.import_line(write.today(), rule, source)
+        present = caps_hit(cfg, scope, text, rule)
+        if not present:
+            write_text(cfg, scope.relpath, rulepolicy.append_line(text, scope.name, line, None))
+        return scope.name, line, present, None
     quote = write.clean_line(cfg, fold.nfc(str(item.get("quote") or "")), "quote")
     pid = str(item.get("pid") or "")
     if not pid or len(pid) > 8 or not all(c.isalnum() or c in "_-" for c in pid):
@@ -275,14 +296,36 @@ def accept_one(cfg: config.Config, item: queues.Item) -> tuple[str, str, bool, l
     return scope.name, line, present, triggers
 
 
+def select(
+    args: argparse.Namespace, queue: list[queues.Item]
+) -> tuple[list[str], list[queues.Item]]:
+    """Ids and items named by ids or by --batch (the whole native-memory import batch)."""
+    if args.batch:
+        if args.ids:
+            raise Refused("give ids or --batch, not both")
+        items = [i for i in queue if i.get("status") == "pending" and imported(i)]
+        if not items:
+            raise Refused(f"no pending candidates in batch {args.batch}")
+        return [str(i["id"]) for i in items], items
+    if not args.ids:
+        raise Refused(f"give candidate ids or --batch {nativememory.BATCH}")
+    ids = queues.clean_ids(queues.RULES, args.ids)
+    return ids, queues.pending_by_id(queue, queues.RULES, ids)
+
+
 def do_accept(cfg: config.Config, args: argparse.Namespace) -> int:
     seg = write.guard(cfg)
-    ids = queues.clean_ids(queues.RULES, args.ids)
     done: list[tuple[queues.Item, tuple[str, str, bool, list[str] | None]]] = []
     with queues.locked(cfg, queues.RULES):
         queue = queues.read(cfg, queues.RULES)
-        items = queues.pending_by_id(queue, queues.RULES, ids)
-        write.require_chosen(cfg, seg, items)
+        _, items = select(args, queue)
+        if not args.batch:
+            write.require_chosen(cfg, seg, items)
+        elif not write.chosen(cfg, seg, args.batch):
+            raise Refused(
+                f"the user did not choose {args.batch} in this segment: the option label "
+                f"'Accept all {args.batch}' must be an AskUserQuestion answer the user chose"
+            )
         try:
             with write.locked(cfg):
                 for item in items:
@@ -306,10 +349,10 @@ def do_accept(cfg: config.Config, args: argparse.Namespace) -> int:
 
 def do_reject(cfg: config.Config, args: argparse.Namespace) -> int:
     seg = write.guard(cfg)
-    ids = queues.clean_ids(queues.RULES, args.ids)
     with queues.locked(cfg, queues.RULES):
         queue = queues.read(cfg, queues.RULES)
-        queues.mark(queues.pending_by_id(queue, queues.RULES, ids), "rejected")
+        ids, items = select(args, queue)
+        queues.mark(items, "rejected")
         queues.write(cfg, queues.RULES, queue)
     ledgerio.record(cfg, seg, {"ev": "rule_rejected", "count": len(ids)})
     print(f"Juno: rule candidates rejected: {', '.join(ids)}.")

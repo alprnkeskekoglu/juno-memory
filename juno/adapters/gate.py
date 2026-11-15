@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from juno import config
 from juno.adapters import fs, ledgerio, store, writelog
-from juno.core import fold, privacy, writegate
+from juno.core import fold, nativememory, privacy, writegate
 from juno.core.errors import Refused
 from juno.core.ledger import Segment
 
@@ -58,6 +58,14 @@ def anchor(
         f"{label} is not anchored in this session: quote words typed or chosen in this "
         "segment, or give repo:<name> or ticket:<KEY> that the session touched"
     )
+
+
+def import_evidence(source: str) -> str:
+    """Evidence of the native-memory import. Only juno/cmd/import_memory.py calls this; `anchor`
+    never accepts an `import:` string, so no verb argument can claim it."""
+    if not nativememory.SOURCE_RE.match(source):
+        raise Refused("import evidence must look like import:memory/<project>/<file>.md")
+    return source
 
 
 def scan_evidence(cfg: config.Config, text: str | None, label: str) -> str:

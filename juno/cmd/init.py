@@ -9,8 +9,8 @@ from collections.abc import Mapping
 from typing import Any
 
 from juno import config, paths
-from juno.adapters import fs, interpreter, schedule, vault
-from juno.cmd import common
+from juno.adapters import fs, interpreter, nativescan, schedule, vault
+from juno.cmd import common, import_memory
 from juno.cmd.common import say
 from juno.core import interp, migrate, settings_merge, shim, tomlio
 from juno.core.errors import Refused
@@ -183,6 +183,7 @@ def plugin_status(settings: str) -> str:
 ASKED_MARKER = "stale-fix-asked"
 STYLE_MARKER = "output-style-asked"
 BAND_MARKER = "status-band-asked"
+IMPORT_MARKER = "memory-import-asked"
 STYLE_CHOICES = {
     "1": "juno:juno",
     "2": "juno:juno-witty",
@@ -246,6 +247,38 @@ def offer_status_band(cfg: config.Config, settings: str) -> None:
     else:
         later = install_command(common.UI_PLUGIN_ID, False)
         say(f"status band: left off; install later with {later}")
+
+
+def offer_memory_import(cfg: config.Config, dry: bool = False) -> None:
+    if import_memory.refusal(cfg):
+        return
+    found = nativescan.scan(cfg)
+    if not found:
+        return
+    seen = f"Claude's own memory has {nativescan.summary(found)}"
+    later = "juno import-memory"
+    marker = os.path.join(cfg.state, IMPORT_MARKER)
+    if dry:
+        say(f"memory import: {seen}; would ask to import them (nothing is written)")
+        return
+    if not interactive() or os.path.exists(marker):
+        say(f"memory import: {seen}; import them later with: {later}")
+        return
+    try:
+        answer = input(f"{seen}. Import them into Juno? [Y/n] ").strip().lower()
+    except EOFError:
+        answer = "n"
+    fs.atomic_write(marker, b"asked\n", 0o600)
+    if answer not in ("", "y", "yes"):
+        say(f"memory import: left off; import later with: {later}")
+        return
+    try:
+        report = import_memory.run_import(cfg, found, False)
+    except (ValueError, OSError) as error:
+        say(f"memory import: failed ({error}); try again with: {later}")
+        return
+    for line in import_memory.describe(report, False):
+        say(line)
 
 
 def offer_output_style(cfg: config.Config, settings: str) -> None:
@@ -341,8 +374,11 @@ def run(args: argparse.Namespace, env: Mapping[str, str]) -> int:
     if refused:
         say("Juno: " + refused)
     say(plugin_status(settings))
+    if dry and not refused:
+        offer_memory_import(cfg, True)
     if not dry and not refused:
         offer_status_band(config.load(env), settings)
         offer_output_style(config.load(env), settings)
         offer_stale_fix(config.load(env), env)
+        offer_memory_import(config.load(env))
     return 2 if refused else 0

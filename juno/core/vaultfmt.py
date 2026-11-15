@@ -31,7 +31,7 @@ NEVER_INJECTED_KINDS = frozenset({"archive", "generated", "config"})
 WIKILINK_RE = re.compile(r"\[\[([^\[\]]+?)\]\]")
 FM_KEY_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*)[ \t]*:(?:[ \t]+(.*)|[ \t]*)$")
 RULE_LINE_RE = re.compile(
-    r'^- (\d{4}-\d{2}-\d{2}) · (.+?) · src: (?:user (\S{1,8}) · "(.*)"|unquoted)\s*$'
+    r'^- (\d{4}-\d{2}-\d{2}) · (.+?) · src: (?:user (\S{1,8}) · "(.*)"|unquoted|import:\S+)\s*$'
 )
 CARD_HEAD_RE = re.compile(r"^## (\d{4}-\d{2}-\d{2} \d{2}:\d{2}) · (.+?) · (.+?) · (\S{1,8})[ \t]*$")
 THREAD_RE = re.compile(r"^- \[([^\]\n]+)\] (.+)$")
