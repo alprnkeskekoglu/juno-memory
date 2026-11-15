@@ -329,5 +329,74 @@ class Cards(SandboxCase):
             text = self.card("aaaa1111", "other") + self.card(name * 8, name)
             self.write(f"{name}.md", "# H\n\n" + text)
         self.assertEqual(self.sb.cli("migrate", "--cards")[0], 0)
-        found = self.read("p.md").count("aaaa1111") + self.read("q.md").count("aaaa1111")
+        found = sum(self.read(n).count("aaaa1111") for n in ("p.md", "q.md", "other.md"))
         self.assertEqual(found, 1)
+        self.assertIn("aaaa1111", self.read("other.md"))
+
+    def profiles(self, *names: str) -> None:
+        os.makedirs(os.path.join(self.sb.vault, "projects"), exist_ok=True)
+        for name in names:
+            with open(os.path.join(self.sb.vault, "projects", f"{name}.md"), "w") as handle:
+                handle.write(f"# {name}\n")
+
+    def misfiled_warnings(self) -> int:
+        return self.sb.cli("doctor")[1].count("misfiled cards")
+
+    def test_cards_moves_a_misfiled_card_to_the_repo_it_names(self) -> None:
+        self.profiles("alpha", "beta")
+        card = self.card("aaaaaaaa", "beta")
+        self.write("alpha.md", "# Handoffs · alpha\n\n" + card)
+        self.assertEqual(self.misfiled_warnings(), 1)
+        before = self.read("alpha.md")
+        code, out = self.sb.cli("migrate", "--cards", "--dry-run")
+        self.assertEqual(code, 0)
+        self.assertIn("would move", out)
+        self.assertEqual(self.read("alpha.md"), before)
+        self.assertFalse(os.path.exists(os.path.join(self.sb.vault, "handoffs", "beta.md")))
+        code, out = self.sb.cli("migrate", "--cards")
+        self.assertEqual(code, 0)
+        self.assertIn("moved 1 card from handoffs/alpha.md to handoffs/beta.md", out)
+        self.assertTrue(self.read("beta.md").startswith("# Handoffs · beta\n"))
+        self.assertIn(card.rstrip("\n"), self.read("beta.md"))
+        self.assertNotIn("aaaaaaaa", self.read("alpha.md"))
+        self.assertEqual(self.misfiled_warnings(), 0)
+        after = {n: self.read(n) for n in ("alpha.md", "beta.md")}
+        self.assertEqual(self.sb.cli("migrate", "--cards")[0], 0)
+        self.assertEqual(after, {n: self.read(n) for n in after})
+
+    def test_cards_move_goes_to_the_first_repo_and_keeps_time_order(self) -> None:
+        self.profiles("alpha", "beta", "gamma")
+        early = self.card("bbbbbbbb", "beta").replace("10:00", "09:00")
+        late = self.card("cccccccc", "beta").replace("10:00", "11:00")
+        self.write("beta.md", "# Handoffs · beta\n\n" + early + late)
+        self.write("alpha.md", "# H\n\n" + self.card("aaaaaaaa", "beta, gamma"))
+        self.assertEqual(self.sb.cli("migrate", "--cards")[0], 0)
+        text = self.read("beta.md")
+        self.assertLess(text.index("bbbbbbbb"), text.index("aaaaaaaa"))
+        self.assertLess(text.index("aaaaaaaa"), text.index("cccccccc"))
+        self.assertFalse(os.path.exists(os.path.join(self.sb.vault, "handoffs", "gamma.md")))
+
+    def test_cards_move_into_a_file_that_has_the_segment_is_a_copy_drop(self) -> None:
+        self.profiles("alpha", "beta")
+        self.write("beta.md", "# H\n\n" + self.card("aaaaaaaa", "beta"))
+        self.write("alpha.md", "# H\n\n" + self.card("aaaaaaaa", "beta"))
+        self.assertEqual(self.sb.cli("migrate", "--cards")[0], 0)
+        self.assertEqual(self.read("beta.md").count("aaaaaaaa"), 1)
+        self.assertNotIn("aaaaaaaa", self.read("alpha.md"))
+
+    def test_cards_move_leaves_ticket_and_label_files_and_ticketless_cards_alone(self) -> None:
+        self.profiles("alpha", "beta")
+        self.write("ABC-1.md", "# H\n\n" + self.card("aaaaaaaa", "beta"))
+        self.write("topic.md", "# H\n\n" + self.card("bbbbbbbb", "beta"))
+        self.write("alpha.md", "# H\n\n" + self.card("cccccccc", "-"))
+        before = {n: self.read(n) for n in ("ABC-1.md", "topic.md", "alpha.md")}
+        self.assertEqual(self.sb.cli("migrate", "--cards")[0], 0)
+        self.assertEqual(before, {n: self.read(n) for n in before})
+
+    def test_cards_move_needs_no_profile_for_the_named_repo(self) -> None:
+        self.profiles("alpha")
+        self.write("alpha.md", "# H\n\n" + self.card("aaaaaaaa", "beta"))
+        self.assertEqual(self.misfiled_warnings(), 1)
+        self.assertEqual(self.sb.cli("migrate", "--cards")[0], 0)
+        self.assertIn("aaaaaaaa", self.read("beta.md"))
+        self.assertEqual(self.misfiled_warnings(), 0)
