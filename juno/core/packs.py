@@ -1,3 +1,4 @@
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -5,7 +6,7 @@ from typing import Any
 from juno import config
 from juno.core import fold, vaultfmt
 from juno.core.inject import CONTEXT_LABEL, RULES_LABEL, neutralize, trim
-from juno.core.trim import trim_pack
+from juno.core.trim import trim_body, trim_pack
 from juno.core.view import VaultView
 
 MAX_THREAD_LINES = 5
@@ -247,13 +248,33 @@ def scoped_rule_lines(view: VaultView, wanted: Wanted) -> list[str]:
     return lines
 
 
+SENTENCE_END_RE = re.compile(r"(?<=[.!?])\s")
+
+
+def first_sentence(text: str) -> str:
+    return SENTENCE_END_RE.split(text, 1)[0]
+
+
+def global_rules_body(texts: list[str], room: int) -> str:
+    body = "\n".join("- " + neutralize(t) for t in texts)
+    if len(body) > room:
+        body = "\n".join("- " + neutralize(first_sentence(t)) for t in texts)
+    return trim_body(body, room, "rules/global.md")
+
+
+def global_reserve(view: VaultView, caps: Caps) -> int:
+    texts = visible_rules(view, "rules/global.md")
+    size = sum(len(t) + 3 for t in texts)
+    return min(caps.subagent_global_rules_chars // 2, size)
+
+
 def subagent_rules(view: VaultView, caps: Caps, scoped: list[str], budget: int) -> str:
-    room = min(caps.subagent_global_rules_chars, budget - len("\n".join(scoped)) - 80)
+    reserve = global_reserve(view, caps)
+    room = min(caps.subagent_global_rules_chars, max(budget - len("\n".join(scoped)) - 80, reserve))
     texts = visible_rules(view, "rules/global.md")
     lines: list[str] = []
     if texts and room > 0:
-        body = "\n".join("- " + neutralize(t) for t in texts)
-        lines = ["[Global rules · rules/global.md]", trim(body, room, "rules/global.md")]
+        lines = ["[Global rules · rules/global.md]", global_rules_body(texts, room)]
     lines += scoped
     return "\n".join([RULES_LABEL + ":", *lines]) if lines else ""
 
@@ -273,7 +294,8 @@ def subagent_block(
     context = "\n".join([CONTEXT_LABEL + ":", *pointers]) if pointers else ""
     budget = max(0, caps.subagent_chars - len(SUBAGENT_HEADER) - len(context) - 4)
     scoped = scoped_rule_lines(view, wanted)
-    scoped += topic_lines(budget - len("\n".join(scoped)) - 80)
+    reserve = global_reserve(view, caps)
+    scoped += topic_lines(budget - len("\n".join(scoped)) - 80 - reserve)
     rules = subagent_rules(view, caps, scoped, budget)
     if not rules and not context:
         return ""

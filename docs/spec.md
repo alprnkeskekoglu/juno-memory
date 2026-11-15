@@ -542,7 +542,8 @@ Carried from [v1: Phase 2 item 1] and [v1: Phase 3] search noise fixes:
 ### 12.2 Packs and trimming
 As in [v1: Injection] Packs: RULES first, then CONTEXT. The CONTEXT order is decisions `## Current`, Gotchas, How to run, cards (1-2), ticket Notes, threads, knowledge titles, procedure titles (repo packs, by `repos`), then Linked when its arm is on. Purpose follows the cards only when `[packs] purpose = true` (default off, 6.6).
 - Each pack is ≤ 4,500 chars, trimmed by section with the water-fill split (`core.trim_pack`).
-- A card keeps its heading and priority lines.
+- A card keeps its heading and priority lines. Other sections (Gotchas and the like) grow by appending, so an over-budget section keeps its newest items and drops the oldest, in display order [#19].
+- The subagent block reserves up to half of `subagent_global_rules_chars` for global rules before topic rules; over its room, global rules shorten to their first sentence, then keep the newest. Doctor WARNs (`pack fit`) when a profile Gotchas or How to run section exceeds `pack_chars`, or global rules exceed `subagent_global_rules_chars`.
 - After 4 full packs in a segment, further packs are one-line pointers.
 
 ### 12.3 Links

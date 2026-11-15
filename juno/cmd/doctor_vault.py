@@ -10,6 +10,7 @@ from juno.adapters import status as status_io
 from juno.adapters.vaultview import DiskVault, scan_metas
 from juno.cmd import backlog as backlog_cmd
 from juno.core import backlog as bl
+from juno.core import doctor_fit
 from juno.core import doctor_vault as dv
 from juno.core import retire, selfmodel, topics
 from juno.core.doctor_vault import Check
@@ -83,6 +84,12 @@ def vault_checks(cfg: config.Config) -> list[Check]:
     card_repos = [r for c in valid for r in c.get("repos") or [] if not repos.plain_folder(cfg, r)]
     profiles = {n[:-3] for n in view.names("projects")}
     out += dv.profile_checks(card_repos, profiles)
+    out += doctor_fit.pack_fit_checks(
+        {n: view.read(f"projects/{n}.md") for n in sorted(profiles)},
+        view.read("rules/global.md"),
+        cfg.get_int("caps", "pack_chars"),
+        cfg.get_int("caps", "subagent_global_rules_chars"),
+    )
     out += index_checks(cfg)
     resolution = retire.resolve(scan_metas(cfg.vault))
     out += dv.retire_checks(resolution.pairs, resolution.dead)
