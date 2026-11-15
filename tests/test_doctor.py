@@ -97,7 +97,7 @@ class Doctor(SandboxCase):
     def test_vault_schema_mismatch(self) -> None:
         self.installed()
         with open(os.path.join(self.sb.vault, "juno-brain.toml"), "w", encoding="utf-8") as handle:
-            handle.write("schema_version = 5\n")
+            handle.write("schema_version = 9\n")
         self.assertEqual(self.statuses()["vault"], "FAIL")
 
     def test_hook_cap_must_stay_below_claude_limit(self) -> None:

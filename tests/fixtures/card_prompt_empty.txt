@@ -5,7 +5,7 @@ Card format, quoted from the vault's core.md:
 Repos: a, b
 Tickets: KEY-123
 <2-5 lines: what was done, where it stopped, what is next>
-Links: [[<repo>]], [[<KEY>]], ...
+Links: [[<repo>]] (why), ...
 **Decision:** <one line, only if I decided something>
 Learned: <mandatory: one sentence, or none>
 
@@ -14,7 +14,7 @@ Rules:
 - Then `Repos: billing-api` and `Tickets: ABC-111111` on their own lines (copy these values).
 - Then 2-5 lines: what was done, where it stopped, what is next. Only facts from the digest.
 - Optional `Links:` and `**Decision:**` lines as in the format; a decision only when the user decided it.
-- Link a vault file only when the card relies on its content, and put a short reason right after every link, e.g. `[[billing-api]] (repo profile with the run commands)`; a link without a reason is unlinked.
+- Link a vault file only when the card relies on its content. On the `Links:` line put the reason in parentheses right after each link, e.g. `Links: [[billing-api]] (repo profile with the run commands)`, even where the format above shows none; a link without a reason is unlinked, and a card with no reasoned link writes `Links: -`.
 - When the digest has this segment's current card, keep its concrete details (commit hashes, test counts, file names, decisions) unless the new work superseded them.
 - Neutral voice: never address anyone as "you"; call the user "the user".
 - The last line is `Learned: <one sentence>` or `Learned: none`.

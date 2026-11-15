@@ -63,7 +63,7 @@ class Skeleton(unittest.TestCase):
     def test_schema_file(self) -> None:
         text = read("juno-brain.toml").replace(vault.CREATED_TOKEN, "2026-01-01")
         data = tomllib.loads(text)
-        self.assertEqual(data["schema_version"], 4)
+        self.assertEqual(data["schema_version"], 5)
         self.assertIn(vault.CREATED_TOKEN, read("juno-brain.toml"))
 
 

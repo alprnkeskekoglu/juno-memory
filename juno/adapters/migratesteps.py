@@ -37,6 +37,11 @@ def quote_and_cap_text(vault: str) -> None:
     _replace_in(vault, "core.md", migrate.CAPS_OLD, migrate.CAPS_NEW)
 
 
+def card_link_reasons(vault: str) -> None:
+    _replace_in(vault, "core.md", migrate.LINKS_FORMAT_OLD, migrate.LINKS_FORMAT_NEW)
+    _replace_in(vault, "core.md", migrate.LINKS_CMD_OLD, migrate.LINKS_CMD_NEW)
+
+
 def ticket_decisions(vault: str) -> None:
     day = time.strftime("%Y-%m-%d")
     folder = os.path.join(vault, "decisions")
@@ -87,4 +92,5 @@ STEPS: dict[int, migrate.Step] = {
     1: stale_exception,
     2: quote_and_cap_text,
     3: ticket_decisions,
+    4: card_link_reasons,
 }

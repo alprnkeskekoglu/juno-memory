@@ -3,7 +3,7 @@ from collections.abc import Callable, Mapping
 
 from juno.core import vaultfmt, writegate
 
-CODE_SCHEMA_VERSION = 4
+CODE_SCHEMA_VERSION = 5
 
 Step = Callable[[str], None]
 SCHEMA_RE = re.compile(r"^schema_version\s*=\s*(\d+)\s*$", re.M)
@@ -35,6 +35,10 @@ RULES_QUOTE_NEW = (
 )
 CAPS_OLD = "Stay under the per-file and per-session caps."
 CAPS_NEW = "Stay under the per-session cap."
+LINKS_FORMAT_OLD = "Links: [[<repo>]], [[<KEY>]], ..."
+LINKS_FORMAT_NEW = "Links: [[<repo>]] (why), ..."
+LINKS_CMD_OLD = '[--links "[[<repo>]]"]'
+LINKS_CMD_NEW = '[--links "[[<repo>]] (why)"]'
 
 
 def read_schema(toml_text: str) -> int | None:

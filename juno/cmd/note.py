@@ -59,6 +59,12 @@ def do(cfg: config.Config, args: argparse.Namespace) -> int:
         if gate.read(cfg, rel):
             raise Refused(f"{rel} exists; notes are written once (use another --slug or fix)")
         same = todays_duplicate(cfg, day, text)
+        if same and specs:
+            if any(canon(target) == same for target, _ in specs):
+                raise Refused("a file cannot link to itself")
+            new = linkline.with_links(gate.read(cfg, same) or "", specs, canon)
+            res = gate.commit(cfg, seg, "link", same, new, f"segment {seg.sid[:8]}")
+            return gateio.report(res, "already recorded; links written to")
         if same:
             print(f"Juno: already recorded in {same}; nothing written")
             return 0
