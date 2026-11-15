@@ -91,3 +91,15 @@ def merge(blocks: list[str], seg8: str, prefixes: list[str] | None = None) -> st
     except cardfmt.Failed as exc:
         raise Refused(f"the merged card is invalid ({exc}); shorten the two cards") from None
     return card
+
+
+def insert_card(text: str, block: str, stamp: str, name: str) -> str:
+    """The text with a moved card block placed by its time stamp (after equal ones), else last."""
+    card = block.rstrip("\n") + "\n"
+    if not text.strip():
+        text = f"# Handoffs · {name}\n"
+    for head in re.finditer(r"^## .*$", text, re.M):
+        match = vaultfmt.CARD_HEAD_RE.match(head.group(0))
+        if match and match.group(1) > stamp:
+            return text[: head.start()] + card + "\n" + text[head.start() :]
+    return text + ("" if text.endswith("\n") else "\n") + "\n" + card

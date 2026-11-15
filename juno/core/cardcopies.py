@@ -68,6 +68,7 @@ def checks(cards: Sequence[Card], profiles: Collection[str] = ()) -> list[Check]
     for card in stray[:MISFILED_SHOWN]:
         named = ", ".join(card["repos"]) or "-"
         said = f"{card['path']}: card {card['seg']} names {named}, not this repo"
+        said += "; `juno migrate --cards` moves it"
         out.append(("WARN", "misfiled cards", said))
     if len(stray) > MISFILED_SHOWN:
         out.append(("WARN", "misfiled cards", f"{len(stray) - MISFILED_SHOWN} more"))
