@@ -236,9 +236,12 @@ def render_pack(
         lines.append(CONTEXT_LABEL + ":")
     text = "\n".join(lines + [f"[{title}]\n{body}" for title, body in blocks])
     if blocks and len(text) > caps.pack_chars:
+        titles = [title for title, _ in blocks]
+        newest = [titles.index(digests[i][0]) for i in taskdigest.priority(digests)]
         return trim_pack(
-            lines, blocks + extras, caps.pack_chars, text, rank, reserve_first=bool(digests)
-        )
+            lines, blocks + extras, caps.pack_chars, text, rank,
+            reserve_first=bool(digests), priority=newest or None,
+        )  # fmt: skip
     text = trim(text, caps.pack_chars, src["doc"])
     has_label = bool(blocks)
     for title, body in extras:

@@ -8,6 +8,7 @@ KEY_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,39}$")
 RESERVED = frozenset({"notes", "decisions", "links", "current", "history"})
 FIELD = "digests"
 HEADING_RE = re.compile(r"^##[ \t]+(.+?)[ \t]*$")
+DAY_RE = re.compile(r"· (\d{4}-\d{2}-\d{2})[ \t]*$", re.M)
 ALLOWED = "user words typed in this segment, or ticket:{key} for the ticket being written"
 
 
@@ -56,6 +57,13 @@ def blocks(doc: str, doc_title: str) -> list[tuple[str, str]]:
         if body:
             found.append((f"{name} · {doc_title}", body))
     return found
+
+
+def priority(found: list[tuple[str, str]]) -> list[int]:
+    """Indexes of `blocks` output in keep-first order: the section holding the latest line date
+    first (undated last), a tie going to the section registered later."""
+    latest = [max(DAY_RE.findall(body), default="") for _, body in found]
+    return sorted(range(len(found)), key=lambda i: (latest[i], i), reverse=True)
 
 
 def item_line(key: str, text: str, day: str) -> str:
