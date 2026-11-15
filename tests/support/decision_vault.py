@@ -9,6 +9,8 @@ Shapes (see the constants):
   lines, ABC-3 an existing `## Decisions` line that repeats one legacy line exactly.
   ABC-1 and ABC-2 also have `## History` lines in their decision file.
 - ABC-18 .. ABC-30 (13 keys) have a decision file and no task file.
+- ABC-31 (LINELESS) has a decision file with no line and no task file; ABC-32 (LINELESS_HISTORY)
+  the same with one History line. Neither is in TICKETS: the move creates no task file for them.
 - alpha: profile with a `## Decisions` line the legacy file repeats exactly (ALPHA_DUPLICATE),
   a near-duplicate pair in the legacy file (ALPHA_NEAR_A/B, both must survive) and History.
 - beta: profile without `## Decisions`, legacy file with Current and History.
@@ -31,6 +33,8 @@ WITHOUT_TASK = [f"ABC-{i}" for i in range(18, 31)]
 TICKETS = WITH_TASK + WITHOUT_TASK
 WITH_NOTES = WITH_TASK[:5]
 WITH_HISTORY = WITH_TASK[:2]
+LINELESS = "ABC-31"
+LINELESS_HISTORY = "ABC-32"
 EXISTING_DECISIONS_TICKET = "ABC-3"
 OWNERLESS = ("payments-design", "release-process", "XYZ-9")
 SOURCE_MTIME = 1_700_000_000
@@ -76,6 +80,14 @@ def build(vault: str) -> None:
         if key == EXISTING_DECISIONS_TICKET:
             current.append(line("a choice already in the task file"))
         put(vault, f"decisions/{key}.md", decision_file(key, current, history), SOURCE_MTIME)
+    put(vault, f"decisions/{LINELESS}.md", decision_file(LINELESS, []), SOURCE_MTIME)
+    old = [line("old choice for the lineless ticket", "2026-09-01")]
+    put(
+        vault,
+        f"decisions/{LINELESS_HISTORY}.md",
+        decision_file(LINELESS_HISTORY, [], old),
+        SOURCE_MTIME,
+    )
     for key in WITH_TASK:
         extra = ""
         if key == EXISTING_DECISIONS_TICKET:

@@ -122,9 +122,12 @@ def virtual_move(
     from juno.adapters import decisionmoveio
 
     out = dict(files)
-    for move in decisionmoveio.plan_for(cfg).moves:
+    plan = decisionmoveio.plan_for(cfg)
+    for move in plan.moves:
         out.pop(move.source, None)
         out[move.owner.rel] = links.parse_file(move.owner.rel, move.owner_text, None)
+    for drop in plan.drops:
+        out.pop(drop.source, None)
     return out
 
 

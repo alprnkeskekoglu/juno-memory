@@ -64,7 +64,10 @@ def vault_texts(cfg: config.Config) -> dict[str, str]:
 
 
 def count_links(cfg: config.Config, plan: decisionmove.Plan) -> int:
-    return decisionmove.count_path_links(vault_texts(cfg), {m.source for m in plan.moves})
+    return decisionmove.count_path_links(
+        vault_texts(cfg),
+        {m.source for m in plan.moves} | {d.source for d in plan.drops},
+    )
 
 
 def write_checked(cfg: config.Config, rel: str, text: str, mtime: float | None) -> bool:
@@ -113,6 +116,17 @@ def apply(cfg: config.Config, plan: decisionmove.Plan, say: Callable[[str], None
             return 1
         if marked:
             resign_stale(cfg, move.owner.rel)
+        store.backup(cfg, source)
+        os.remove(source)
+    for drop in plan.drops:
+        source = vault_path(cfg, drop.source)
+        if not os.path.exists(source):
+            continue
+        if drop.archive_text is not None and not write_checked(
+            cfg, drop.archive_rel, drop.archive_text, None
+        ):
+            say(f"decisions: {drop.archive_rel} did not read back as written; {drop.source} kept")
+            return 1
         store.backup(cfg, source)
         os.remove(source)
     return 0

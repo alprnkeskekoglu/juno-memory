@@ -212,6 +212,50 @@ class Moves(WriteCase):
         self.assertTrue(any(m.startswith("INFO") and "decisions/gamma.md" in m for m in after))
         self.assertTrue(all("juno migrate" not in m for m in after if m.startswith("INFO")))
 
+    def test_lineless_file_creates_no_task_file(self) -> None:
+        out = self.move()
+        for key in (dv.LINELESS, dv.LINELESS_HISTORY):
+            self.assertFalse(self.exists(f"tasks/{key}.md"), key)
+            self.assertFalse(self.exists(f"decisions/{key}.md"), key)
+        self.assertIn(f"decisions: removed decisions/{dv.LINELESS}.md (no current lines)\n", out)
+        self.assertIn(
+            f"decisions: removed decisions/{dv.LINELESS_HISTORY}.md "
+            f"(no current lines, 1 to archive/decisions/{dv.LINELESS_HISTORY}.md)",
+            out,
+        )
+        archive = self.get(f"archive/decisions/{dv.LINELESS_HISTORY}.md")
+        self.assertIn(dv.line("old choice for the lineless ticket", "2026-09-01"), archive)
+        self.assertFalse(self.exists(f"archive/decisions/{dv.LINELESS}.md"))
+
+    def test_lineless_dry_run_writes_nothing(self) -> None:
+        before = snapshot(self.sb.vault)
+        out = self.move("--dry-run")
+        self.assertIn(f"decisions: would remove decisions/{dv.LINELESS}.md (no current", out)
+        self.assertEqual(snapshot(self.sb.vault), before)
+
+    def test_lineless_file_with_an_owner_is_moved_as_before(self) -> None:
+        self.put("decisions/ABC-5.md", dv.decision_file("ABC-5", []))
+        out = self.move()
+        self.assertIn("moved decisions/ABC-5.md to tasks/ABC-5.md (0 lines)", out)
+        self.assertFalse(self.exists("decisions/ABC-5.md"))
+
+    def test_lineless_hidden_file_stays(self) -> None:
+        text = self.get(f"decisions/{dv.LINELESS}.md")
+        self.put(
+            f"decisions/{dv.LINELESS}.md",
+            text.replace("---\ntopic", "---\nvisibility: private\ntopic", 1),
+        )
+        out = self.move()
+        self.assertIn(f"decisions/{dv.LINELESS}.md stays: the file is hidden", out)
+        self.assertTrue(self.exists(f"decisions/{dv.LINELESS}.md"))
+
+    def test_lineless_schema_step_removes_it_too(self) -> None:
+        text = migrate.write_schema(self.get("juno-brain.toml"), 5)
+        self.put("juno-brain.toml", text)
+        self.assertEqual(self.juno("migrate")[0], 0)
+        self.assertFalse(self.exists(f"tasks/{dv.LINELESS}.md"))
+        self.assertFalse(self.exists(f"decisions/{dv.LINELESS}.md"))
+
 
 class NoPrefixes(WriteCase):
     def test_ticket_shaped_files_stay_without_jira_prefixes(self) -> None:

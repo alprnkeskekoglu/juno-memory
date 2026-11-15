@@ -251,12 +251,22 @@ def render_pack(
     return text
 
 
+def holds_nothing(doc: str) -> bool:
+    """A task file with no title and no line under any heading (what an empty move left)."""
+    fields, body = vaultfmt.parse_frontmatter(doc)
+    return not fields.get("title") and not any(
+        x.strip() and not x.lstrip().startswith("#") for x in body.splitlines()
+    )
+
+
 def pack_pointer(view: VaultView, kind: str, key: str) -> str:
     src = pack_sources(kind, key)
     doc = view.read(src["doc"])
     doc = "" if view.hidden(src["doc"], doc) else doc
     owner = decisions_owner(view, src, kind)
     files = [p for p in (src["rules"], src["doc"]) if view.exists(p) and not view.hidden(p)]
+    if kind == "ticket" and src["doc"] in files and holds_nothing(doc):
+        files.remove(src["doc"])
     if owner not in files and decision_lines(view, src, doc):
         files.append(owner)
     where = ", ".join(files) if files else "handoff cards in handoffs/"
