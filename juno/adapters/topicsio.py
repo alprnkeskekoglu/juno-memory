@@ -124,9 +124,10 @@ def for_text(
     text: str,
     budget: int,
     view: DiskVault | None = None,
+    execs: frozenset[str] = frozenset(),
 ) -> str:
     preset = preset_of(cfg)
-    hits = topics.matches(index(cfg), text, preset)
+    hits = topics.matches(index(cfg), text, preset, execs)
     if not hits:
         return ""
     view = view or DiskVault(cfg)
@@ -137,7 +138,10 @@ def for_text(
 def for_tool(cfg: config.Config, payload: dict[str, Any], budget: int) -> str:
     tool_in = payload.get("tool_input")
     text = topics.tool_text(payload.get("tool_name"), tool_in if isinstance(tool_in, dict) else {})
-    return for_text(cfg, payload.get("session_id"), payload.get("agent_id"), text, budget)
+    execs = topics.tool_exes(payload.get("tool_name"), tool_in if isinstance(tool_in, dict) else {})
+    return for_text(
+        cfg, payload.get("session_id"), payload.get("agent_id"), text, budget, None, execs
+    )
 
 
 def for_subagent(cfg: config.Config, sid: object, agent: object, budget: int) -> list[str]:

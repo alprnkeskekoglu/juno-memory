@@ -456,6 +456,8 @@ These are carried from [v1: Rules policy] Topic triggers and [v1: Injection] Top
 - At most 20 per topic, 2-60 chars, case-folded literals, no user regex.
 - An alphanumeric end needs a word boundary. A punctuation end is a substring match.
 - Matched against the typed prompt, the Bash command, `file_path|path|notebook_path`, the Glob `pattern`, the Grep `glob` and the tool name.
+- Bash commands are matched on their own tokens: heredoc bodies, `--body`/`--body-file`/`--message`/`--notes`/`--title` values, `git|gh -m`/`-F` messages and grep/rg patterns that are regexes or word lists are dropped first.
+- A pitfall fires on a match of one trigger that is specific by shape (a flag, path, dot, hyphen, underscore, digit, or a phrase with a non-stoplist word) or equal to the command's executable (first word of a pipeline segment), or on two non-stoplist triggers. A single plain word never fires it; `juno doctor` warns about such lines. Stoplist words (`GENERIC_TRIGGERS`) never count as specific.
 - The index is `triggers.json`, rebuilt on a size or mtime change of `rules/topics/*.md`, `knowledge/*.md`, `procedures/*.md` or `pitfalls.md`.
 - A procedure's `triggers` and `repos` are front matter; the match injects `[Procedure · procedures/<slug>.md] <title>` plus its numbered steps, at most 600 chars (a step that does not fit is cut), as CONTEXT.
 - Each item is injected once per segment and agent, through an exclusive marker. A block that does not fit is skipped unclaimed.

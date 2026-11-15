@@ -299,17 +299,17 @@ class Pitfalls(Base):
 
     def test_cache_rebuilds_when_pitfalls_change(self) -> None:
         self.bash("echo ===")
-        self.write("pitfalls.md", PITFALL.format("Fresh pitfall", "newword", 1))
-        self.assertIn("Fresh pitfall", self.context(self.bash("run newword")))
+        self.write("pitfalls.md", PITFALL.format("Fresh pitfall", "new_word", 1))
+        self.assertIn("Fresh pitfall", self.context(self.bash("run new_word")))
 
 
 VAULT_PITFALLS = (
     "# Pitfalls\n"
     + PITFALL.format("Grep guessed path juno/core/env.py", "grep, is_interactive, juno", 1)
-    + PITFALL.format("Locked worktree needs remove -f -f", "worktree, git, branch", 2)
+    + PITFALL.format("Locked worktree needs remove -f -f", "git worktree, branch", 2)
     + PITFALL.format("Read the suite summary before commit", "git, commit, tests, config.toml", 3)
     + PITFALL.format("Tie tests to writegate.RUN_MAX", "writegate, run_max, tests, config", 4)
-    + PITFALL.format("Check juno cap show early", "juno, cap, knowledge, vault", 5)
+    + PITFALL.format("Check juno cap show early", "juno cap, knowledge, vault", 5)
     + PITFALL.format("Deploy only from a clean tree", "deploy, git, status, commit", 6)
     + PITFALL.format("CI checkout ref", "gh, run, checkout, ref", 7)
     + PITFALL.format("Tag format in zsh", "git, zsh, format, tag", 8)
@@ -372,11 +372,51 @@ class SpecificTriggers(Base):
     def test_generic_list_and_write_time_check(self) -> None:
         self.assertIn("git", topics.GENERIC_TRIGGERS)
         self.assertFalse(topics.is_specific("git"))
-        for word in ("git push", "--force", "config.toml", "run_max", "worktree"):
+        for word in ("--force", "config.toml", "run_max", "git worktree", "dry-run"):
             self.assertTrue(topics.is_specific(word), word)
+        for word in ("worktree", "pending", "develop", "git status", "git push"):
+            self.assertFalse(topics.is_specific(word), word)
         self.assertIsNotNone(topics.triggers_problem(["git", "status"]))
         self.assertIsNone(topics.triggers_problem(["git", "--force"]))
         self.assertIsNone(topics.triggers_problem([]))
+
+    def test_plain_words_need_two_matches_or_the_executable(self) -> None:
+        entries = [
+            ["pitfall-a", "pitfalls.md", ["sqlite3", "x.db", "pending"], "a"],
+            ["pitfall-b", "pitfalls.md", ["kubectl", "apply"], "b"],
+            ["pitfall-c", "pitfalls.md", ["develop", "vendor", "npm"], "c"],
+        ]
+
+        def fired(command: str) -> list[str]:
+            text, execs = topics.bash_view(command)
+            return [e[0] for e in topics.matches(entries, text, "none", execs)]
+
+        self.assertEqual(fired("juno thread pending"), [])
+        self.assertEqual(fired("git show origin/develop:src/a.py"), [])
+        self.assertEqual(fired("sqlite3 data.db"), ["pitfall-a"])
+        self.assertEqual(fired("cd x && sqlite3 y"), ["pitfall-a"])
+        self.assertEqual(fired("kubectl get pods"), ["pitfall-b"])
+        self.assertEqual(fired("echo kubectl"), [])
+        self.assertEqual(fired("git checkout develop && npm i vendor"), ["pitfall-c"])
+        self.assertIsNotNone(topics.plain_triggers_problem(["pending", "git"]))
+        self.assertIsNone(topics.plain_triggers_problem(["pending", "x.db"]))
+        self.assertIsNone(topics.plain_triggers_problem(["pending", "close"]))
+
+    def test_command_view_drops_text_the_command_only_carries(self) -> None:
+        def view(command: str) -> str:
+            return topics.bash_view(command)[0]
+
+        self.assertNotIn("make", view("cat > f <<'EOF'\nmake it so\nEOF\nls out"))
+        self.assertIn("ls out", view("cat > f <<'EOF'\nmake it so\nEOF\nls out"))
+        self.assertNotIn("make", view('gh issue comment 5 --body "we make it"').split())
+        self.assertNotIn("make", view("gh issue comment 5 --body-file notes.md --body=make").split())
+        self.assertNotIn("make", view('git commit -m "make it"').split())
+        self.assertNotIn("kubectl", view("grep -rnE 'kubectl|close' juno"))
+        self.assertIn("juno", view("grep -rnE 'kubectl|close' juno"))
+        self.assertIn("kubectl", view("grep -e a -- kubectl"))
+        self.assertIn("is_interactive", view("grep -rn is_interactive src"))
+        self.assertIn("pytest", view("python -m pytest"))
+        self.assertEqual(topics.bash_view("FOO=1 sudo /usr/bin/Make all | tee x")[1], {"make", "tee"})
 
     def test_cap_of_three_per_call(self) -> None:
         lines = "".join(
