@@ -409,14 +409,18 @@ class SpecificTriggers(Base):
         self.assertNotIn("make", view("cat > f <<'EOF'\nmake it so\nEOF\nls out"))
         self.assertIn("ls out", view("cat > f <<'EOF'\nmake it so\nEOF\nls out"))
         self.assertNotIn("make", view('gh issue comment 5 --body "we make it"').split())
-        self.assertNotIn("make", view("gh issue comment 5 --body-file notes.md --body=make").split())
+        self.assertNotIn(
+            "make", view("gh issue comment 5 --body-file notes.md --body=make").split()
+        )
         self.assertNotIn("make", view('git commit -m "make it"').split())
         self.assertNotIn("kubectl", view("grep -rnE 'kubectl|close' juno"))
         self.assertIn("juno", view("grep -rnE 'kubectl|close' juno"))
         self.assertIn("kubectl", view("grep -e a -- kubectl"))
         self.assertIn("is_interactive", view("grep -rn is_interactive src"))
         self.assertIn("pytest", view("python -m pytest"))
-        self.assertEqual(topics.bash_view("FOO=1 sudo /usr/bin/Make all | tee x")[1], {"make", "tee"})
+        self.assertEqual(
+            topics.bash_view("FOO=1 sudo /usr/bin/Make all | tee x")[1], {"make", "tee"}
+        )
 
     def test_cap_of_three_per_call(self) -> None:
         lines = "".join(

@@ -30,9 +30,7 @@ def copies(cards: Sequence[Card]) -> dict[str, list[Card]]:
     for card in cards:
         if card.get("valid"):
             by_seg[str(card["seg"])].append(card)
-    return {
-        seg: group for seg, group in by_seg.items() if len({str(c["path"]) for c in group}) > 1
-    }
+    return {seg: group for seg, group in by_seg.items() if len({str(c["path"]) for c in group}) > 1}
 
 
 def repo_stems(cards: Sequence[Card], profiles: Collection[str] = ()) -> set[str]:

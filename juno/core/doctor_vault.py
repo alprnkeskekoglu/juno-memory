@@ -280,9 +280,7 @@ def pitfall_checks(text: str, preset: str) -> list[Check]:
         )
         for n in bad
     ]
-    plain = topics.plain_pitfalls_warning(text, preset)
-    if plain:
-        out.append(("WARN", "pitfalls", plain))
+    out += [("WARN", "pitfalls", p) for p in [topics.plain_pitfalls_warning(text, preset)] if p]
     twins = pitfalldup.pairs(text, preset)
     if twins:
         shown = ", ".join(f"{a}/{b}" for a, b in twins[:5]) + (", ..." if len(twins) > 5 else "")

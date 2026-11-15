@@ -10,9 +10,8 @@ from juno.adapters import status as status_io
 from juno.adapters.vaultview import DiskVault, scan_metas
 from juno.cmd import backlog as backlog_cmd
 from juno.core import backlog as bl
-from juno.core import doctor_fit
+from juno.core import doctor_fit, retire, selfmodel, topics
 from juno.core import doctor_vault as dv
-from juno.core import retire, selfmodel, topics
 from juno.core.doctor_vault import Check
 from juno.core.vaultfmt import (
     NEVER_INJECTED_KINDS,

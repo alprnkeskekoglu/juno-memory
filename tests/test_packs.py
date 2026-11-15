@@ -183,9 +183,7 @@ class RenderPack(unittest.TestCase):
         self.assertIn("ticket decided", packs.render_pack(view, Caps(), "ticket", "abc-1", []))
 
     def test_ticket_pack_reads_legacy_task_decisions(self) -> None:
-        view = vault(
-            tasks__ABC_1="---\ntitle: T\n---\n## Decisions\n- old one\n\n## Notes\n- n\n"
-        )
+        view = vault(tasks__ABC_1="---\ntitle: T\n---\n## Decisions\n- old one\n\n## Notes\n- n\n")
         text = packs.render_pack(view, Caps(), "ticket", "ABC-1", [])
         self.assertIn("old one", text)
         self.assertIn("[Decisions · tasks/ABC-1.md]", text)
@@ -234,9 +232,7 @@ class Subagent(unittest.TestCase):
         self.assertLess(text.index("number 98 "), text.index("number 99 "))
 
     def test_rules_are_shortened_to_first_sentence_before_dropping(self) -> None:
-        long = "".join(
-            rule(f"Rule {i} stays. " + "Extra detail sentence. " * 6) for i in range(40)
-        )
+        long = "".join(rule(f"Rule {i} stays. " + "Extra detail sentence. " * 6) for i in range(40))
         view = vault(rules__global=long)
         text = packs.subagent_block(view, Caps(), [], lambda b: [])
         self.assertIn("Rule 0 stays.", text)
