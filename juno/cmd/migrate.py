@@ -8,7 +8,7 @@ from typing import cast
 from juno import config
 from juno.adapters import fs, migratesteps, protocolio, store, vault
 from juno.adapters.vaultview import DiskVault
-from juno.cmd import migratenotes
+from juno.cmd import migratedecisions, migratenotes
 from juno.cmd.common import say
 from juno.core import cardcopies, cardfmt, cardsettle, fold, migrate, vaultfmt
 
@@ -29,6 +29,11 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "--notes",
         action="store_true",
         help="archive notes/*.md files that have a frontmatter and no body line",
+    )
+    parser.add_argument(
+        "--decisions",
+        action="store_true",
+        help="move decisions/<x>.md into the profile or ticket file that owns it",
     )
 
 
@@ -140,9 +145,9 @@ def run(
     steps: Mapping[int, migrate.Step] | None = None,
     target: int | None = None,
 ) -> int:
-    steps = migratesteps.STEPS if steps is None else steps
     target = migrate.CODE_SCHEMA_VERSION if target is None else target
     cfg = config.load(env)
+    steps = migratesteps.steps_for(cfg) if steps is None else steps
     if vault.status(cfg.vault) != "juno":
         say(f"Juno: no Juno vault at {cfg.vault}; run juno init")
         return 2
@@ -150,6 +155,8 @@ def run(
         return sync_protocol(cfg, args.dry_run)
     if getattr(args, "cards", False):
         return drop_card_copies(cfg, args.dry_run)
+    if getattr(args, "decisions", False):
+        return migratedecisions.move_decisions(cfg, args.dry_run)
     if getattr(args, "notes", False):
         return migratenotes.archive_bodyless(cfg, args.dry_run)
     current = vault.schema_version(cfg.vault)
