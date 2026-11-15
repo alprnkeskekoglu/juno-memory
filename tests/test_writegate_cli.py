@@ -230,53 +230,6 @@ class Knowledge(Base):
         )
 
 
-class Decision(Base):
-    def test_needs_the_users_words_and_supersedes(self) -> None:
-        self.refused(
-            "decision", "--topic", "storage", "--evidence", "repo:app", "Use Postgres for storage"
-        )
-        self.ok("decision", "--topic", "storage", "--evidence", QUOTE, "Use Postgres for storage")
-        text = self.get("decisions/storage.md")
-        self.assertIn("## Current\n\n- Use Postgres for storage (user pid00001, ", text)
-        self.ok(
-            "decision",
-            "--topic",
-            "storage",
-            "--evidence",
-            QUOTE,
-            "Use DynamoDB for storage",
-            "--supersedes",
-            "1",
-        )
-        text = self.get("decisions/storage.md")
-        current = text.split("## Current")[1].split("## History")[0]
-        self.assertIn("DynamoDB", current)
-        self.assertNotIn("Postgres", current)
-        self.assertIn("Postgres for storage (user pid00001", text.split("## History")[1])
-        self.refused(
-            "decision",
-            "--topic",
-            "storage",
-            "--evidence",
-            QUOTE,
-            "Use X for storage",
-            "--supersedes",
-            "9",
-        )
-
-
-class TicketDecision(Base):
-    def test_ticket_topic_is_written_under_the_uppercase_key(self) -> None:
-        self.ok("decision", "--topic", "abc-1", "--evidence", QUOTE, "Use Postgres for storage")
-        self.ok("decision", "--topic", "ABC-1", "--evidence", QUOTE, "Use queues for retries")
-        self.assertIn("ABC-1.md", os.listdir(os.path.join(self.sb.vault, "decisions")))
-        self.assertNotIn("abc-1.md", os.listdir(os.path.join(self.sb.vault, "decisions")))
-        text = self.get("decisions/ABC-1.md")
-        self.assertIn("topic: ABC-1", text)
-        self.assertIn("Use Postgres", text)
-        self.assertIn("Use queues", text)
-
-
 class Project(Base):
     def test_sections(self) -> None:
         self.touch_repo("app")

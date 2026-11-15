@@ -40,6 +40,7 @@ class VaultEditRefusal(HookCase):
             "self/values.md": "juno self",
             "rules/global.md": "juno rule",
             "backlog/x.md": "juno backlog",
+            "tasks/ABC-1.md": "juno task set / juno task log / juno decision",
             "core.md": "a juno verb",
         }
         for rel, verb in expected.items():

@@ -12,7 +12,7 @@ HINTS = {
     "self": "juno self",
     "rule": "juno rule",
     "backlog": "juno backlog",
-    "task": "juno tasks (read only)",
+    "task": "juno task set / juno task log / juno decision",
 }
 
 
