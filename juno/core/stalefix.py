@@ -78,14 +78,17 @@ def body_start(lines: list[str]) -> int:
 
 
 def candidate_lines(
-    lines: list[str], problems: Iterable[str], limit: int
+    lines: list[str], problems: Iterable[str], limit: int, skip_decisions: bool = False
 ) -> tuple[list[Candidate], int]:
     wanted = set(problems)
+    span = stale.decisions_span(lines) if skip_decisions else None
     found: list[Candidate] = []
     skipped = 0
     fenced = False
     for index in range(body_start(lines), len(lines)):
         text = lines[index]
+        if span and span[0] <= index < span[1]:
+            continue
         if FENCE_LINE_RE.match(text):
             fenced = not fenced
             continue

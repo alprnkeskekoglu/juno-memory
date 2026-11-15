@@ -95,6 +95,8 @@ def scan_file(
         kind, relpath, since, source, (today - since).days, days, [st.st_size, st.st_mtime_ns]
     )
     known = stale.file_repos(kind, fields, os.path.basename(path))
+    if kind == "profile":
+        body = stale.without_decisions(body)
     for token in stale.path_tokens(body):
         scan.check(token, known, since, entry)
     return stale.finish_entry(entry)

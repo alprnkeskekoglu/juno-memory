@@ -179,6 +179,10 @@ def commit_changes(
             return
         for v in plan.writes:
             cand = cands[v.line]
+            if scan.rel.startswith("projects/") and stale.in_decisions(current, v.line - 1):
+                reject(row, scan.rel, v.line, "a line under ## Decisions is the user's own words")
+                clean = False
+                continue
             try:
                 ev = adapter.first_evidence(scan, cand, v)
                 proof = gate.scan_evidence(cfg, ev.text(), "evidence")
