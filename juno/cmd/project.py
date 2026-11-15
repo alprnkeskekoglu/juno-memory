@@ -72,6 +72,7 @@ def do_runtime(
         old = gate.read(cfg, rel)
         new = writegate.set_field(runtimeblock.apply(old, block, args.repo, day), "updated", day)
         res = gate.commit(cfg, seg, "project", rel, new, evidence)
+    backlog.consume_body_file(cfg, args.block_file)
     return gateio.report(res, "runtime block written to")
 
 
