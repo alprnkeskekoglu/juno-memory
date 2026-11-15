@@ -95,7 +95,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "gh_timeout_seconds": 10,
     },
     "links": {"linked_block": False},
-    "packs": {"purpose": False},
+    "packs": {"purpose": False, "ranked_trim": False},
     "decay": {"window_days": 90},
     "keys": {"weight": 0.0, "model": ""},
     "self": {"max_lines": 12, "max_chars": 1200, "inject": False},

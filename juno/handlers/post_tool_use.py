@@ -5,7 +5,7 @@ from typing import Any
 from juno import config
 from juno.adapters import agentcalls, armsio, asklog, ledgerio, repos, status, store, usageio
 from juno.adapters.vaultview import DiskVault
-from juno.core import packs, toolrec, vaultfmt
+from juno.core import packs, rank, toolrec, vaultfmt
 from juno.core.ledger import Record, Segment
 from juno.core.redact import chunks
 from juno.handlers import delivery
@@ -145,8 +145,14 @@ def handle(payload: dict[str, Any], cfg: config.Config) -> dict[str, Any] | None
     if tool == toolrec.ASK_TOOL:
         record_answers(cfg, seg, payload)
     view = DiskVault(cfg)
+    last_prompt = next(reversed(seg.prompts.values()), "")
     text = delivery.deliver_packs(
-        cfg, view, seg, packs.wanted_for(found), cfg.get_int("caps", "hook_output_chars")
+        cfg,
+        view,
+        seg,
+        packs.wanted_for(found),
+        cfg.get_int("caps", "hook_output_chars"),
+        rank.query_text(last_prompt, tool_in, cwd),
     )
     status.update(cfg, seg)
     return output(cfg, "PostToolUse", text)

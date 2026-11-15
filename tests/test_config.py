@@ -20,7 +20,7 @@ retention.backup_days retention.shadow_days retention.asks_days retention.usage_
 handoff.mode handoff.model handoff.budget_usd handoff.daily_budget_usd handoff.min_run_usd
 handoff.timeout_seconds handoff.digest_chars handoff.extract handoff.claude_bin handoff.launch_path
 threads.scan threads.stale_days threads.gh threads.gh_owner threads.gh_calls
-threads.gh_timeout_seconds links.linked_block keys.weight keys.model packs.purpose decay.window_days
+threads.gh_timeout_seconds links.linked_block keys.weight keys.model packs.purpose packs.ranked_trim decay.window_days
 self.max_lines self.max_chars self.inject
 stale.auto_fix stale.weekday stale.start_hour stale.end_hour stale.model stale.file_budget_usd
 stale.run_budget_usd stale.timeout_seconds stale.max_files stale.max_changes_per_file

@@ -58,7 +58,9 @@ def handle(payload: dict[str, Any], cfg: config.Config) -> dict[str, Any] | None
     budget = cap - len(cue) - 2
     view = DiskVault(cfg)
     before = set(seg.packs)
-    delivered = delivery.deliver_packs(cfg, view, seg, [("ticket", k) for k in tickets], budget)
+    delivered = delivery.deliver_packs(
+        cfg, view, seg, [("ticket", k) for k in tickets], budget, typed
+    )
     topic_text = topicsio.for_text(cfg, sid, None, typed, budget - len(delivered) - 2, view)
     status.update(cfg, seg)
     shadowio.observe(cfg, seg, view, typed, own, nosave, tickets, before, delivered)

@@ -6,7 +6,7 @@ from typing import Any
 from juno import config
 from juno.core import cardcopies, fold, taskfile, vaultfmt
 from juno.core.inject import CONTEXT_LABEL, RULES_LABEL, neutralize, trim
-from juno.core.trim import trim_body, trim_pack
+from juno.core.trim import Ranking, trim_body, trim_pack
 from juno.core.view import VaultView
 
 MAX_THREAD_LINES = 5
@@ -169,6 +169,7 @@ def render_pack(
     cards: list[Card],
     shown: set[str] | None = None,
     plan: NextPlan | None = None,
+    rank: Ranking | None = None,
 ) -> str:
     shown = set() if shown is None else shown
     src = pack_sources(kind, key)
@@ -218,7 +219,7 @@ def render_pack(
         lines.append(CONTEXT_LABEL + ":")
     text = "\n".join(lines + [f"[{title}]\n{body}" for title, body in blocks])
     if blocks and len(text) > caps.pack_chars:
-        return trim_pack(lines, blocks + extras, caps.pack_chars, text)
+        return trim_pack(lines, blocks + extras, caps.pack_chars, text, rank)
     text = trim(text, caps.pack_chars, src["doc"])
     has_label = bool(blocks)
     for title, body in extras:
