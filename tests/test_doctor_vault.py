@@ -214,6 +214,17 @@ class Pure(unittest.TestCase):
         self.assertNotIn("code", details.replace("ghost link targets", ""))
         self.assertEqual(dv.link_checks({"a.md": "[[a]]"})[0][0], "PASS")
 
+    def test_links_counts_bare_links_with_several_candidates(self) -> None:
+        files = {
+            "projects/alpha.md": "",
+            "handoffs/alpha.md": "[[alpha]] [[handoffs/alpha]]",
+            "projects/beta.md": "[[alpha]] [[beta]]",
+        }
+        out = dv.link_checks(files)
+        self.assertEqual([c[0] for c in out], ["PASS", "INFO"])
+        self.assertIn("2 bare links", out[1][2])
+        self.assertEqual(len(dv.link_checks({"a.md": "[[a]]"})), 1)
+
     def test_timings_and_probe(self) -> None:
         lines = ["PreToolUse 10ms", "PreToolUse 20ms", "Stop 900ms", "junk"]
         out = dv.timing_checks(lines)

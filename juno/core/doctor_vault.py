@@ -439,18 +439,26 @@ def resolve_link(target: str, rels: set[str], names: set[str]) -> bool:
     return low in names
 
 
+SHARED_LINKS = "%d bare links name a stem with more than one file (a path link is exact)"
+
+
 def link_checks(files: Mapping[str, str]) -> list[Check]:
     rels = {r[:-3].casefold() for r in files}
     names = {r.rsplit("/", 1)[-1] for r in rels}
+    stems = Counter(r.rsplit("/", 1)[-1] for r in rels)
     broken: list[tuple[str, int, str]] = []
     total = 0
+    shared = 0
     for rel, text in sorted(files.items()):
         for number, target in link_targets(text):
             total += 1
             if not resolve_link(target, rels, names):
                 broken.append((rel, number, target))
+            elif "/" not in target and stems[target.casefold().removesuffix(".md")] > 1:
+                shared += 1
+    info: list[Check] = [("INFO", "links", SHARED_LINKS % shared)] if shared else []
     if not broken:
-        return [("PASS", "links", f"{total} wikilinks in {len(files)} files resolve")]
+        return [("PASS", "links", f"{total} wikilinks in {len(files)} files resolve"), *info]
     out: list[Check] = [
         ("WARN", "links", f"broken link {r}:{n} -> [[{t}]]") for r, n, t in broken[:LINK_SHOWN]
     ]
@@ -465,7 +473,7 @@ def link_checks(files: Mapping[str, str]) -> list[Check]:
             f"{len(ghosts)} ghost link targets: " + ", ".join(f"{t} ({n})" for t, n in ranked),
         )
     )
-    return out
+    return out + info
 
 
 def percentile(values: Sequence[float], q: float) -> float:
