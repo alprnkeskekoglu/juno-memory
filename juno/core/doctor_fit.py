@@ -14,7 +14,8 @@ def pack_fit_checks(
             size = len(section(text, sec))
             if size > pack_chars:
                 said = f"projects/{name}.md {sec} is {size} chars but the pack budget is "
-                said += f"{pack_chars}; the oldest lines are cut, so consolidate it"
+                said += f"{pack_chars}; the oldest lines are cut, so run "
+                said += f"`juno consolidate projects/{name}.md --section {sec}`"
                 out.append(("WARN", "pack fit", said))
     size = len(injected_rules(global_text))
     if size > subagent_chars:
