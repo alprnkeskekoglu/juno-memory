@@ -9,6 +9,7 @@ from juno.core import fold
 Card = Mapping[str, Any]
 Check = tuple[str, str, str]
 MISFILED_SHOWN = 10
+MISC = "handoffs/misc.md"
 
 
 def stem(card: Card) -> str:
@@ -45,22 +46,30 @@ def misfiled(cards: Sequence[Card], profiles: Collection[str] = ()) -> list[Card
     return [c for c in cards if c.get("valid") and stem(c) in repos and not names_file(c)]
 
 
-def extra_copies(cards: Sequence[Card], profiles: Collection[str] = ()) -> list[Card]:
-    """Copies to drop: those in a repo file the card does not name, always keeping one."""
-    repos = repo_stems(cards, profiles)
-    drop: list[Card] = []
-    for group in copies(cards).values():
-        ordered = sorted(group, key=lambda c: str(c["path"]))
-        out = [c for c in ordered if stem(c) in repos and not names_file(c)]
-        if len(out) == len(ordered):
-            out = out[1:]
-        drop += out
-    return drop
+def extras(group: Sequence[Card]) -> list[Card]:
+    """Copies of one segment to drop: every copy outside the files the card names.
+
+    A card filed once in each file it names keeps all of them. With no named file, one copy
+    stays: `handoffs/misc.md` when the card is there, else the first file by name.
+    """
+    ordered = sorted(group, key=lambda c: str(c["path"]))
+    named = [c for c in ordered if names_file(c)]
+    if named:
+        return [c for c in ordered if not names_file(c)]
+    home = next((c for c in ordered if str(c["path"]) == MISC), ordered[0])
+    return [c for c in ordered if str(c["path"]) != str(home["path"])]
+
+
+def extra_copies(cards: Sequence[Card]) -> list[Card]:
+    """Copies to drop, always keeping at least one per segment."""
+    return [c for group in copies(cards).values() for c in extras(group)]
 
 
 def checks(cards: Sequence[Card], profiles: Collection[str] = ()) -> list[Check]:
     out: list[Check] = []
     for seg, group in sorted(copies(cards).items()):
+        if not extras(group):
+            continue
         files = sorted({str(c["path"]) for c in group})
         said = f"segment {seg} has a card in {len(files)} files ({', '.join(files)}); "
         out.append(("WARN", "card copies", said + "`juno migrate --cards` drops the extra copies"))

@@ -95,13 +95,14 @@ def drop_card_copies(cfg: config.Config, dry_run: bool) -> int:
 
     profiles = [n[:-3] for n in view.names("projects")]
     by_file: dict[str, list[str]] = {}
-    for card in cardcopies.extra_copies(parse(), profiles):
+    for card in cardcopies.extra_copies(parse()):
         by_file.setdefault(str(card["path"]), []).append(str(card["seg"]))
     for rel, found in sorted(by_file.items()):
         segs = list(dict.fromkeys(found))
         drop = [span for seg in segs for span in cardsettle.spans(texts[rel], seg)]
         texts[rel] = cardsettle.cut(texts[rel], drop)
-        say(f"cards: {'would drop' if dry_run else 'dropped'} {len(segs)} copies from {rel}")
+        verb = "would drop" if dry_run else "dropped"
+        say(f"cards: {verb} {len(segs)} copies from {rel} ({', '.join(segs)})")
     moved = move_misfiled(texts, parse(), profiles, hidden)
     flows: dict[tuple[str, str], list[str]] = {}
     for src, dest, seg in moved:
