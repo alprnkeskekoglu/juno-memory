@@ -239,9 +239,14 @@ def render_pack(
         titles = [title for title, _ in blocks]
         newest = [titles.index(digests[i][0]) for i in taskdigest.priority(digests)]
         return trim_pack(
-            lines, blocks + extras, caps.pack_chars, text, rank,
-            reserve_first=bool(digests), priority=newest or None,
-        )  # fmt: skip
+            lines,
+            blocks + extras,
+            caps.pack_chars,
+            text,
+            rank,
+            reserve_first=bool(digests),
+            priority=newest or None,
+        )
     text = trim(text, caps.pack_chars, src["doc"])
     has_label = bool(blocks)
     for title, body in extras:
