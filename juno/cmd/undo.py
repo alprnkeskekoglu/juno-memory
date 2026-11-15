@@ -120,6 +120,9 @@ def do(cfg: config.Config, args: argparse.Namespace) -> int:
         found = next((r for r in records if r.get("id") == wid and r.get("verb") != "undo"), None)
         if found is None:
             raise Refused(f"no write {wid} in the write log")
+        if found.get("link"):
+            parent = found["link"]
+            raise Refused(f"write {wid} is part of {parent}; undo {parent}")
         if wid in writelog.undone(records):
             raise Refused(f"write {wid} is already undone")
         files = ", ".join(revert(cfg, seg, records, found))
