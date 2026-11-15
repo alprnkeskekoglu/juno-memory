@@ -120,6 +120,18 @@ class CardRun(CardCase):
         self.assertNotIn("auto: true", text)
         self.assertNotIn("stub", text)
 
+    def test_card_without_ticket_is_written_once_per_repo_it_names(self) -> None:
+        sid = "aaaa1111-" + OTHER_SID[9:]
+        self.prompt("work on the a, b and c repos", sid)
+        repos = [["a", None], ["b", None], ["c", None]]
+        ledgerio.append(self.cfg(), sid, {"ev": "tool", "edits": [["x", None]], "repos": repos})
+        seg8 = sid[:8]
+        head = f"## 2026-01-01 00:00 · - · work · {seg8}\nRepos: c, zzz\nTickets: -\n"
+        row = self.run_card(head + "Did.\nLearned: none\n", sid=sid)
+        self.assertEqual(row["files"], ["handoffs/c.md"])
+        self.assertFalse(os.path.exists(self.vp("handoffs/a.md")))
+        self.assertFalse(os.path.exists(self.vp("handoffs/b.md")))
+
     def test_rewrites_own_card_and_appends_to_existing_file(self) -> None:
         self.write(f"handoffs/{KEY}.md", f"# Handoffs · {KEY}\n\n" + card(seg="deadbeef"))
         self.dirty()

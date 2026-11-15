@@ -13,7 +13,19 @@ def local_stamp(now: float | None = None) -> str:
     return time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() if now is None else now))
 
 
-def handoff_targets(seg: Segment) -> list[Target]:
+def primary_repo(seg: Segment) -> str:
+    """The repo a card without ticket or name goes to when it names none of the touched ones."""
+    return next(iter(seg.repos))
+
+
+def repo_targets(seg: Segment, card_repos: Sequence[str] | None) -> list[str]:
+    """Repos that get the card: its own `Repos:` line crossed with the touched repos, else one."""
+    named = [r for r in dict.fromkeys(card_repos or []) if r != "-"]
+    hit = [r for r in named if r in seg.repos]
+    return hit or named[:1] or [primary_repo(seg)]
+
+
+def handoff_targets(seg: Segment, card_repos: Sequence[str] | None = None) -> list[Target]:
     best = seg.current_ticket()
     tickets = list(seg.tickets)
     if best:
@@ -33,7 +45,7 @@ def handoff_targets(seg: Segment) -> list[Target]:
                 "repos": [repo],
                 "tickets": tickets,
             }
-            for repo in seg.repos
+            for repo in repo_targets(seg, card_repos)
         ]
     return [
         {
@@ -45,8 +57,8 @@ def handoff_targets(seg: Segment) -> list[Target]:
     ]
 
 
-def card_targets(seg: Segment) -> list[Target]:
-    targets = handoff_targets(seg)
+def card_targets(seg: Segment, card_repos: Sequence[str] | None = None) -> list[Target]:
+    targets = handoff_targets(seg, card_repos)
     return [dict(targets[0], path=p) for p in seg.card_files] or targets
 
 

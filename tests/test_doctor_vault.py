@@ -129,6 +129,26 @@ class Pure(unittest.TestCase):
         self.assertIn("1 near-duplicate pair (lines 3/5)", out[0][2])
         self.assertIn("juno forget pitfalls.md:<line>", out[0][2])
 
+    def test_card_copies_and_misfiled_cards(self) -> None:
+        def card(path: str, seg: str, repos: list[str]) -> dict[str, object]:
+            body = f"## h\nRepos: {', '.join(repos)}\nTickets: -\nLearned: x"
+            return {
+                "valid": True, "path": path, "seg": seg, "head": "", "auto": False,
+                "key": "-", "repos": repos, "body": body,
+            }  # fmt: skip
+
+        cards = [
+            card("handoffs/juno.md", "aaaa1111", ["juno"]),
+            card("handoffs/web.md", "aaaa1111", ["juno"]),
+            card("handoffs/api.md", "aaaa1111", ["juno"]),
+            card("handoffs/web.md", "bbbb2222", ["web"]),
+        ]
+        out = dv.card_checks(cards)
+        self.assertEqual([c[1] for c in out if c[0] == "WARN"].count("card copies"), 1)
+        misfiled = [d for _, n, d in out if n == "misfiled cards"]
+        self.assertEqual(len(misfiled), 1)
+        self.assertTrue(any("handoffs/web.md: card aaaa1111" in d for d in misfiled))
+
     def test_threads(self) -> None:
         now = time.mktime(time.strptime("2026-11-07", "%Y-%m-%d"))
         old = "- [app] an old open question · since 2026-01-01\n"

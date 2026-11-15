@@ -5,7 +5,7 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from juno.core import pitfalldup, privacy, threadscan, topics
+from juno.core import cardcopies, pitfalldup, privacy, threadscan, topics
 from juno.core.vaultfmt import (
     CARD_HEAD_RE,
     WIKILINK_RE,
@@ -29,7 +29,7 @@ FENCE_RE = re.compile(r"```.*?```|~~~.*?~~~", re.S)
 CODE_RE = re.compile(r"`[^`\n]*`")
 
 
-def card_checks(cards: Sequence[Mapping[str, Any]]) -> list[Check]:
+def card_checks(cards: Sequence[Mapping[str, Any]], profiles: Sequence[str] = ()) -> list[Check]:
     out: list[Check] = []
     bad = [c for c in cards if not c["valid"]]
     for card in bad:
@@ -63,6 +63,7 @@ def card_checks(cards: Sequence[Mapping[str, Any]]) -> list[Check]:
             name = str(path).removeprefix("handoffs/").removesuffix(".md")
             said = f"{path}: {n} cards for segment {seg}; `juno card merge {name} {seg}` joins them"
             out.append(("WARN", "duplicate cards", said))
+    out += cardcopies.checks(cards, profiles)
     return out
 
 

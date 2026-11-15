@@ -279,3 +279,55 @@ class Command(SandboxCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Cards(SandboxCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.assertEqual(self.sb.cli("init", *self.sb.install_args())[0], 0)
+
+    def card(self, seg: str, repos: str) -> str:
+        return (
+            f"## 2026-11-01 10:00 · - · work · {seg}\nRepos: {repos}\nTickets: -\n"
+            "Did it.\nLearned: none\n\n"
+        )
+
+    def read(self, name: str) -> str:
+        with open(os.path.join(self.sb.vault, "handoffs", name), encoding="utf-8") as handle:
+            return handle.read()
+
+    def write(self, name: str, text: str) -> None:
+        with open(os.path.join(self.sb.vault, "handoffs", name), "w", encoding="utf-8") as handle:
+            handle.write(text)
+
+    def test_cards_drops_copies_outside_the_repos_the_card_names(self) -> None:
+        keep = "# Handoffs\n\n"
+        self.write("juno.md", keep + self.card("aaaa1111", "juno") + self.card("cccc3333", "juno"))
+        self.write("web.md", keep + self.card("aaaa1111", "juno") + self.card("bbbb2222", "web"))
+        self.write("api.md", keep + self.card("aaaa1111", "juno"))
+        os.makedirs(os.path.join(self.sb.vault, "projects"), exist_ok=True)
+        with open(os.path.join(self.sb.vault, "projects", "api.md"), "w", encoding="utf-8") as h:
+            h.write("# api\n")
+        self.write("x.md", keep + self.card("dddd4444", "x, y"))
+        self.write("y.md", keep + self.card("dddd4444", "x, y"))
+        self.assertEqual(self.sb.cli("migrate", "--cards", "--dry-run")[0], 0)
+        self.assertIn("aaaa1111", self.read("web.md"))
+        self.assertEqual(self.sb.cli("migrate", "--cards")[0], 0)
+        self.assertEqual(self.read("juno.md").count("aaaa1111"), 1)
+        self.assertNotIn("aaaa1111", self.read("web.md"))
+        self.assertNotIn("aaaa1111", self.read("api.md"))
+        self.assertIn("bbbb2222", self.read("web.md"))
+        self.assertIn("cccc3333", self.read("juno.md"))
+        self.assertIn("dddd4444", self.read("x.md"))
+        self.assertIn("dddd4444", self.read("y.md"))
+        after = {n: self.read(n) for n in os.listdir(os.path.join(self.sb.vault, "handoffs"))}
+        self.assertEqual(self.sb.cli("migrate", "--cards")[0], 0)
+        self.assertEqual(after, {n: self.read(n) for n in after})
+
+    def test_cards_keeps_one_copy_when_none_is_filed_under_a_named_repo(self) -> None:
+        for name in ("p", "q"):
+            text = self.card("aaaa1111", "other") + self.card(name * 8, name)
+            self.write(f"{name}.md", "# H\n\n" + text)
+        self.assertEqual(self.sb.cli("migrate", "--cards")[0], 0)
+        found = self.read("p.md").count("aaaa1111") + self.read("q.md").count("aaaa1111")
+        self.assertEqual(found, 1)

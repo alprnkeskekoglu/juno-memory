@@ -67,7 +67,8 @@ def vault_checks(cfg: config.Config) -> list[Check]:
     view = DiskVault(cfg)
     cards = all_cards(view)
     valid = [c for c in cards if c["valid"]]
-    out = dv.card_checks(cards)
+    profiles = [n[:-3] for n in view.names("projects")]
+    out = dv.card_checks(cards, profiles)
     rule_files = {n: view.read(f"rules/{n}") for n in rule_names(view)}
     out += dv.rule_checks(
         rule_files,
@@ -82,8 +83,7 @@ def vault_checks(cfg: config.Config) -> list[Check]:
         cfg.get_int("caps", "global_rules_chars"),
     )
     card_repos = [r for c in valid for r in c.get("repos") or [] if not repos.plain_folder(cfg, r)]
-    profiles = {n[:-3] for n in view.names("projects")}
-    out += dv.profile_checks(card_repos, profiles)
+    out += dv.profile_checks(card_repos, set(profiles))
     out += doctor_fit.pack_fit_checks(
         {n: view.read(f"projects/{n}.md") for n in sorted(profiles)},
         view.read("rules/global.md"),
