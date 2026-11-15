@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from juno import config
 from juno.adapters import gate
 from juno.cmd import fix, gateio, write
-from juno.core import writegate
+from juno.core import notebody, writegate
 from juno.core.ledger import Segment
 
 ARCHIVE = "archive/decayed/forgotten-{month}.md"
@@ -28,11 +28,24 @@ def move(
 ) -> gate.Result:
     day = write.today()
     archive = ARCHIVE.format(month=day[:7])
+    original = gate.read(cfg, rel)
     gone = lines.pop(index)
+    # The last body line of a note takes the whole file with it: one write, one undo.
+    empty = rel.startswith("notes/") and notebody.bodyless("\n".join(lines))
     res = gate.commit(
-        cfg, seg, "forget", rel, writegate.join(lines), evidence, extra=extra, run_cap=run_cap
+        cfg,
+        seg,
+        "forget",
+        rel,
+        "" if empty else writegate.join(lines),
+        evidence,
+        extra=extra,
+        delete=empty,
+        run_cap=run_cap,
     )
     kept = f"{gone} · forgotten {day} · from {rel} · {res.id}"
+    if empty:
+        kept = notebody.archive_line(gone, "forgotten", day, rel, res.id, original)
     text = gate.read(cfg, archive) or "# Forgotten lines\n\n"
     new = writegate.join([*text.splitlines(), kept])
     gate.commit(
