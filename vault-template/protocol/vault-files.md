@@ -7,8 +7,8 @@ Part of [[core]]. Every write is a `juno` verb; Edit and Write on vault files ar
 
 ## Verbs
 - Repo profile, when you first learn something durable about a repo: `juno project purpose|run|gotchas --repo <repo> --evidence E "<one short factual line>"` (writes `projects/<repo>.md`; Purpose holds at most 3 lines).
-- Note, a situational finding, written once: `juno note [--slug S] [--repos a,b] [--tickets K] "<text>"` (`notes/YYYY-MM-DD-<slug>.md`).
-- Knowledge, when a `Learned:` is still true next month: `juno knowledge add --topic <slug> --evidence E "<fact>"`; from a page, `--source web --url <https://...>` instead of evidence. One file per topic. After re-checking one against code, correct it with `juno fix`; `juno stale` lists what may be stale.
+- Note, a situational finding, written once: `juno note [--slug S] [--repos a,b] [--tickets K] [--link "<target>:<reason>"] "<text>"` (`notes/YYYY-MM-DD-<slug>.md`). `--link` (repeatable) writes the file's final `Links:` line, each target followed by its reason in parentheses; the target must exist in the vault, the reason is 2+ words saying why.
+- Knowledge, when a `Learned:` is still true next month: `juno knowledge add --topic <slug> --evidence E [--link "<target>:<reason>"] "<fact>"` (the `Links:` line stays the file's last line); from a page, `--source web --url <https://...>` instead of evidence. One file per topic. After re-checking one against code, correct it with `juno fix`; `juno stale` lists what may be stale.
 - Decision, only what I decided, in my words: `juno decision --topic <slug> --evidence "<my words>" "<decision>" [--supersedes N]` (`--supersedes` moves Current line N to History).
 - Procedure, a step sequence that worked: `juno procedure --slug S --title T --evidence E "<step 1>" "<step 2>"` (2-12 steps; the same slug rewrites it).
 - Pitfall, Claude's own recurring mistake and the correct behaviour: `juno pitfall [--triggers a,b] --evidence E "<text>"`. A lesson I state in my own words becomes a rule through `juno rule`.
@@ -19,6 +19,7 @@ Part of [[core]]. Every write is a `juno` verb; Edit and Write on vault files ar
 - Write cap: 50 vault writes per segment (`[caps] run_max`). When it refuses, ask me; only after I approve, `juno cap raise --by N --evidence "<my words approving it>"` (N up to 100, my words only, never from a subagent) raises it for this segment. `juno cap show` prints used/limit.
 
 ## Correcting
+- Links on an existing note or knowledge file: `juno link notes/<file>.md --link "<target>:<reason>" [--link ...] --evidence E` (`knowledge/<file>.md` works too). It adds to the final `Links:` line, touches no other line, and is one write for `juno undo`; a repeated target updates its reason.
 - A wrong or outdated line: `juno fix <file>:<line> --was "<part of the line as it is now>" --evidence E "<corrected line>"`.
 - A wrong line that should leave the vault: `juno forget <file>:<line> --was "..." --evidence E` (moves it to `archive/decayed/`).
 - A section over its pack budget (doctor `pack fit`): `juno consolidate projects/<repo>.md --section Gotchas` (read-only) lists near-duplicate lines and lines citing a file gone from the default branch; merge a group into one line with `juno fix --merge <file>:<a>,<b>,<c> --was "<part of line a>" --was "<part of line b>" --was "<part of line c>" --evidence E "<one new line>"` (one `--was` per line, in the line order; one write id, one cap unit, the old lines go to `archive/decayed/`).

@@ -506,8 +506,8 @@ class Validation(unittest.TestCase):
         self.assertIn("See [[c|C]] for details", fixed)
         self.assertIn("ok d", fixed)
         self.assertNotIn("[[a]]", fixed)
-        only_bad, _ = cardfmt.fix_links("## h\nLinks: [[a]]\nx")
-        self.assertNotIn("Links", only_bad)
+        only_bad, count = cardfmt.fix_links("## h\nLinks: [[a]]\nx")
+        self.assertEqual((only_bad, count), ("## h\nLinks: -\nx", 1))
 
 
 class LearningMoments(unittest.TestCase):

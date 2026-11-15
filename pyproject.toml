@@ -75,6 +75,7 @@ files = ["juno"]
   "juno.cmd.report",
   "juno.cmd.schedule",
   "juno.cmd.privacy",
+  "juno.cmd.link",
 ]
 "tests.test_launcher" = [
   "juno.cli",

@@ -15,6 +15,7 @@ HEADING_RE = re.compile(r"^## (\d{4}-\d{2}-\d{2} \d{2}:\d{2}) · (\S+) · (.+?) 
 FORMAT_RE = re.compile(r"^- Format:\s*\n+```[^\n]*\n(.*?)\n```", re.M | re.S)
 LINK_RE = re.compile(r"\[\[([^\[\]\n|]+)(?:\|([^\[\]\n]+))?\]\]")
 REASON_RE = re.compile(r"[^\W\d_]{3,}")
+PAREN_REASON_RE = re.compile(r"\s*\(([^()]*)\)")
 HANDOFF_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,90}\.md")
 
 
@@ -248,19 +249,24 @@ def fix_links(card: str) -> tuple[str, int]:
         kept: list[str] = []
         pieces: list[str] = []
         pos = 0
+        is_links = line.startswith("Links:")
         for n, link in enumerate(links):
             end = links[n + 1].start() if n + 1 < len(links) else len(line)
             after = line[link.end() : end]
             pieces.append(line[pos : link.start()])
-            if REASON_RE.search(after):
+            reason = PAREN_REASON_RE.match(after) if is_links else None
+            if reason and REASON_RE.search(reason.group(1)):
+                kept.append(f"{link.group(0)} ({reason.group(1).strip()})")
+                pieces.append(link.group(0))
+            elif not is_links and REASON_RE.search(after):
                 kept.append(link.group(0) + after.rstrip(" ,;"))
                 pieces.append(link.group(0))
             else:
                 unlinked += 1
                 pieces.append(link.group(2) or link.group(1))
             pos = link.end()
-        if line.startswith("Links:"):
-            lines[i] = "Links: " + ", ".join(kept) if kept else None
+        if is_links:
+            lines[i] = "Links: " + (", ".join(kept) if kept else "-")
         else:
             lines[i] = "".join(pieces) + line[pos:]
     return "\n".join(line for line in lines if line is not None), unlinked

@@ -5,8 +5,8 @@ from urllib.parse import urlsplit
 
 from juno import config
 from juno.adapters import gate
-from juno.cmd import gateio, write
-from juno.core import privacy, writegate
+from juno.cmd import gateio, linkargs, write
+from juno.core import linkline, privacy, writegate
 from juno.core.errors import Refused
 from juno.core.ledger import Segment
 
@@ -37,6 +37,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="a page the fact came from (--source web); repeat once for a second source",
     )
     add.add_argument("--evidence", help="needed for --source session")
+    linkargs.add_option(add)
     add.add_argument("text", help="one fact that stays true for a month")
 
 
@@ -62,6 +63,7 @@ def do(cfg: config.Config, args: argparse.Namespace) -> int:
     topic = writegate.check_slug(args.topic, "topic")
     text = gate.scan_line(cfg, args.text, "fact")
     src = provenance(cfg, seg, args)
+    specs, canon = linkargs.prepare(cfg, args.link)
     day = write.today()
     rel = f"knowledge/{topic}.md"
     line = f"- {text} · src: {src} · {day}"
@@ -70,7 +72,12 @@ def do(cfg: config.Config, args: argparse.Namespace) -> int:
     )
     base = f"{head}\n# {topic}\n\n"
     with write.locked(cfg):
-        new, _ = writegate.add_item(gate.read(cfg, rel), line, write.preset(cfg), base=base)
+        old, tail = linkline.detach(gate.read(cfg, rel))
+        new, _ = writegate.add_item(old, line, write.preset(cfg), base=base)
+        if tail:
+            new = linkline.attach(new, tail)
+        if specs:
+            new = linkline.with_links(new, specs, canon)
         res = gate.commit(cfg, seg, "knowledge", rel, new, src)
     return gateio.report(res, "fact written to")
 
