@@ -175,6 +175,10 @@ class Nudges(CardCase):
         self.assertNotIn("money type", self.read("_generated/learned.md"))
 
 
+# Fixture threads are dated 2026-11-01; scan at a fixed instant so they never age past stale_days.
+NOW = 1793620800.0  # 2026-11-02T12:00:00Z
+
+
 class ThreadScan(CardCase):
     def setUp(self) -> None:
         super().setUp()
@@ -246,17 +250,17 @@ class ThreadScan(CardCase):
             "- [billing-api] open billing-api#7 · since 2026-11-01",
             "- [ABC-111111] PR #8 pending · since 2026-11-01",
         )
-        self.assertEqual(self.scan()["queued"], 0)
+        self.assertEqual(self.scan(NOW)["queued"], 0)
 
     def test_no_owner_means_no_gh_call_and_failures_degrade(self) -> None:
         self.threads_cfg(owner="")
         self.threads("- [billing-api] x billing-api#7 · since 2026-11-01")
-        self.assertEqual(self.scan()["queued"], 0)
+        self.assertEqual(self.scan(NOW)["queued"], 0)
         self.assertEqual(self.gh_seen(), [])
         self.threads_cfg()
-        self.assertEqual(self.scan()["queued"], 0)
+        self.assertEqual(self.scan(NOW)["queued"], 0)
         self.threads_cfg(gh="/nonexistent/gh")
-        self.assertEqual(self.scan()["queued"], 0)
+        self.assertEqual(self.scan(NOW)["queued"], 0)
 
     def test_cache_and_call_budget(self) -> None:
         self.gh_states({str(n): {"state": "MERGED", "title": ""} for n in range(1, 9)})
@@ -264,9 +268,9 @@ class ThreadScan(CardCase):
         self.threads(
             *[f"- [billing-api] thing billing-api#{n} · since 2026-11-01" for n in range(1, 9)]
         )
-        out = self.scan()
+        out = self.scan(NOW)
         self.assertEqual((out["gh_calls"], out["queued"]), (2, 2))
-        self.assertEqual(self.scan()["gh_calls"], 2)
+        self.assertEqual(self.scan(NOW)["gh_calls"], 2)
         self.assertEqual(len(queues.pending(self.cfg(), queues.THREADS)), 4)
         self.assertTrue(os.path.isfile(os.path.join(self.sb.state, "cards", "thread-prs.json")))
 
