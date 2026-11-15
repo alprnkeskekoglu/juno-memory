@@ -22,11 +22,11 @@ Juno only acts in interactive sessions. Sessions run with `-p`, from scripts, or
 | `protocol/` | step-by-step procedures for specific tasks: handoffs, rules, vault files, links, ideas, backlog |
 | `rules/` | your rules: `global.md`, `repos/<repo>.md`, `topics/<slug>.md` (topic rules have trigger words) |
 | `handoffs/` | handoff cards, one file per ticket, repo or topic |
-| `decisions/<topic>.md` | the current decision per topic, with superseded lines kept under `## History` |
+| `decisions/<topic>.md` | the current decision of a topic that has no ticket or repo file; a ticket or repo keeps its decisions in the `## Decisions` section of its own file, and superseded lines go to `archive/decisions/` |
 | `knowledge/<slug>.md` | durable facts, each with its source and date |
 | `projects/<repo>.md` | repo profiles: purpose, how to run, gotchas, links |
 | `procedures/<slug>.md` | step sequences that worked |
-| `tasks/<KEY>.md` | one file per ticket, only when Jira prefixes are configured |
+| `tasks/<KEY>.md` | one file per ticket, only when Jira prefixes are configured; holds its decisions and the sections `juno task log` writes |
 | `notes/` | dated situational notes |
 | `self/` | lines about you, from your own words: values, decisions, communication, tensions |
 | `ideas/`, `backlog/` | saved ideas, and your personal work list |
