@@ -72,7 +72,7 @@ def handle(payload: dict[str, Any], cfg: config.Config) -> dict[str, Any] | None
     preset = cfg.get_str("language", "preset")
     cue = CUE_LINE if fold.has_cue(typed, cfg.language_list("correction_cues"), preset) else ""
     cap = cfg.get_int("caps", "hook_output_chars")
-    budget = cap - len(notice) - len(cue) - 4
+    budget = cap - len(cue) - 2 - (len(notice) + 2 if notice else 0)
     view = DiskVault(cfg)
     before = set(seg.packs)
     delivered = delivery.deliver_packs(
