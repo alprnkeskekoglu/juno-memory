@@ -150,13 +150,6 @@ def budget_checks(core_text: str, global_text: str, core_cap: int, global_cap: i
     return out
 
 
-def profile_checks(repos: Sequence[str], profiles: set[str]) -> list[Check]:
-    missing = sorted(r for r in set(repos) if r not in profiles)
-    if missing:
-        return [("WARN", "profiles", "repos in cards without a profile: " + ", ".join(missing))]
-    return [("PASS", "profiles", "every repo in cards has a profile")]
-
-
 def handoff_size_checks(counts: Mapping[str, int]) -> list[Check]:
     over = [(n, c) for n, c in sorted(counts.items()) if c > HANDOFF_CARDS]
     if not over:
