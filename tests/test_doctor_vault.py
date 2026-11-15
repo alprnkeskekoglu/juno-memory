@@ -4,6 +4,7 @@ import time
 import unittest
 
 from juno.adapters import queues
+from juno.core import doctor_fit
 from juno.core import doctor_vault as dv
 from tests.support import timing
 from tests.support.write import SID, WriteCase
@@ -52,6 +53,16 @@ class Pure(unittest.TestCase):
         self.assertIn("legacy ticket rules", details)
         self.assertIn("no triggers", details)
         self.assertTrue(any(level == "FAIL" for level, _, _ in out))
+
+    def test_pack_fit_warns_with_size_and_budget(self) -> None:
+        big = "## Gotchas\n" + "- g\n" * 100
+        glob = "".join(f"- 2026-01-01 · rule {i} · src: unquoted\n" for i in range(50))
+        out = doctor_fit.pack_fit_checks({"a": big, "b": "## Gotchas\n- g\n"}, glob, 100, 100)
+        said = [d for lv, n, d in out if lv == "WARN" and n == "pack fit"]
+        self.assertEqual(len(said), 2)
+        self.assertIn("projects/a.md Gotchas is 399 chars but the pack budget is 100", said[0])
+        self.assertIn("rules/global.md injects", said[1])
+        self.assertEqual(doctor_fit.pack_fit_checks({"b": "## Gotchas\n- g\n"}, "", 100, 100), [])
 
     def test_budget_fail_warn_pass(self) -> None:
         self.assertEqual(dv.budget_checks("x" * 10, "", 100, 100)[0][0], "PASS")

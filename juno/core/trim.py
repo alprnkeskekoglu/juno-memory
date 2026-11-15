@@ -45,9 +45,11 @@ def list_items(lines: list[str]) -> list[str]:
 
 
 def keep_items(items: list[str], room: int) -> list[str]:
+    # Lists grow by appending, so the newest items sit at the end: fill from
+    # the end and return the kept items in their original display order.
     kept: list[str] = []
     used = -1
-    for item in items:
+    for item in reversed(items):
         if used + 1 + len(item) > room:
             if not kept and not item.startswith("- "):
                 cut = cut_words(item, room)
@@ -55,7 +57,7 @@ def keep_items(items: list[str], room: int) -> list[str]:
             break
         kept.append(item)
         used += 1 + len(item)
-    return kept
+    return kept[::-1]
 
 
 def trim_body(body: str, limit: int, source: str) -> str:
