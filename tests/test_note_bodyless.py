@@ -2,6 +2,7 @@ import json
 import os
 import time
 
+from tests.support import legacy_vault as legacy
 from tests.support.write import WriteCase
 
 QUOTE = "this is the first typed prompt"
@@ -90,3 +91,11 @@ class Cleanup(Base):
         before = self.forgotten()
         self.assertIn("no body-less", self.ok("migrate", "--notes"))
         self.assertEqual(self.forgotten(), before)
+
+    def test_legacy_vault_notes_warn_then_migrate_clears_them(self) -> None:
+        legacy.build(self.sb.vault)
+        warn = [d for s, d in self.doctor_rows() if s == "WARN"]
+        self.assertEqual(len(warn), len(legacy.BODYLESS), warn)
+        self.ok("migrate", "--notes")
+        self.assertEqual(self.notes(), ["2026-11-03-full.md"])
+        self.assertEqual({s for s, _ in self.doctor_rows()}, {"PASS"})

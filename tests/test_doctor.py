@@ -45,7 +45,9 @@ class Doctor(SandboxCase):
             handle.write("\n[ab]\ncard_holdout = 0.5\n")
         code, out = self.doctor()
         self.assertEqual(code, 0, out)
-        self.assertIn("WARN card_holdout: [ab] card_holdout is ignored; use juno arm", out)
+        self.assertIn(
+            "WARN card_holdout: [ab] card_holdout is ignored; delete the key from the config", out
+        )
 
     def test_before_init_fails_with_hint(self) -> None:
         code, out = self.doctor()

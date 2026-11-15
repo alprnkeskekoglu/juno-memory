@@ -168,7 +168,7 @@ def do_remove(cfg: config.Config, args: argparse.Namespace) -> int:
 
 def do_move(cfg: config.Config, args: argparse.Namespace) -> int:
     seg = write.guard(cfg)
-    source = rulepolicy.parse_scope(args.source)
+    source = rulepolicy.parse_source(args.source)
     target = rulepolicy.parse_scope(args.target)
     if source.relpath == target.relpath:
         raise Refused("--from and --to are the same scope")

@@ -54,7 +54,9 @@ def check_retired_keys(cfg: config.Config) -> list[Check]:
         return []
     section = data.get("ab")
     if isinstance(section, dict) and "card_holdout" in section:
-        return [("WARN", "card_holdout", "[ab] card_holdout is ignored; use juno arm")]
+        return [
+            ("WARN", "card_holdout", "[ab] card_holdout is ignored; delete the key from the config")
+        ]
     return []
 
 
@@ -79,7 +81,7 @@ def check_stale(cfg: config.Config) -> list[Check]:
             "WARN",
             "stale",
             "[stale] auto_fix is on but core.md Privacy has no stale fixer exception; "
-            "run juno migrate or add the sentence by hand",
+            "add the sentence by hand",
         )
     ]
 
@@ -232,7 +234,8 @@ def check_settings(cfg: config.Config, settings: str) -> list[Check]:
         return [("FAIL", "settings", str(error))]
     out: list[Check] = []
     if manifest is None or "record" not in manifest:
-        out.append(("WARN", "settings merge", "no install manifest; run juno init"))
+        said = "no install manifest (juno init writes it when it first merges the settings)"
+        out.append(("WARN", "settings merge", said))
     else:
         perms = data.get("permissions")
         perms = perms if isinstance(perms, dict) else {}
