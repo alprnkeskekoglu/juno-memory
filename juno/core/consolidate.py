@@ -57,3 +57,36 @@ def split_merge_ref(ref: str) -> tuple[str, list[int]]:
     if len(set(numbers)) != len(numbers):
         raise Refused("--merge lists a line more than once")
     return rel, numbers
+
+
+class Tree:
+    """The tracked paths of one repo at one sha, with their directories and base names."""
+
+    def __init__(self, paths: list[str]) -> None:
+        self.paths = set(paths)
+        self.dirs = {"/".join(p.split("/")[:i]) for p in paths for i in range(1, p.count("/") + 1)}
+        self.names = {p.rsplit("/", 1)[-1] for p in paths}
+
+    def has(self, token: str) -> bool:
+        """A tracked file, a tracked directory, or (no '/') a tracked base name."""
+        if "/" not in token:
+            return token in self.names or token in self.dirs
+        return token in self.paths or token in self.dirs
+
+
+def gone_reason(token: str, tree: Tree, deleted: dict[str, str]) -> str | None:
+    """Why `token` counts as gone, or None. Gone needs both: nothing tracked answers to it, and
+    git history shows a deletion of it (that exact path, a path under that directory, or for a
+    bare name a file of that base name). Without the history proof (config keys, URLs, refs,
+    package names, never-tracked runtime files) it is not listed."""
+    bare = token.strip("/")
+    if not bare or tree.has(bare):
+        return None
+    for path, sha in deleted.items():
+        if "/" not in bare and path.rsplit("/", 1)[-1] == bare:
+            return f"no tracked file named {bare}; {path} was deleted in {sha}"
+        if path == bare:
+            return f"not tracked; deleted in {sha}"
+        if path.startswith(bare + "/"):
+            return f"nothing tracked under {bare}/; {path} was deleted in {sha}"
+    return None

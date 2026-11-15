@@ -89,6 +89,68 @@ class ConsolidateGone(Base):
         self.assertNotIn("4: " + kept, out)
 
 
+SHAPES = [
+    "`app.url`", "`services.billing.api.url`", "`workflows/`", "`state/`", "`dev/`",
+    "`v3/locales`", "`orders/v1/update`", "`origin/develop`", "`feature/ABC-123`",
+    "`vendor/some-package`", "`.d.ts`", "`storage/logs/app.log`",
+]  # fmt: skip
+
+
+class GoneShapes(Base):
+    def setUp(self) -> None:
+        super().setUp()
+        w = self.world = World(self.sb)
+        w.config()
+        h = w.helper
+        w.write(h, "tools/check.sh", "echo ok\n")
+        w.write(h, "src/Detect.php", "<?php\n")
+        w.write(h, "docs/CHANGELOG.md", "# log\n")
+        w.write(h, "CHANGELOG.md", "# old log\n")
+        w.write(h, "scripts/run.sh", "echo run\n")
+        w.write(h, "legacy/a.py", "x = 1\n")
+        w.write(h, "storage/.gitkeep", "")
+        w.git(h, "add", "-A")
+        w.git(h, "commit", "-q", "-m", "add files")
+        for gone in ("CHANGELOG.md", "scripts/run.sh", "legacy/a.py"):
+            w.write(h, gone, None)
+        w.git(h, "add", "-A")
+        w.git(h, "commit", "-q", "-m", "drop some files")
+        w.git(h, "push", "-q", "origin", "develop")
+        w.git(w.app, "fetch", "-q", "origin")
+
+    def gone(self, *tokens: str) -> str:
+        lines = "".join(f"- Note about {t} for the team\n" for t in tokens)
+        self.put("projects/app.md", "# app\n## Gotchas\n" + lines)
+        return self.ok("consolidate", "projects/app.md", "--section", "Gotchas")
+
+    def test_issue_repro_lists_nothing(self) -> None:
+        out = self.gone("`dev/`", "`app.url`", "`tools/check.sh`", "`src/Detect.php`")
+        self.assertNotIn("gone", out)
+
+    def test_no_shape_without_a_tracked_past_is_listed(self) -> None:
+        out = self.gone(*SHAPES)
+        self.assertNotIn("gone", out)
+
+    def test_deleted_path_is_listed_with_repo_ref_and_reason(self) -> None:
+        out = self.gone("`legacy/a.py`", "`src/old.py`")
+        self.assertIn("legacy/a.py", out)
+        self.assertIn("src/old.py", out)
+        self.assertIn("app @ origin/develop", out)
+        self.assertIn("deleted in", out)
+
+    def test_deleted_directory_is_listed_only_when_nothing_tracked_under_it(self) -> None:
+        out = self.gone("`legacy/`", "`src/`", "`tools/`")
+        self.assertIn("gone: legacy/ ", out)
+        self.assertNotIn("gone: src/", out)
+        self.assertNotIn("tools/ (", out)
+
+    def test_bare_name_listed_only_when_no_tracked_file_has_that_base_name(self) -> None:
+        out = self.gone("`run.sh`", "`CHANGELOG.md`", "`check.sh`")
+        self.assertIn("gone: run.sh ", out)
+        self.assertNotIn("CHANGELOG.md (", out)
+        self.assertNotIn("check.sh (", out)
+
+
 class Merge(Base):
     def merge(self, nums: str = "3,11,27") -> list[str]:
         return [
