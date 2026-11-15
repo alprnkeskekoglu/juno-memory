@@ -4,8 +4,8 @@ from collections.abc import Callable, Collection, Iterator
 from typing import Any
 
 from juno import config
-from juno.adapters import fs, store
-from juno.core import fold, inject, links
+from juno.adapters import fs, repos, store
+from juno.core import decisionmove, fold, inject, links
 
 CACHE_FILE = "links.json"
 MAX_READ_BYTES = 1 << 20
@@ -87,7 +87,45 @@ def anchored(
         return None
     files = link_map(cfg)
     anchor = links.anchor_of(kind, key, fold.safe_name(key))
+    files = virtual_move(cfg, files, retired)
     return (anchor, files) if anchor in files else None
+
+
+def pending_move(cfg: config.Config, files: dict[str, Any], retired: Collection[str]) -> bool:
+    """Cheap precheck on the link map alone: does any visible `decisions/<x>.md` have an owner?"""
+    legacy = [
+        rel
+        for rel, entry in files.items()
+        if rel.startswith("decisions/") and rel.count("/") == 1 and not entry["hidden"]
+    ]
+    if not legacy:
+        return False
+    profiles = [
+        rel[9:-3]
+        for rel, entry in files.items()
+        if rel.startswith("projects/") and rel.count("/") == 1 and not entry["hidden"]
+    ]
+    tickets = repos.tickets_from(cfg)
+    return any(
+        rel not in retired and decisionmove.owner_of(rel, profiles, tickets) for rel in legacy
+    )
+
+
+def virtual_move(
+    cfg: config.Config, files: dict[str, Any], retired: Collection[str]
+) -> dict[str, Any]:
+    """The link graph as `juno migrate --decisions` will leave it, so a pack's Linked block reads
+    the same before and after: each planned owner gets the links of its post-move text, the legacy
+    file leaves the graph (its History goes to `archive/`, which the walk skips)."""
+    if not pending_move(cfg, files, retired):
+        return files
+    from juno.adapters import decisionmoveio
+
+    out = dict(files)
+    for move in decisionmoveio.plan_for(cfg).moves:
+        out.pop(move.source, None)
+        out[move.owner.rel] = links.parse_file(move.owner.rel, move.owner_text, None)
+    return out
 
 
 def linked_titles(
