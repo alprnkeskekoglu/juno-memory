@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from juno import config
-from juno.core import fold, vaultfmt
+from juno.core import fold, taskfile, vaultfmt
 from juno.core.inject import CONTEXT_LABEL, RULES_LABEL, neutralize, trim
 from juno.core.trim import trim_body, trim_pack
 from juno.core.view import VaultView
@@ -75,7 +75,7 @@ def pack_sources(kind: str, key: str) -> dict[str, str]:
         return {
             "rules": f"rules/{key}.md",
             "doc": f"tasks/{key}.md",
-            "decisions": f"decisions/{key}.md",
+            "decisions": f"decisions/{taskfile.canonical_topic(key)}.md",
         }
     name = fold.safe_name(key)
     return {
@@ -174,7 +174,10 @@ def render_pack(
     )
     head, tail = context_sections(kind, caps.purpose)
     doc_title = src["doc"] + view.stale_mark(src["doc"])
-    blocks: list[tuple[str, str]] = [(f"Decisions · {src['decisions']}", current)]
+    legacy = vaultfmt.section(doc, "Decisions") if kind == "ticket" else ""
+    decisions_title = src["decisions"] if current or not legacy else src["doc"]
+    current = "\n".join(x for x in (current, legacy) if x)
+    blocks: list[tuple[str, str]] = [(f"Decisions · {decisions_title}", current)]
     blocks += [(f"{n} · {doc_title}", vaultfmt.section(doc, n)) for n in head]
     mentioned = [
         c for c in cards if c["body"] not in shown and vaultfmt.card_mentions(c, kind, key)

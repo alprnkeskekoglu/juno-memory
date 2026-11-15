@@ -257,6 +257,18 @@ class Decision(Base):
         )
 
 
+class TicketDecision(Base):
+    def test_ticket_topic_is_written_under_the_uppercase_key(self) -> None:
+        self.ok("decision", "--topic", "abc-1", "--evidence", QUOTE, "Use Postgres for storage")
+        self.ok("decision", "--topic", "ABC-1", "--evidence", QUOTE, "Use queues for retries")
+        self.assertIn("ABC-1.md", os.listdir(os.path.join(self.sb.vault, "decisions")))
+        self.assertNotIn("abc-1.md", os.listdir(os.path.join(self.sb.vault, "decisions")))
+        text = self.get("decisions/ABC-1.md")
+        self.assertIn("topic: ABC-1", text)
+        self.assertIn("Use Postgres", text)
+        self.assertIn("Use queues", text)
+
+
 class Project(Base):
     def test_sections(self) -> None:
         self.touch_repo("app")

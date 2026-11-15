@@ -61,6 +61,10 @@ class TaskSet(TaskCase):
         self.assertEqual(code, 0, out)
         self.assertEqual(self.fields("ABC-100")["url"], "https://jira.example.test/browse/ABC-100")
 
+    def test_new_file_has_no_decisions_section(self) -> None:
+        self.juno("task", "set", "ABC-100", "--title", "T", "--status", "open")
+        self.assertNotIn("## Decisions", self.read("tasks/ABC-100.md"))
+
     def test_explicit_url_and_repos(self) -> None:
         code, out = self.juno(
             "task", "set", "ABC-100", "--title", "T", "--status", "open",

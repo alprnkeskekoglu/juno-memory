@@ -11,9 +11,14 @@ PLAIN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._/()+,-]*$")
 ORDER = ("jira", "title", "status", "url", "repos", "slack_checked", "created", "updated")
 DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 QUOTED = ("title",)
-NEW_BODY = "## Decisions\n\n## Notes"
+NEW_BODY = "## Notes"
+TICKET_TOPIC_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]{1,9}-[0-9]{1,8}$")
 
 Updates = dict[str, str | list[str]]
+
+
+def canonical_topic(topic: str) -> str:
+    return topic.upper() if TICKET_TOPIC_RE.match(topic) else topic
 
 
 def clean_title(raw: str, prefixes: Sequence[str] | None = None) -> tuple[str, str | None]:

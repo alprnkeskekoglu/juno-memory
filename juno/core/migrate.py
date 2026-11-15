@@ -1,7 +1,9 @@
 import re
 from collections.abc import Callable, Mapping
 
-CODE_SCHEMA_VERSION = 3
+from juno.core import vaultfmt, writegate
+
+CODE_SCHEMA_VERSION = 4
 
 Step = Callable[[str], None]
 SCHEMA_RE = re.compile(r"^schema_version\s*=\s*(\d+)\s*$", re.M)
@@ -75,3 +77,39 @@ def add_stale_exception(core_text: str) -> str:
 
 def replace_exact(text: str, old: str, new: str) -> str:
     return text.replace(old, new, 1)
+
+
+def take_task_decisions(text: str) -> tuple[list[str], str]:
+    lines = text.split("\n")
+    start = next((i for i, x in enumerate(lines) if re.match(r"^##\s+Decisions\s*$", x)), None)
+    if start is None:
+        return [], text
+    end = next(
+        (i for i in range(start + 1, len(lines)) if re.match(r"^#{1,2}\s", lines[i])), len(lines)
+    )
+    found = [x.strip() for x in lines[start + 1 : end] if x.strip()]
+    found = [x if x.startswith("- ") else "- " + x for x in found]
+    rest = lines[:start] + lines[end:]
+    while 0 < start < len(rest) and not rest[start - 1].strip() and not rest[start].strip():
+        del rest[start]
+    return found, "\n".join(rest)
+
+
+def new_decision_file(topic: str, day: str) -> str:
+    head = writegate.frontmatter({"topic": topic, "updated": day, "valid_from": day})
+    return f"{head}\n## Current\n\n## History\n"
+
+
+def add_decisions(text: str, lines: list[str], section: str) -> str:
+    for line in lines:
+        text, _ = writegate.add_item(text, line, "none", section=section)
+    return text
+
+
+def merge_decision_files(into: str, other: str) -> str:
+    _, body = vaultfmt.parse_frontmatter(other)
+    for section in ("Current", "History"):
+        found = vaultfmt.section(body, section).split("\n")
+        items = [x.strip() for x in found if x.startswith("- ")]
+        into = add_decisions(into, items, section)
+    return into
