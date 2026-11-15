@@ -48,14 +48,18 @@ def ticket_decisions(vault: str) -> None:
             continue
         old = os.path.join(folder, name)
         text = (fs.read_bytes(old) or b"").decode("utf-8")
-        os.remove(old)
         target = os.path.join(folder, topic + ".md")
-        have = fs.read_bytes(target)
+        # On a case-insensitive filesystem the target is the same file: rename in place.
+        same = os.path.exists(target) and os.path.samefile(old, target)
+        have = None if same else fs.read_bytes(target)
         if have is None:
             new = writegate.set_field(text, "topic", topic)
+            fs.atomic_write(old, new.encode("utf-8"))
+            os.rename(old, target)
         else:
             new = migrate.merge_decision_files(have.decode("utf-8"), text)
-        fs.atomic_write(target, new.encode("utf-8"))
+            fs.atomic_write(target, new.encode("utf-8"))
+            os.remove(old)
     tasks = os.path.join(vault, "tasks")
     for name in sorted(os.listdir(tasks)) if os.path.isdir(tasks) else []:
         path = os.path.join(tasks, name)
