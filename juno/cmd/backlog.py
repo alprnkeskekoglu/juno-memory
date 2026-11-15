@@ -1,4 +1,5 @@
 import argparse
+import contextlib
 import os
 import time
 from collections.abc import Mapping
@@ -115,21 +116,30 @@ def body_roots(cfg: config.Config) -> list[str]:
     return [os.path.realpath("/tmp"), os.path.realpath(cfg.state)]
 
 
-def read_body_text(
-    cfg: config.Config, raw: str, flag: str = "--body-file", limit: int = bl.BODY_BYTES
-) -> str:
+def body_path(cfg: config.Config, raw: str, flag: str = "--body-file") -> str:
     path = os.path.abspath(raw)
     if os.path.islink(path) or not os.path.isfile(path):
         raise Refused(f"{flag} {raw} is not a regular file")
     real = os.path.realpath(path)
     if store.in_vault(cfg, real) or not any(store.is_within(real, r) for r in body_roots(cfg)):
         raise Refused(f"{flag} must live under /tmp or the Juno state dir")
+    return real
+
+
+def read_body_text(
+    cfg: config.Config, raw: str, flag: str = "--body-file", limit: int = bl.BODY_BYTES
+) -> str:
+    """Read an input file and leave it; consume_body_file removes it after the write."""
+    real = body_path(cfg, raw, flag)
     if os.path.getsize(real) > limit:
-        os.unlink(real)
         raise Refused(f"{flag} is over {limit} bytes")
-    text = store.read_text(real)
-    os.unlink(real)
-    return text
+    return store.read_text(real)
+
+
+def consume_body_file(cfg: config.Config, raw: str, flag: str = "--body-file") -> None:
+    """Delete an input file after the command succeeded; a refused command leaves it."""
+    with contextlib.suppress(Refused, OSError):
+        os.unlink(body_path(cfg, raw, flag))
 
 
 def verified_quote(cfg: config.Config, seg: Segment, raw: str) -> tuple[str, str]:
@@ -201,6 +211,7 @@ def do_add(cfg: config.Config, args: argparse.Namespace) -> int:
         fs.atomic_write(path, bl.render_item(fields, sections, entry).encode("utf-8"))
         keys = fields["tickets"]
         linked = [k for k in keys if link_ticket(cfg, k, slug)] if isinstance(keys, list) else []
+    consume_body_file(cfg, args.body_file)
     record(cfg, seg, "backlog_added", slug)
     print(f"Juno: backlog item added: {rel(cfg, path)}{linked_note(linked)}")
     return 0
@@ -291,6 +302,7 @@ def do_add_to(cfg: config.Config, args: argparse.Namespace) -> int:
         text = bl.set_field(bl.append_section(text, heading, lines), "updated", write.today())
         entry = bl.log_entry(write.today(), f"{args.section} updated")
         write_item(cfg, path, bl.append_line(text, "Log", entry))
+    consume_body_file(cfg, args.body_file)
     record(cfg, seg, "backlog_changed", slug)
     closed = f" (note: the item is {status})" if status in bl.CLOSED else ""
     print(f"Juno: {len(lines)} line(s) added to ## {heading} of {rel(cfg, path)}{closed}")
@@ -318,6 +330,8 @@ def do_edit(cfg: config.Config, args: argparse.Namespace) -> int:
         )
         entry = bl.log_entry(write.today(), f"{args.section} line {args.line} {verb}")
         write_item(cfg, path, bl.append_line(text, "Log", entry))
+    if args.replace_file:
+        consume_body_file(cfg, args.replace_file)
     record(cfg, seg, "backlog_changed", slug)
     print(f"Juno: ## {heading} line {args.line} {verb} in {rel(cfg, path)}")
     return 0

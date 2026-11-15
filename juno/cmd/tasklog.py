@@ -122,6 +122,8 @@ def run_log(cfg: config.Config, key: str, args: argparse.Namespace) -> int:
     except OSError as error:
         say(f"Juno: cannot write {taskio.rel(key)}: {error}")
         return 2
+    if args.batch_file:
+        backlog.consume_body_file(cfg, args.batch_file, "--batch-file")
     if not res.changed:
         say(f"Juno: task {key}: {len(rows)} line(s) unchanged in {rel}; nothing written")
         return 0

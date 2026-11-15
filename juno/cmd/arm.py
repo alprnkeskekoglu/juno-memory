@@ -140,6 +140,7 @@ def do_start(cfg: config.Config, args: argparse.Namespace) -> int:
         }
         save(cfg, data)
         log(cfg, "start", args.name, sha256=data["sha256"])
+    backlog.consume_body_file(cfg, args.prereg)
     print(f"Juno: arm {args.name} started at fraction {prereg['assignment']['fraction']}")
     return 0
 
