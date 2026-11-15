@@ -6,9 +6,10 @@ import time
 from collections.abc import Callable
 
 from juno import config
-from juno.adapters import fs, repos, store
+from juno.adapters import fs, privacyack, repos, store
 from juno.adapters.vaultview import SKIP_DIRS, STALE_FILE, DiskVault
 from juno.core import decisionmove, owners, vaultfmt
+from juno.core import privacyack as ack_core
 
 
 def vault_path(cfg: config.Config, rel: str) -> str:
@@ -114,4 +115,45 @@ def apply(cfg: config.Config, plan: decisionmove.Plan, say: Callable[[str], None
             resign_stale(cfg, move.owner.rel)
         store.backup(cfg, source)
         os.remove(source)
+    return 0
+
+
+def ack_targets(cfg: config.Config, plan: decisionmove.Plan) -> dict[str, tuple[str, str]]:
+    """Where each acknowledged `decisions/<x>.md` went or goes: the planned moves (their owner text
+    after the move) and the orphans, whose file is gone and whose owner exists."""
+    targets = {m.source: (m.owner.rel, m.owner_text) for m in plan.moves}
+    view = DiskVault(cfg)
+    profiles = [n[:-3] for n in view.names("projects") if not view.hidden(f"projects/{n}")]
+    tickets = repos.tickets_from(cfg)
+    for rec in privacyack.read(cfg):
+        rel = str(rec["file"])
+        if rel in targets or not rel.startswith("decisions/") or view.exists(rel):
+            continue
+        found = decisionmove.owner_of(rel, profiles, tickets)
+        if found is not None and view.exists(found.rel):
+            targets[rel] = (found.rel, view.read(found.rel))
+    return targets
+
+
+def carry_acks(
+    cfg: config.Config, plan: decisionmove.Plan, dry_run: bool, say: Callable[[str], None]
+) -> int:
+    """Re-home the privacy acknowledgements of moved decision files (backup, atomic write)."""
+    path = store.vault_file(cfg, ack_core.ACK_FILE)
+    if path is None or not os.path.isfile(path):
+        return 0
+    old = store.read_text(path)
+    new, moved, stayed = ack_core.rehome(old, ack_targets(cfg, plan), cfg.privacy_prefixes())
+    if moved:
+        verb = "would move" if dry_run else "moved"
+        say(f"decisions: {moved} privacy acknowledgements {verb} with their lines")
+        if not dry_run:
+            store.backup(cfg, path)
+            store.write_text(path, new)
+            if fs.read_bytes(path) != new.encode("utf-8"):
+                say(f"decisions: {ack_core.ACK_FILE} did not read back as written")
+                return 1
+    if stayed:
+        why = "their line is not in the owner file"
+        say(f"decisions: {stayed} privacy acknowledgements stay ({why})")
     return 0

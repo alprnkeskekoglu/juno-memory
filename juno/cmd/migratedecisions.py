@@ -14,6 +14,8 @@ def move_decisions(cfg: config.Config, dry_run: bool) -> int:
         say(f"decisions: {verb} {move.source} to {move.owner.rel} ({move.lines} lines{extra})")
     for skip in plan.skips:
         say(f"decisions: {skip.source} stays: {skip.reason}")
+    if decisionmoveio.carry_acks(cfg, plan, dry_run, say):
+        return 1
     if not plan.moves:
         say("decisions: nothing to move")
         return 0
