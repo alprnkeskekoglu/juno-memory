@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from juno import config
 from juno.adapters import gate
 from juno.cmd import gateio, write
-from juno.core import writegate
+from juno.core import taskfile, writegate
 from juno.core.errors import Refused
 
 CURRENT, HISTORY = "Current", "History"
@@ -42,7 +42,9 @@ def supersede(text: str, number: int, day: str, preset: str) -> str:
 
 def do(cfg: config.Config, args: argparse.Namespace) -> int:
     seg = write.guard(cfg)
-    topic = writegate.check_slug(args.topic, "topic")
+    topic = taskfile.canonical_topic(args.topic)
+    if not taskfile.TICKET_TOPIC_RE.match(topic):
+        topic = writegate.check_slug(topic, "topic")
     text = gate.scan_line(cfg, args.text, "decision")
     pid = gate.anchor(cfg, seg, args.evidence, user_only=True).split()[-1]
     day = write.today()

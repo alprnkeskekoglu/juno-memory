@@ -25,10 +25,24 @@ class Core(unittest.TestCase):
         with self.assertRaises(ValueError):
             migrate.plan(1, 4, steps)
 
-    def test_code_schema_is_three_with_two_steps(self) -> None:
-        self.assertEqual(migrate.CODE_SCHEMA_VERSION, 3)
-        self.assertEqual(sorted(migratesteps.STEPS), [1, 2])
-        self.assertEqual(migrate.plan(1, 3, migratesteps.STEPS), [1, 2])
+    def test_code_schema_is_four_with_three_steps(self) -> None:
+        self.assertEqual(migrate.CODE_SCHEMA_VERSION, 4)
+        self.assertEqual(sorted(migratesteps.STEPS), [1, 2, 3])
+        self.assertEqual(migrate.plan(1, 4, migratesteps.STEPS), [1, 2, 3])
+
+    def test_decision_files_merge_without_duplicates(self) -> None:
+        head = "---\ntopic: ABC-6\nupdated: 2026-05-03\nvalid_from: 2026-05-03\n---\n"
+        upper = head + "## Current\n\n- Upper six (user p2, 2026-05-04)\n\n## History\n"
+        lower = (
+            head + "## Current\n\n- Lower six (user p1, 2026-05-03)\n"
+            "- Upper six (user p2, 2026-05-04)\n\n"
+            "## History\n- Old six (user p1, 2026-04-01)\n"
+        )
+        merged = migrate.merge_decision_files(upper, lower)
+        for text in ("Lower six", "Upper six", "Old six"):
+            self.assertEqual(merged.count(text), 1, text)
+        self.assertIn("Old six", merged.split("## History")[1])
+        self.assertEqual(migrate.merge_decision_files(merged, lower), merged)
 
     def test_stale_exception_is_added_once_and_only_to_the_old_sentence(self) -> None:
         old = open(os.path.join(REPO, "vault-template", "core.md"), encoding="utf-8").read()
@@ -123,7 +137,7 @@ class Command(SandboxCase):
             handle.write(text.replace(migrate.PRIVACY_NEW, migrate.PRIVACY_OLD))
         self.set_schema(1)
         self.assertEqual(self.sb.cli("migrate")[0], 0)
-        self.assertEqual(self.schema(), 3)
+        self.assertEqual(self.schema(), 4)
         with open(core, encoding="utf-8") as handle:
             self.assertEqual(handle.read(), text)
         self.assertEqual(self.sb.cli("migrate")[0], 0)
@@ -154,12 +168,12 @@ class Command(SandboxCase):
     def test_step_two_rewrites_quote_rule_and_cap_sentence(self) -> None:
         rules, core = self.make_schema_two()
         self.assertEqual(self.sb.cli("migrate")[0], 0)
-        self.assertEqual(self.schema(), 3)
+        self.assertEqual(self.schema(), 4)
         self.assertEqual(self.read(os.path.join("protocol", "rules.md")), rules)
         self.assertEqual(self.read("core.md"), core)
         backups = os.listdir(os.path.join(self.sb.state, "backups"))
-        self.assertEqual([b for b in backups if b.endswith("-v2")], backups)
-        old = os.path.join(self.sb.state, "backups", backups[0], "protocol", "rules.md")
+        first = next(b for b in backups if b.endswith("-v2"))
+        old = os.path.join(self.sb.state, "backups", first, "protocol", "rules.md")
         with open(old, encoding="utf-8") as handle:
             self.assertIn(migrate.RULES_QUOTE_OLD, handle.read())
 
@@ -182,9 +196,74 @@ class Command(SandboxCase):
         self.write(os.path.join("protocol", "rules.md"), rules)
         self.write("core.md", core)
         self.assertEqual(self.sb.cli("migrate")[0], 0)
-        self.assertEqual(self.schema(), 3)
+        self.assertEqual(self.schema(), 4)
         self.assertEqual(self.read(os.path.join("protocol", "rules.md")), rules)
         self.assertEqual(self.read("core.md"), core)
+
+    def make_schema_three(self) -> None:
+        self.set_schema(3)
+
+    def test_step_three_moves_task_decisions_into_the_decision_file(self) -> None:
+        self.make_schema_three()
+        self.write(
+            "tasks/ABC-1.md",
+            "---\ntitle: T\n---\n\n## Decisions\n"
+            "- Use v2 API (user pid00001, 2026-05-01)\n"
+            "- Retry three times (user pid00002, 2026-05-02)\n\n## Notes\n- keep\n",
+        )
+        self.write(
+            "decisions/ABC-1.md",
+            "---\ntopic: ABC-1\nupdated: 2026-05-03\nvalid_from: 2026-05-03\n---\n"
+            "## Current\n\n- Use v2 API (user pid00009, 2026-05-03)\n\n## History\n",
+        )
+        self.write(
+            "tasks/ABC-2.md",
+            "---\ntitle: U\n---\n## Decisions\n- Only here (user pid1, 2026-05-04)\n",
+        )
+        self.assertEqual(self.sb.cli("migrate")[0], 0)
+        self.assertEqual(self.schema(), 4)
+        task = self.read("tasks/ABC-1.md")
+        self.assertNotIn("Decisions", task)
+        self.assertIn("## Notes\n- keep", task)
+        current = self.read("decisions/ABC-1.md")
+        self.assertEqual(current.count("Use v2 API"), 1)
+        self.assertIn("- Retry three times (user pid00002, 2026-05-02)", current)
+        two = self.read("decisions/ABC-2.md")
+        self.assertIn("topic: ABC-2", two)
+        self.assertIn("## Current\n\n- Only here (user pid1, 2026-05-04)", two)
+        self.assertNotIn("Decisions", self.read("tasks/ABC-2.md"))
+        before = (task, current, two)
+        migratesteps.ticket_decisions(self.sb.vault)
+        self.assertEqual(
+            before,
+            (
+                self.read("tasks/ABC-1.md"),
+                self.read("decisions/ABC-1.md"),
+                self.read("decisions/ABC-2.md"),
+            ),
+        )
+
+    def test_step_three_renames_lowercase_ticket_decision_files(self) -> None:
+        self.make_schema_three()
+        head = "---\ntopic: %s\nupdated: 2026-05-03\nvalid_from: 2026-05-03\n---\n"
+        self.write(
+            "decisions/abc-5.md",
+            head % "abc-5" + "## Current\n\n- Lower only (user p1, 2026-05-03)\n\n## History\n",
+        )
+        self.write(
+            "decisions/storage.md",
+            head % "storage" + "## Current\n\n- keep (user p1, 2026-05-03)\n",
+        )
+        self.assertEqual(self.sb.cli("migrate")[0], 0)
+        names = os.listdir(os.path.join(self.sb.vault, "decisions"))
+        self.assertIn("ABC-5.md", names)
+        self.assertNotIn("abc-5.md", names)
+        self.assertIn("storage.md", names)
+        five = self.read("decisions/ABC-5.md")
+        self.assertIn("topic: ABC-5", five)
+        self.assertIn("Lower only", five)
+        self.assertEqual(self.sb.cli("migrate")[0], 0)
+        self.assertEqual(self.read("decisions/ABC-5.md"), five)
 
     def test_newer_vault_refused(self) -> None:
         with open(self.toml, "w", encoding="utf-8") as handle:

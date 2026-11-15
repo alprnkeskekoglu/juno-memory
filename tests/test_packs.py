@@ -168,6 +168,19 @@ class RenderPack(unittest.TestCase):
         for expected in ("note one", "ticket decided", "legacy ticket rule"):
             self.assertIn(expected, text)
 
+    def test_ticket_pack_reads_decisions_under_the_canonical_key(self) -> None:
+        view = vault(decisions__ABC_1="## Current\n- ticket decided\n")
+        self.assertEqual(packs.pack_sources("ticket", "abc-1")["decisions"], "decisions/ABC-1.md")
+        self.assertIn("ticket decided", packs.render_pack(view, Caps(), "ticket", "abc-1", []))
+
+    def test_ticket_pack_reads_legacy_task_decisions(self) -> None:
+        view = vault(
+            tasks__ABC_1="---\ntitle: T\n---\n## Decisions\n- old one\n\n## Notes\n- n\n"
+        )
+        text = packs.render_pack(view, Caps(), "ticket", "ABC-1", [])
+        self.assertIn("old one", text)
+        self.assertIn("[Decisions · tasks/ABC-1.md]", text)
+
     def test_pointer_names_existing_files(self) -> None:
         text = packs.pack_pointer(vault(), "repo", "a")
         self.assertIn("projects/a.md", text)
