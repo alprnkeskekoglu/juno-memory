@@ -39,11 +39,12 @@ GIT_CONTEXT_RE = re.compile(
     r"|\(\d{7}\)",
     re.I,
 )
-# 12-digit AWS account id: after ECR/AWS/`aws account`, or right before a region (`eu-west-1`).
+# 12-digit AWS account id: after ECR/AWS/`aws account`, or right before a region (`eu-west-1`,
+# also after `(` or `,`).
 # The bare word `account` does not exempt (bank accounts).
 AWS_ACCOUNT_RE = re.compile(
     r"\b(?:ECR|AWS|aws account(?: id)?)\s*[:#]?\s*\d{12}\b"
-    r"|(?<![\w.])\d{12}\s+(?:us|eu|ap|sa|ca|me|af|il|mx)-[a-z]+-\d\b",
+    r"|(?<![\w.])\d{12}(?:\s+|\s*[(\[,]\s*)(?:us|eu|ap|sa|ca|me|af|il|mx)-[a-z]+-\d\b",
     re.I,
 )
 # A plausible date glued to a hyphenated/path name: `home-cleanup-20260101`.
