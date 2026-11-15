@@ -3,7 +3,7 @@ from collections.abc import Callable, Mapping
 
 from juno.core import vaultfmt, writegate
 
-CODE_SCHEMA_VERSION = 5
+CODE_SCHEMA_VERSION = 6
 
 Step = Callable[[str], None]
 SCHEMA_RE = re.compile(r"^schema_version\s*=\s*(\d+)\s*$", re.M)

@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from unittest import mock
 
 from tests import test_protocolsync as protocolsync
-from tests.support import REPO, fakeclaude
+from tests.support import REPO, decision_vault, fakeclaude
 from tests.support import legacy_vault as legacy
 from tests.support.write import WriteCase
 
@@ -30,6 +30,7 @@ SCANNED = (
     "juno/cmd/doctor_vault.py",
     "juno/core/doctor_vault.py",
     "juno/core/doctor_fit.py",
+    "juno/core/doctor_decisions.py",
     "juno/core/doctor_links.py",
     "juno/core/doctor_profiles.py",
     "juno/core/cardcopies.py",
@@ -119,6 +120,11 @@ def duplicates(case: WriteCase) -> None:
 def many_cards(case: WriteCase) -> None:
     body = "".join(legacy.card(f"{i:08x}", "app") for i in range(25))
     case.put("handoffs/app.md", legacy.KEEP + body)
+
+
+def owned_decisions(case: WriteCase) -> None:
+    case.set_config('[jira]\nprefixes = ["ABC"]')
+    decision_vault.build(case.sb.vault)
 
 
 def ticket_rules(case: WriteCase) -> None:
@@ -248,6 +254,14 @@ ROWS = (
     ),
     Row("compact", "juno compact", "handoffs", "juno compact", ("compact",), many_cards),
     Row("digest", "juno digest", "learned", "not built yet", ("digest",), drifted_digest),
+    Row(
+        "decisions",
+        "juno migrate --decisions",
+        "decisions",
+        "juno migrate --decisions",
+        ("migrate", "--decisions"),
+        owned_decisions,
+    ),
     # notes, rules, pitfalls
     Row(
         "notes",

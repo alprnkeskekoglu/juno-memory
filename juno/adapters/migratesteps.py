@@ -1,7 +1,8 @@
 import os
 import time
 
-from juno.adapters import fs
+from juno import config
+from juno.adapters import decisionmoveio, fs
 from juno.core import migrate, taskfile, writegate
 
 
@@ -94,3 +95,13 @@ STEPS: dict[int, migrate.Step] = {
     3: ticket_decisions,
     4: card_link_reasons,
 }
+
+
+def steps_for(cfg: config.Config) -> dict[int, migrate.Step]:
+    """STEPS plus the steps that need the configuration (routing by `[jira] prefixes`)."""
+
+    def owner_decisions(vault: str) -> None:
+        if decisionmoveio.apply(cfg, decisionmoveio.plan_for(cfg), lambda _: None):
+            raise RuntimeError("decisions: a file did not read back as written; run juno migrate")
+
+    return {**STEPS, 5: owner_decisions}

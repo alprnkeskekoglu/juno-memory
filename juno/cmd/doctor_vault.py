@@ -8,6 +8,7 @@ from typing import Any
 from juno import config
 from juno.adapters import (
     cardjob,
+    decisionmoveio,
     learned,
     ledgerio,
     privacyack,
@@ -21,7 +22,16 @@ from juno.adapters import status as status_io
 from juno.adapters.vaultview import DiskVault, scan_metas
 from juno.cmd import backlog as backlog_cmd
 from juno.core import backlog as bl
-from juno.core import doctor_fit, doctor_links, doctor_profiles, notebody, retire, selfmodel, topics
+from juno.core import (
+    doctor_decisions,
+    doctor_fit,
+    doctor_links,
+    doctor_profiles,
+    notebody,
+    retire,
+    selfmodel,
+    topics,
+)
 from juno.core import doctor_vault as dv
 from juno.core import privacyack as ack_core
 from juno.core.doctor_vault import Check
@@ -110,6 +120,7 @@ def vault_checks(cfg: config.Config) -> list[Check]:
     out += dv.handoff_size_checks(sizes)
     out += dv.learned_check(learned_stale(cfg))
     out += content_checks(cfg, view)
+    out += doctor_decisions.decision_checks(decisionmoveio.plan_for(cfg))
     return out
 
 
