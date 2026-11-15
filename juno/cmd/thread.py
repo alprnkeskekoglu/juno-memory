@@ -170,6 +170,18 @@ def close_line(cfg: config.Config, args: argparse.Namespace) -> int:
         )
     ledgerio.record(cfg, seg, {"ev": "thread_closed", "count": 1, "id": res.id})
     print(f"Juno: thread closed: {gone}")
+    with queues.locked(cfg, queues.THREADS):
+        queue = queues.read(cfg, queues.THREADS)
+        settled = [
+            i
+            for i in queue
+            if i.get("status") == "pending" and str(i.get("line") or "") == gone.rstrip()
+        ]
+        if settled:
+            queues.mark(settled, "closed")
+            queues.write(cfg, queues.THREADS, queue)
+    for item in settled:
+        print(f"Juno: thread {item['id']} closed: {item.get('line')}")
     return gateio.report(res, "thread removed from")
 
 

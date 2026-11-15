@@ -255,6 +255,22 @@ class DirectClose(WriteCase):
         self.assertEqual(code, 0, out)
         self.assertEqual(self.get("threads.md"), THREADS)
 
+    def test_settles_the_pending_candidate_of_that_line(self) -> None:
+        self.seed_queue(
+            queues.THREADS,
+            [
+                {"id": "t111111", "line": LINE, "signals": ["x"], "t": 1.0, "status": "pending"},
+                {"id": "t222222", "line": LINE2, "signals": ["x"], "t": 1.0, "status": "pending"},
+            ],
+        )
+        code, out = self.close("--evidence", self.QUOTE)
+        self.assertEqual(code, 0, out)
+        self.assertIn("t111111", out)
+        self.assertEqual(
+            self.queue_status(queues.THREADS), {"t111111": "closed", "t222222": "pending"}
+        )
+        self.assertNotIn("t111111", self.juno("thread", "pending")[1])
+
     def test_refuses_without_a_verbatim_quote(self) -> None:
         for evidence in ("close it please, this was never typed", "too short"):
             code, out = self.close("--evidence", evidence)
