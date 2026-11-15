@@ -113,6 +113,57 @@ def share_room(sizes: list[int], room: int) -> dict[int, int]:
     return shares
 
 
+def prioritized(sizes: list[int], room: int, priority: list[int]) -> dict[int, int]:
+    """Shares for `trim_pack(priority=...)`: the first section keeps up to half of the room, a third
+    of the rest goes to the sections not in `priority` (sharing by size), and the remainder to the
+    `priority` sections in turn, each taking up to 3/4 of what is left."""
+    first = 0 if 0 in priority else min(sizes[0], room // 2)
+    rest = [i for i in range(1, len(sizes)) if i not in priority]
+    left = room - first
+    held = share_room([sizes[i] for i in rest], left // 3)
+    left -= sum(held.values())
+    shares = {0: first}
+    for n, i in enumerate(priority):
+        shares[i] = min(sizes[i], left if n == len(priority) - 1 else -(-left * 3 // 4))
+        left -= shares[i]
+    final = share_room([sizes[i] for i in rest], left + sum(held.values()))
+    shares.update({rest[n]: share for n, share in final.items()})
+    return shares
+
+
+def drop_cut(
+    sections: list[tuple[str, str]], room: int, priority: list[int], ranking: Ranking | None
+) -> list[str]:
+    """Parts for `trim_pack(priority=...)`. A section whose share cannot hold its truncation
+    marker is dropped, the least wanted first, and its room goes back to the others."""
+    dropped: list[int] = []
+    while True:
+        live = [i for i in range(len(sections)) if i not in dropped]
+        gain = sum(len(sections[i][0]) + 4 for i in dropped)
+        got = prioritized(
+            [len(sections[i][1]) for i in live],
+            room + gain,
+            [live.index(i) for i in priority if i in live],
+        )
+        shares = {live[n]: share for n, share in got.items()}
+        bad = [
+            i
+            for i in live
+            if i
+            and shares[i] < len(sections[i][1])
+            and shares[i]
+            < len(TRIM_MARKER.format(len(sections[i][1]), section_source(sections[i][0])))
+        ]
+        if not bad:
+            break
+        dropped.append(max(bad, key=lambda i: priority.index(i) if i in priority else -1))
+    return [
+        f"[{title}]\n{trim_body(body, shares[i], section_source(title), ranking)}"
+        for i, (title, body) in enumerate(sections)
+        if i not in dropped
+    ]
+
+
 def trim_pack(
     head: list[str],
     sections: list[tuple[str, str]],
@@ -120,14 +171,22 @@ def trim_pack(
     full: str,
     ranking: Ranking | None = None,
     reserve_first: bool = False,
+    priority: list[int] | None = None,
 ) -> str:
     """Trim sections to the budget. With `reserve_first` the first section (Decisions) is kept in
-    full before the others share the rest, if it takes at most half of the room."""
+    full before the others share the rest, if it takes at most half of the room. With `priority`
+    (section indexes, keep-first order; needs `reserve_first`) the first section keeps up to half
+    of the room, then those sections fill in that order, the rest share what is left, and a
+    section left without room for its truncation marker is dropped."""
     fixed = "\n".join(head)
     room = budget - len(fixed) - sum(len(title) + 4 for title, _ in sections)
     if room < 0:
         return inject.trim(full, budget, "the pack")
     sizes = [len(body) for _, body in sections]
+    if reserve_first and priority and sizes:
+        parts = drop_cut(sections, room, priority, ranking)
+        text = "\n".join([fixed, *parts])
+        return text if len(text) <= budget else inject.trim(full, budget, "the pack")
     if reserve_first and sizes and sizes[0] * 2 <= room:
         rest = share_room(sizes[1:], room - sizes[0])
         shares = {0: sizes[0], **{i + 1: share for i, share in rest.items()}}
