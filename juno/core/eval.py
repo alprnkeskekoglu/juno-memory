@@ -259,7 +259,10 @@ def pasted_keys(entry: Mapping[str, Any]) -> set[str]:
 
 
 def needed_files(
-    entry: Entry, end: float, touches: Sequence[Touch], ticket_exists: Callable[[str], bool]
+    entry: Entry,
+    end: float,
+    touches: Sequence[Touch],
+    ticket_exists: Callable[[str, float], bool],
 ) -> dict[str, str]:
     window = [(tool, rel) for ts, tool, rel in touches if entry["ts"] <= ts < end]
     written = {rel for tool, rel in window if tool in RECALL_WRITE_TOOLS}
@@ -270,7 +273,7 @@ def needed_files(
     keys = [m.group(0).upper() for m in TICKET_RE.finditer(entry["prompt"])]
     for key in keys + sorted(pasted_keys(entry)):
         rel = f"tasks/{key}.md"
-        if ticket_exists(rel):
+        if ticket_exists(rel, entry["ts"]):
             needed.setdefault(rel, "ticket")
     return needed
 
@@ -283,7 +286,7 @@ def miss_kind(needed: Mapping[str, str], entry: Entry, suggested: Sequence[str])
 
 
 def evidence_entries(
-    entries: Sequence[Entry], touches_for: Touches, ticket_exists: Callable[[str], bool]
+    entries: Sequence[Entry], touches_for: Touches, ticket_exists: Callable[[str, float], bool]
 ) -> list[tuple[Entry, set[str]]]:
     by_segment: dict[str, list[Entry]] = {}
     for e in sorted(entries, key=lambda e: (str(e["segment"]), e["ts"])):
@@ -315,7 +318,7 @@ def compare_report(m: Mapping[str, Any]) -> str:
 def recall_from(
     entries: Sequence[Entry],
     touches_for: Touches,
-    ticket_exists: Callable[[str], bool],
+    ticket_exists: Callable[[str, float], bool],
     floor: float,
 ) -> dict[str, Any]:
     by_segment: dict[str, list[Entry]] = {}

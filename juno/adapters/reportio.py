@@ -95,8 +95,7 @@ def retrieval(cfg: config.Config, entries: Sequence[shadow.Entry]) -> tuple[Any,
     vault = os.path.realpath(cfg.vault)
     touches = evalio.touches_reader(evalio.transcripts_dir(cfg), vault)
 
-    def exists_in_vault(rel: str) -> bool:
-        return os.path.isfile(os.path.join(vault, rel))
+    exists_in_vault = evalio.existed_at(cfg.state, vault)
 
     recall = evalcore.recall_from(entries, touches, exists_in_vault, 0.0)
     pairs = evalcore.evidence_entries(entries, touches, exists_in_vault)

@@ -103,6 +103,20 @@ class RecallProxy(EvalCase):
         self.assertEqual(m["misses"][0]["needed"], ["tasks/ABC-1.md"])
         self.assertEqual(m["by_source"]["ticket"], {"needed": 2, "suggested": 1, "with_packs": 1})
 
+    def test_ticket_file_created_after_the_prompt_is_not_evidence(self) -> None:
+        self.write("tasks/ABC-9.md", "# x\n")
+        self.write("tasks/ABC-8.md", "---\ncreated: 2999-01-01\n---\n")
+        rec = {"verb": "task", "file": "tasks/ABC-9.md", "created": True}
+        os.makedirs(self.state, exist_ok=True)
+        with open(os.path.join(self.state, "writes.jsonl"), "w", encoding="utf-8") as handle:
+            handle.write(json.dumps({**rec, "t": T0 + 500}) + "\n")
+            handle.write(json.dumps({**rec, "t": T0 + 900}) + "\n")
+        self.shadow("s4", T0, "plan ABC-9 and ABC-8")
+        self.shadow("s4", T0 + 600, "continue ABC-9")
+        m = self.run_proxy()
+        self.assertEqual((m["with_evidence"], m["silent"]), (1, 1))
+        self.assertEqual(m["misses"][0]["needed"], ["tasks/ABC-9.md"])
+
     def test_report_text(self) -> None:
         self.shadow("s2", T0, "about ABC-1")
         report = core.recall_report(self.run_proxy())

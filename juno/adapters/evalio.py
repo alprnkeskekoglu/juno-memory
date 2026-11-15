@@ -3,13 +3,13 @@ import hashlib
 import json
 import os
 import time
-from collections.abc import Collection, Sequence
+from collections.abc import Callable, Collection, Sequence
 from typing import Any
 
 from juno import config, paths
 from juno.adapters import fs, index, indexquery, ledgerio, shadowio
 from juno.core import eval as core
-from juno.core import fold, isoweek, shadow
+from juno.core import fold, isoweek, shadow, vaultfmt
 from juno.core import keys as keycore
 
 LAST_GATE = "last-gate.json"
@@ -307,6 +307,37 @@ def read_touches(cfg: config.Config, sid: str) -> list[tuple[float, str]] | None
     return [(ts, rel) for ts, tool, rel in touches if tool in core.RECALL_READ_TOOLS]
 
 
+def existed_at(state: str, vault: str) -> Callable[[str, float], bool]:
+    """Whether a vault file existed at ts: first `created` write record, else frontmatter date."""
+    born: dict[str, float] = {}
+    for name in (os.path.join(state, "writes.jsonl.1"), os.path.join(state, "writes.jsonl")):
+        for line in (fs.read_bytes(name) or b"").decode("utf-8", "replace").splitlines():
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(rec, dict) and rec.get("created") is True and rec.get("verb") != "undo":
+                t = rec.get("t")
+                if isinstance(t, (int, float)) and rec.get("file"):
+                    born[str(rec["file"])] = min(born.get(str(rec["file"]), t), t)
+
+    def exists(rel: str, ts: float) -> bool:
+        path = os.path.join(vault, rel)
+        if not os.path.isfile(path):
+            return False
+        if rel in born:
+            return born[rel] <= ts
+        with open(path, encoding="utf-8", errors="replace") as handle:
+            created = vaultfmt.parse_frontmatter(handle.read())[0].get("created")
+        try:
+            day = datetime.date.fromisoformat(str(created))
+        except ValueError:
+            return True
+        return datetime.datetime.combine(day, datetime.time()).timestamp() <= ts
+
+    return exists
+
+
 def recall_proxy(
     state: str, vault_dir: str, transcripts: str, floor: float = 0.0
 ) -> dict[str, Any]:
@@ -315,7 +346,7 @@ def recall_proxy(
     return core.recall_from(
         entries,
         touches_reader(transcripts, vault),
-        lambda rel: os.path.isfile(os.path.join(vault, rel)),
+        existed_at(state, vault),
         floor,
     )
 
@@ -337,9 +368,7 @@ def recall_weekly(
     for label in reversed(labels):
         start, end = isoweek.bounds(label)
         week = [e for e in entries if start <= first[str(e["segment"])] < end]
-        m = core.recall_from(
-            week, touches, lambda rel: os.path.isfile(os.path.join(vault, rel)), 0.0
-        )
+        m = core.recall_from(week, touches, existed_at(state, vault), 0.0)
         out.append(
             {
                 "week": label,
@@ -386,7 +415,7 @@ def compare_keys(
     pairs = core.evidence_entries(
         entries,
         touches_reader(transcripts, vault),
-        lambda rel: os.path.isfile(os.path.join(vault, rel)),
+        existed_at(state, vault),
     )
     preset = cfg.get_str("language", "preset")
     tickets = bool(cfg.get_list("jira", "prefixes"))
