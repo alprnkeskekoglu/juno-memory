@@ -8,6 +8,7 @@ from typing import cast
 from juno import config
 from juno.adapters import fs, migratesteps, protocolio, store, vault
 from juno.adapters.vaultview import DiskVault
+from juno.cmd import migratenotes
 from juno.cmd.common import say
 from juno.core import cardcopies, cardfmt, cardsettle, fold, migrate, vaultfmt
 
@@ -23,6 +24,11 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "--cards",
         action="store_true",
         help="drop extra copies of a card, and move a card to the repo file it names",
+    )
+    parser.add_argument(
+        "--notes",
+        action="store_true",
+        help="archive notes/*.md files that have a frontmatter and no body line",
     )
 
 
@@ -143,6 +149,8 @@ def run(
         return sync_protocol(cfg, args.dry_run)
     if getattr(args, "cards", False):
         return drop_card_copies(cfg, args.dry_run)
+    if getattr(args, "notes", False):
+        return migratenotes.archive_bodyless(cfg, args.dry_run)
     current = vault.schema_version(cfg.vault)
     if current is None:
         say("Juno: juno-brain.toml has no schema_version")
