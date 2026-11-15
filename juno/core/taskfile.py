@@ -105,6 +105,12 @@ def merge(existing: str, key: str, updates: Updates, today: str) -> str:
     return "\n".join([lines[0], *front, *lines[end:]])
 
 
+def stub(key: str, today: str, url: str | None = None) -> str:
+    """The task file a decision or a task log creates when tasks/<KEY>.md is missing."""
+    updates: Updates = {"url": url} if url else {}
+    return merge("## Decisions\n\n## Notes", key, updates, today)
+
+
 def row(name: str, text: str) -> dict[str, object]:
     fields, _ = vaultfmt.parse_frontmatter(text)
     return {

@@ -119,7 +119,10 @@ def trim_pack(
     budget: int,
     full: str,
     ranking: Ranking | None = None,
+    reserve_first: bool = False,
 ) -> str:
+    """Trim sections to the budget. `reserve_first` is for P4 (task digests): when true the first
+    section is satisfied in full before the others share the rest; ignored for now."""
     fixed = "\n".join(head)
     room = budget - len(fixed) - sum(len(title) + 4 for title, _ in sections)
     if room < 0:

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from juno import config
-from juno.core import cardcopies, fold, taskfile, vaultfmt
+from juno.core import cardcopies, fold, owners, taskdigest, taskfile, vaultfmt
 from juno.core.inject import CONTEXT_LABEL, RULES_LABEL, neutralize, trim
 from juno.core.trim import Ranking, trim_body, trim_pack
 from juno.core.view import VaultView
@@ -80,18 +80,21 @@ def one_per_segment(cards: list[Card]) -> list[Card]:
     return [c for c in cards if best[str(c["seg"])] is c]
 
 
-def pack_sources(kind: str, key: str) -> dict[str, str]:
+def pack_sources(kind: str, key: str) -> dict[str, Any]:
+    legacy = owners.legacy_decision_rels(kind, key)
     if kind == "ticket":
         return {
             "rules": f"rules/{key}.md",
             "doc": f"tasks/{key}.md",
             "decisions": f"decisions/{taskfile.canonical_topic(key)}.md",
+            "legacy": legacy,
         }
     name = fold.safe_name(key)
     return {
         "rules": f"rules/repos/{name}.md",
         "doc": f"projects/{name}.md",
         "decisions": f"decisions/{name}.md",
+        "legacy": legacy,
     }
 
 
@@ -102,7 +105,7 @@ def context_sections(kind: str, purpose: bool = False) -> tuple[list[str], list[
 
 
 def own_files(kind: str, key: str) -> set[str]:
-    return set(pack_sources(kind, key).values())
+    return {v for v in pack_sources(kind, key).values() if isinstance(v, str)}
 
 
 def visible_rules(view: VaultView, rel: str) -> list[str]:
@@ -189,6 +192,8 @@ def render_pack(
     decisions_title = src["decisions"] if current or not legacy else src["doc"]
     current = "\n".join(x for x in (current, legacy) if x)
     blocks: list[tuple[str, str]] = [(f"Decisions · {decisions_title}", current)]
+    digests = taskdigest.blocks(doc, doc_title) if kind == "ticket" else []
+    blocks += digests
     blocks += [(f"{n} · {doc_title}", vaultfmt.section(doc, n)) for n in head]
     mentioned = [
         c for c in cards if c["body"] not in shown and vaultfmt.card_mentions(c, kind, key)
@@ -219,7 +224,9 @@ def render_pack(
         lines.append(CONTEXT_LABEL + ":")
     text = "\n".join(lines + [f"[{title}]\n{body}" for title, body in blocks])
     if blocks and len(text) > caps.pack_chars:
-        return trim_pack(lines, blocks + extras, caps.pack_chars, text, rank)
+        return trim_pack(
+            lines, blocks + extras, caps.pack_chars, text, rank, reserve_first=bool(digests)
+        )
     text = trim(text, caps.pack_chars, src["doc"])
     has_label = bool(blocks)
     for title, body in extras:
