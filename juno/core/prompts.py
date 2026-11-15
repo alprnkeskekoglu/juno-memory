@@ -36,6 +36,8 @@ USER_WRAPPER_RE = re.compile(
 WRAPPER_TAIL_RE = re.compile(r"^[ \t]*important:", re.I | re.MULTILINE)
 COMMAND_RE = re.compile(r"/[A-Za-z][\w.:-]*(?=[ \t]|$)")
 NOSAVE = "[nosave]"
+CODE_SPAN_RE = re.compile(r"(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)", re.DOTALL)
+NOSAVE_TOKEN_RE = re.compile(r"""[("'*>]*\[nosave\][.,;:!?)"'*]*""", re.I)
 
 
 def strip_pastes(prompt: str | None) -> str:
@@ -77,5 +79,23 @@ def is_synthetic(prompt: object) -> bool:
     return isinstance(prompt, str) and bool(prompt.strip()) and not user_text(prompt)
 
 
-def has_nosave(typed: str) -> bool:
-    return NOSAVE in typed.casefold()
+def prose(own: str) -> str:
+    """The typed words: pastes, paste markers, log lines, fenced code and code spans removed."""
+    return CODE_SPAN_RE.sub(" ", strip_pastes(own))
+
+
+def nosave_set(own: str) -> bool:
+    """True when [nosave] (any case) is the first or the last word of the typed prose.
+
+    Words are split on whitespace after `prose`. A word counts when it is the token
+    alone, optionally wrapped in leading ( " ' * > and trailing . , ; : ! ? ) " ' *,
+    so `[nosave].`, `([nosave])` and `**[nosave]**` count; `[nosave]s` and `x[nosave]`
+    do not. A message that is only the token counts.
+    """
+    words = prose(own).split()
+    return bool(words) and any(NOSAVE_TOKEN_RE.fullmatch(w) for w in (words[0], words[-1]))
+
+
+def nosave_mentioned(own: str) -> bool:
+    """True when the token stands anywhere in the typed prose (code and pastes excluded)."""
+    return NOSAVE in prose(own).casefold()

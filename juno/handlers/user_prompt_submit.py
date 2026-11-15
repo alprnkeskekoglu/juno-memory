@@ -9,6 +9,14 @@ from juno.core.redact import chunks, redact
 from juno.handlers import delivery
 from juno.handlers.common import capture_title, main_session, output
 
+NOSAVE_SET_LINE = (
+    "Juno: [nosave] is set for this segment: nothing is written to the vault and no handoff "
+    "card is made."
+)
+NOSAVE_MENTION_LINE = (
+    "Juno: [nosave] was mentioned but not set; it counts only as the first or last word of a "
+    "message."
+)
 CUE_LINE = (
     "If this is a lasting correction or preference, add it with `juno rule add` "
     "using my exact words."
@@ -36,6 +44,14 @@ def store_prompt(
         ledgerio.record(cfg, seg, rec)
 
 
+def nosave_notice(seg: Segment, own: str, nosave: bool) -> str:
+    if seg.nosave:
+        return ""
+    if nosave:
+        return NOSAVE_SET_LINE
+    return NOSAVE_MENTION_LINE if prompts.nosave_mentioned(own) else ""
+
+
 def handle(payload: dict[str, Any], cfg: config.Config) -> dict[str, Any] | None:
     if not main_session(payload):
         return None
@@ -50,12 +66,13 @@ def handle(payload: dict[str, Any], cfg: config.Config) -> dict[str, Any] | None
     own = prompts.user_text(prompt) if prompt.strip() else prompt
     typed = redact(prompts.strip_pastes(own))
     tickets = repos.tickets_from(cfg).find(typed)
-    nosave = prompts.has_nosave(own)
+    nosave = prompts.nosave_set(own)
+    notice = nosave_notice(seg, own, nosave)
     store_prompt(cfg, seg, payload.get("prompt_id"), typed, tickets, nosave)
     preset = cfg.get_str("language", "preset")
     cue = CUE_LINE if fold.has_cue(typed, cfg.language_list("correction_cues"), preset) else ""
     cap = cfg.get_int("caps", "hook_output_chars")
-    budget = cap - len(cue) - 2
+    budget = cap - len(notice) - len(cue) - 4
     view = DiskVault(cfg)
     before = set(seg.packs)
     delivered = delivery.deliver_packs(
@@ -64,5 +81,5 @@ def handle(payload: dict[str, Any], cfg: config.Config) -> dict[str, Any] | None
     topic_text = topicsio.for_text(cfg, sid, None, typed, budget - len(delivered) - 2, view)
     status.update(cfg, seg)
     shadowio.observe(cfg, seg, view, typed, own, nosave, tickets, before, delivered)
-    text = "\n\n".join(t for t in (cue, delivered, topic_text) if t)
+    text = "\n\n".join(t for t in (notice, cue, delivered, topic_text) if t)
     return output(cfg, "UserPromptSubmit", inject.trim(text, cap, "the vault"))
