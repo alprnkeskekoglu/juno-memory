@@ -16,6 +16,7 @@ from juno.adapters import (
     learnkinds,
     ledgerio,
     modelcall,
+    privacyack,
     store,
     threadwatch,
 )
@@ -153,14 +154,15 @@ def write_valid_card(
     body, out["links_unlinked"] = cardfmt.fix_links(body)
     body = cardfmt.normalise_heading(body, seg.sid[:8], str(targets[0]["key"]), stamp)
     prefixes = cfg.privacy_prefixes()
+    acked = privacyack.hashes(cfg)
     key = str(targets[0]["key"])
     try:
-        body = cardfmt.validate_card(body, seg.sid[:8], key, stamp, prefixes)
+        body = cardfmt.validate_card(body, seg.sid[:8], key, stamp, prefixes, acked)
     except cardfmt.Failed as exc:
-        masked, counts = cardfmt.mask_private(body, seg.sid[:8], str(exc), prefixes)
+        masked, counts = cardfmt.mask_private(body, seg.sid[:8], str(exc), prefixes, acked)
         if not counts:
             raise
-        body = cardfmt.validate_card(masked, seg.sid[:8], key, stamp, prefixes)
+        body = cardfmt.validate_card(masked, seg.sid[:8], key, stamp, prefixes, acked)
         out["masked"] = counts
     if not naming and not seg.card_files and key == "-":
         targets = routing.card_targets(seg, vaultfmt.items(vaultfmt.card_field(body, "Repos")))
