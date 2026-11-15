@@ -190,6 +190,7 @@ The path is `~/.config/juno/juno.toml`. When `XDG_CONFIG_HOME` is set, the path 
 | `[thresholds] active_ticket_days` | 14 | |
 | `[thresholds] thread_stale_days` | 30 | doctor line |
 | `[thresholds] stale_days` | 60 | stale memory |
+| `[thresholds] profile_min_cards` | 3 | doctor profile warning |
 | `[thresholds] stub_quiet_seconds` | 1800 | |
 | `[thresholds] hook_error_repeat` | 3 | |
 | `[thresholds] hook_error_window_hours` | 24 | |
@@ -685,7 +686,7 @@ A POSIX sh script written by init. It is refused when a non-Juno file already ex
   - card headings and fields;
   - rule provenance and caps;
   - core and global budgets (FAIL over the cap, WARN at ≥ 90%);
-  - repos without a profile;
+  - repos without a profile (WARN only for repos named in at least `profile_min_cards` valid cards, a segment counted once, most used first with counts; the rest as one INFO count);
   - pending stubs;
   - dead and retired supersedes;
   - handoff files over 20 cards;

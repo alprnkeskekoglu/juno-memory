@@ -2,6 +2,7 @@ import json
 import os
 import sqlite3
 import time
+from collections import Counter
 from typing import Any
 
 from juno import config
@@ -10,7 +11,7 @@ from juno.adapters import status as status_io
 from juno.adapters.vaultview import DiskVault, scan_metas
 from juno.cmd import backlog as backlog_cmd
 from juno.core import backlog as bl
-from juno.core import doctor_fit, retire, selfmodel, topics
+from juno.core import doctor_fit, doctor_profiles, retire, selfmodel, topics
 from juno.core import doctor_vault as dv
 from juno.core.doctor_vault import Check
 from juno.core.vaultfmt import (
@@ -81,8 +82,10 @@ def vault_checks(cfg: config.Config) -> list[Check]:
         cfg.get_int("caps", "core_chars"),
         cfg.get_int("caps", "global_rules_chars"),
     )
-    card_repos = [r for c in valid for r in c.get("repos") or [] if not repos.plain_folder(cfg, r)]
-    out += dv.profile_checks(card_repos, set(profiles))
+    named = {(c["seg"], r) for c in valid for r in c.get("repos") or []}
+    card_repos = Counter(r for _, r in named if not repos.plain_folder(cfg, r))
+    min_cards = cfg.get_int("thresholds", "profile_min_cards")
+    out += doctor_profiles.profile_checks(card_repos, set(profiles), min_cards)
     out += doctor_fit.pack_fit_checks(
         {n: view.read(f"projects/{n}.md") for n in sorted(profiles)},
         view.read("rules/global.md"),

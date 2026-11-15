@@ -14,7 +14,7 @@ caps.stub_excerpt_chars caps.quote_min_chars caps.run_max caps.rule_max_chars ca
 caps.pack_threads_chars caps.pack_knowledge_chars caps.subagent_chars caps.subagent_global_rules_chars
 thresholds.meaningful_tool_calls thresholds.meaningful_user_turns thresholds.dirty_user_turns
 thresholds.dirty_tool_calls thresholds.reminder_spacing_turns thresholds.active_ticket_days
-thresholds.thread_stale_days thresholds.stale_days thresholds.stub_quiet_seconds
+thresholds.thread_stale_days thresholds.stale_days thresholds.profile_min_cards thresholds.stub_quiet_seconds
 thresholds.hook_error_repeat thresholds.hook_error_window_hours retention.ledger_days
 retention.backup_days retention.shadow_days retention.asks_days retention.usage_days retention.arm_segments_days retention.error_log_bytes privacy.allow_prefixes shadow.enabled shadow.budget_ms
 handoff.mode handoff.model handoff.budget_usd handoff.daily_budget_usd handoff.min_run_usd

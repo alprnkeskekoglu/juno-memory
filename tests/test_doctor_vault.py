@@ -4,7 +4,7 @@ import time
 import unittest
 
 from juno.adapters import queues
-from juno.core import doctor_fit
+from juno.core import doctor_fit, doctor_profiles
 from juno.core import doctor_vault as dv
 from tests.support import timing
 from tests.support.write import SID, WriteCase
@@ -72,8 +72,19 @@ class Pure(unittest.TestCase):
         self.assertEqual(dv.budget_checks("", big, 100, 100)[0][0], "FAIL")
 
     def test_profiles_and_handoffs_and_learned(self) -> None:
-        self.assertEqual(dv.profile_checks(["a", "b"], {"a"})[0][0], "WARN")
-        self.assertEqual(dv.profile_checks(["a"], {"a"})[0][0], "PASS")
+        self.assertEqual(doctor_profiles.profile_checks({"a": 1, "b": 1}, {"a"}, 1)[0][0], "WARN")
+        self.assertEqual(doctor_profiles.profile_checks({"a": 1}, {"a"}, 1)[0][0], "PASS")
+        low = doctor_profiles.profile_checks({"a": 1, "b": 2}, {"a"}, 3)
+        self.assertEqual(low[0], ("PASS", "profiles", "every repo in cards has a profile"))
+        self.assertEqual(
+            low[1], ("INFO", "profiles", "1 repo in fewer than 3 cards has no profile")
+        )
+        many = doctor_profiles.profile_checks({"x": 3, "y": 5, "z": 3, "w": 1}, set(), 3)
+        self.assertEqual(
+            many[0],
+            ("WARN", "profiles", "repos in cards without a profile: y (5), x (3), z (3)"),
+        )
+        self.assertEqual(many[1][2], "1 repo in fewer than 3 cards has no profile")
         self.assertEqual(dv.handoff_size_checks({"a.md": 21})[0][0], "WARN")
         self.assertEqual(dv.handoff_size_checks({"a.md": 20})[0][0], "PASS")
         self.assertEqual(dv.learned_check(True)[0][0], "WARN")
@@ -283,6 +294,50 @@ class Collected(WriteCase):
         self.assertEqual(grouped["profiles"][0][0], "WARN")
         self.assertEqual(grouped["handoffs"][0][0], "WARN")
         self.assertEqual(grouped["learned"][0][0], "INFO")
+
+    def profile_lines(self) -> list[tuple[str, str]]:
+        return self.doctor()[1]["profiles"]
+
+    def beta_cards(self, count: int) -> None:
+        cards = "".join(
+            CARD.replace("Repos: app", "Repos: alpha, beta").replace("abcd1234", f"{i:08d}")
+            for i in range(1, count + 1)
+        )
+        self.put("handoffs/alpha.md", "# Handoffs\n\n" + cards)
+        self.put("projects/alpha.md", "# alpha\n")
+        root = os.path.join(self.sb.home, "work")
+        os.makedirs(os.path.join(root, "beta", ".git"))
+        self.set_config(f'[repos]\nroots = ["{root}"]\n')
+
+    def test_one_card_does_not_warn_for_a_missing_profile(self) -> None:
+        self.beta_cards(1)
+        self.assertEqual(
+            self.profile_lines(),
+            [
+                ("PASS", "every repo in cards has a profile"),
+                ("INFO", "1 repo in fewer than 3 cards has no profile"),
+            ],
+        )
+
+    def test_three_cards_warn_with_counts(self) -> None:
+        self.beta_cards(3)
+        self.assertEqual(
+            self.profile_lines(),
+            [("WARN", "repos in cards without a profile: beta (3)")],
+        )
+
+    def test_profile_min_cards_one_warns_on_a_single_card(self) -> None:
+        self.beta_cards(1)
+        self.set_config("[thresholds]\nprofile_min_cards = 1\n")
+        self.assertEqual(
+            self.profile_lines(), [("WARN", "repos in cards without a profile: beta (1)")]
+        )
+
+    def test_copies_of_one_segment_count_once(self) -> None:
+        self.beta_cards(1)
+        self.put("handoffs/beta.md", "# Handoffs\n\n" + CARD.replace("app", "alpha, beta"))
+        self.put("handoffs/zeta.md", "# Handoffs\n\n" + CARD.replace("app", "alpha, beta"))
+        self.assertEqual(self.profile_lines()[0][0], "PASS")
 
     def test_rule_without_provenance_fails(self) -> None:
         self.put("rules/global.md", "# Rules\n\n- hand written\n")

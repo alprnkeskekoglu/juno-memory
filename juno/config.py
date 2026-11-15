@@ -60,6 +60,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "active_ticket_days": 14,
         "thread_stale_days": 30,
         "stale_days": 60,
+        "profile_min_cards": 3,
         "stub_quiet_seconds": 1800,
         "hook_error_repeat": 3,
         "hook_error_window_hours": 24,
