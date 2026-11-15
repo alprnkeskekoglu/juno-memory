@@ -71,10 +71,28 @@ class ReporterShape(unittest.TestCase):
     def test_the_newest_section_is_kept_before_the_oldest(self) -> None:
         text = render(REPORTER)
         self.assertLessEqual(len(text), 4500)
-        self.assertGreaterEqual(kept(text, "QA"), 10)
+        self.assertEqual(text.count("- decision"), 32)
         self.assertIn("- [qa13]", text)
-        self.assertGreater(kept(text, "Work"), 0)
+        self.assertGreater(kept(text, "QA"), kept(text, "Work"))
+        self.assertGreaterEqual(kept(text, "Work"), kept(text, "Plan"))
         self.assertLess(kept(text, "Plan"), 4)
+
+    def test_decisions_over_the_room_leave_the_floor_and_the_newest_digest_line(self) -> None:
+        doc = ticket(
+            "digests: [Plan, Work, QA]\n",
+            decisions(60),
+            section("Plan", 14, "2026-11-01"),
+            section("Work", 14, "2026-11-02"),
+            section("QA", 14, "2026-11-03"),
+            NOTES,
+        )
+        text = render(doc)
+        self.assertLessEqual(len(text), 4500)
+        self.assertIn("- decision 59", text)
+        self.assertLess(text.count("- decision"), 60)
+        self.assertGreaterEqual(text.count("- decision"), 28)
+        self.assertIn("- [qa13]", text)
+        self.assertGreaterEqual(kept(text, "QA"), kept(text, "Plan"))
 
     def test_older_sections_are_cut_first_when_the_newest_fills_the_room(self) -> None:
         doc = ticket(
@@ -114,7 +132,7 @@ class ReporterShape(unittest.TestCase):
         )
         text = render(doc)
         self.assertGreater(kept(text, "Plan"), kept(text, "QA"))
-        self.assertGreater(kept(text, "QA"), kept(text, "Work"))
+        self.assertGreaterEqual(kept(text, "QA"), kept(text, "Work"))
 
     def test_decisions_that_fit_the_share_all_survive(self) -> None:
         text = render(ticket(
@@ -131,7 +149,9 @@ class ReporterShape(unittest.TestCase):
     def test_display_order_stays_the_digests_order(self) -> None:
         text = render(REPORTER)
         order = ["[Decisions ·", "[Plan ·", "[Work ·", "[QA ·", "[Notes ·"]
-        positions = [text.index(item) for item in order]
+        shown = [item for item in order if item in text]  # a dropped section prints no heading
+        self.assertIn("[QA ·", shown)
+        positions = [text.index(item) for item in shown]
         self.assertEqual(positions, sorted(positions))
         self.assertIn("Juno truncated", text)
 

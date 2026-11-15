@@ -4,6 +4,7 @@ from typing import Any
 
 from juno.core import inject, rank
 
+DIGEST_FLOOR = 600
 TRIM_MARKER = "\n[... Juno truncated {} chars; see {} ...]"
 CARD_KEEP_RE = re.compile(
     r"^(?:\*\*Decision:\*\*|Learned:|Repos:|Tickets:)|^\W*next\b|\bnext (?:steps?|up|session)\b",
@@ -114,13 +115,16 @@ def share_room(sizes: list[int], room: int) -> dict[int, int]:
 
 
 def prioritized(sizes: list[int], room: int, priority: list[int]) -> dict[int, int]:
-    """Shares for `trim_pack(priority=...)`: the first section keeps up to half of the room, a third
-    of the rest goes to the sections not in `priority` (sharing by size), and the remainder to the
-    `priority` sections in turn, each taking up to 3/4 of what is left."""
-    first = 0 if 0 in priority else min(sizes[0], room // 2)
+    """Shares for `trim_pack(priority=...)`: the first section keeps its full size unless that
+    would leave less than `DIGEST_FLOOR` (or all the others, if smaller, or half the room) for
+    them, then it is cut to `room - floor`. Of the remainder, a third goes first to the sections
+    not in `priority` (sharing by size) unless it is at most the floor; the `priority` sections
+    then take what is left in turn, each up to 3/4 of it, and the unlisted sections get the rest."""
+    floor = min(DIGEST_FLOOR, sum(sizes[1:]), room // 2)
+    first = 0 if 0 in priority else max(min(sizes[0], room - floor), 0)
     rest = [i for i in range(1, len(sizes)) if i not in priority]
     left = room - first
-    held = share_room([sizes[i] for i in rest], left // 3)
+    held = share_room([sizes[i] for i in rest], left // 3 if left > DIGEST_FLOOR else 0)
     left -= sum(held.values())
     shares = {0: first}
     for n, i in enumerate(priority):
@@ -175,9 +179,9 @@ def trim_pack(
 ) -> str:
     """Trim sections to the budget. With `reserve_first` the first section (Decisions) is kept in
     full before the others share the rest, if it takes at most half of the room. With `priority`
-    (section indexes, keep-first order; needs `reserve_first`) the first section keeps up to half
-    of the room, then those sections fill in that order, the rest share what is left, and a
-    section left without room for its truncation marker is dropped."""
+    (section indexes, keep-first order; needs `reserve_first`) the first section keeps its full
+    size down to a floor left for the rest, then those sections fill in that order, the rest
+    share what is left, and a section left without room for its truncation marker is dropped."""
     fixed = "\n".join(head)
     room = budget - len(fixed) - sum(len(title) + 4 for title, _ in sections)
     if room < 0:
