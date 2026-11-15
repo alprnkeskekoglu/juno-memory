@@ -98,7 +98,7 @@ flowchart LR
 - **Evidence** is a verbatim part (20 or more characters) of a prompt you typed or an answer you chose, or `repo:<name>` / `ticket:<KEY>` that the session actually touched. `decision` and `self` accept only your words. `note`, `capture`, `idea` and `card` are anchored by the segment id.
 - **Privacy**: secrets, emails, phone numbers and long numeric ids are refused on every write path.
 - **Duplicates**: an exact match writes nothing; a close match updates the existing line instead of adding a second one.
-- **Cap**: at most 50 live writes per session (`[caps] run_max`). You can approve more with `juno cap raise`.
+- **Cap**: at most 100 live writes per session (`[caps] run_max`). You can approve more with `juno cap raise`.
 - Every write is backed up, logged and printed with a write id. `juno undo <id>` reverts it; `juno fix` corrects a line, `juno link <note-or-knowledge>.md --link TARGET:REASON --evidence E` adds reasoned links to a note or knowledge file (`juno note` and `juno knowledge add` take `--link` too) and `juno forget` moves one to the archive. `juno consolidate <file> --section S` lists near-duplicate lines (read-only); `juno fix --merge <file>:a,b,c ...` replaces them with one line in a single write. `juno privacy ack <file>:<line> --was DIGITS --evidence E` accepts one id finding that is not personal data (a hash of the digits goes to `.privacy-ack.jsonl`; `juno privacy list` shows them, doctor counts them).
 
 Edit and Write on vault files are refused by the PreToolUse hook, and the refusal names the verb to use. `juno init` also adds a Claude Code deny for edits under `rules/` and `.git/`. A Bash command that writes a vault file by hand is not detected; the vault's git snapshots are the fallback.
@@ -215,7 +215,7 @@ Settings live in `juno.toml`. Every key has a default and nothing is required. T
 | `[language] preset` | `none` | `tr` adds Turkish folding and cues |
 | `[threads] gh_owner` | `""` | GitHub owner for pull request lookups. Empty means no `gh` call |
 | `[handoff] mode` | `end` | `end` writes the card at session end; `reminder` only reminds the assistant to write one |
-| `[caps] run_max` | `50` | vault writes allowed per session |
+| `[caps] run_max` | `100` | vault writes allowed per session |
 
 Juno never calls Jira itself and holds no token. Ticket titles come from whatever Jira tool your Claude session already has.
 

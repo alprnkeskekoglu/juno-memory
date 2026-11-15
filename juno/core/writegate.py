@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from juno.core import fold
 from juno.core.errors import Refused
 
-RUN_MAX = 50
+RUN_MAX = 100
 LINE_MIN = 8
 LINE_MAX = 300
 NEAR_RATIO = 0.88

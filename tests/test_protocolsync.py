@@ -29,9 +29,9 @@ class Core(unittest.TestCase):
         for name in names:
             self.assertIn(protocolsync.digest(template(name)), protocolsync.SHIPPED[name], name)
 
-    def test_template_says_cap_50_and_names_the_cap_verbs(self) -> None:
+    def test_template_says_cap_100_and_names_the_cap_verbs(self) -> None:
         text = template()
-        self.assertIn("50 vault writes", text)
+        self.assertIn("100 vault writes", text)
         self.assertIn("juno cap show", text)
         self.assertIn("juno cap raise --by N", text)
 

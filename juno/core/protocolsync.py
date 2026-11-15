@@ -37,6 +37,7 @@ SHIPPED: dict[str, tuple[str, ...]] = {
         "8af387db0589bd6425def92b9b320fc6997f08553fc1ac93c45b73b647961295",
         "d4c20289f9ca65b81da697ac5743ffc8f61fe3c5a0db8d0527f5fa764752dd6c",
         "76d6ceb995b89730bc4d2a9a6245057b123d2a739fdd4d94430343c6b0fa7f29",
+        "4376bb5d3942d44237e7ae8ca668ff8a67ae468fca274d08aae948e8a0dad659",
     ),
 }
 

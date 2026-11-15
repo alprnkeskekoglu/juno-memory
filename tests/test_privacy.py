@@ -245,7 +245,7 @@ class WritePaths(WriteCase):
         for n in range(writegate.RUN_MAX):
             code, out = self.juno("task", "set", f"ABC-{n + 1}", "--title", "T", "--status", "open")
             self.assertEqual(code, 0, out)
-        out = self.refused("task", "set", "ABC-99", "--title", "T", "--status", "open")
+        out = self.refused("task", "set", "ABC-99999", "--title", "T", "--status", "open")
         self.assertIn(f"{writegate.RUN_MAX} vault writes", out)
 
 

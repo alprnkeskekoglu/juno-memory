@@ -42,7 +42,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "last_message_chars": 1500,
         "stub_excerpt_chars": 400,
         "quote_min_chars": 20,
-        "run_max": 50,
+        "run_max": 100,
         "rule_max_chars": 300,
         "overview_cards": 2,
         "pack_cards": 2,
