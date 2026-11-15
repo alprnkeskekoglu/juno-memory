@@ -93,8 +93,8 @@ class Synthetic(unittest.TestCase):
         )
 
     def test_nosave_marker(self) -> None:
-        self.assertTrue(prompts.has_nosave("do it [NoSave]"))
-        self.assertFalse(prompts.has_nosave("do it"))
+        self.assertTrue(prompts.nosave_set("do it [NoSave]"))
+        self.assertFalse(prompts.nosave_set("do it"))
 
 
 class Secrets(unittest.TestCase):

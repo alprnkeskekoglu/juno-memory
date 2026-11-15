@@ -195,7 +195,8 @@ def rules_nudge(items: list[Item]) -> str:
         )
         lines.append(clip(inject.neutralize(line), 600))
     ask = (
-        "Unless the user's message contains [nosave], ask the user once in this session, before "
+        "Unless [nosave] is the first or last word of the user's message, ask the user once in "
+        "this session, before "
         "the first task: one AskUserQuestion with multiSelect true and one option per candidate "
         "above, recommended ones first with (Recommended), each label starting with the "
         "candidate id and the description holding the rule and scope. Then run `juno rule "
@@ -229,7 +230,8 @@ def import_nudge(items: list[Item]) -> str:
     if len(items) > NUDGE_SHOWN:
         lines.append(f"({len(items) - NUDGE_SHOWN} more: `juno rule pending`)")
     ask = (
-        "Unless the user's message contains [nosave], ask the user ONCE in this session, before "
+        "Unless [nosave] is the first or last word of the user's message, ask the user ONCE in "
+        "this session, before "
         "the first task, not once per candidate or per kind: one AskUserQuestion, multiSelect "
         f"false, with exactly three options: `Accept all {batch} (Recommended)`, "
         f"`Review {batch}` and `None`. On Accept all run `juno import-memory accept`; on None "
