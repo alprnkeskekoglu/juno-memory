@@ -383,7 +383,7 @@ Every vault-writing CLI verb refuses, with exit 2 and one `Juno: refused: <reaso
 
 There is no grant and no Bash parsing. The only PreToolUse deny is the vault Edit/Write refusal (14). [plan, Phase 2 Kept cheap checks]
 
-The vault-writing verbs are `rule add|remove|move|triggers|accept|reject`, `thread close|keep`, `backlog add|add-to|edit|set|log|done|drop|accept|reject`, `snapshot`, `compact`, `digest`, `profiles`, `doctor --purge-synthetic` and the Phase 4 verbs of 14 (`card`, `knowledge add`, `note`, `decision`, `project`, `procedure`, `pitfall`, `idea`, `capture`, `self`, `fix`, `forget`, `undo`; `thread add` is logged too). Every write takes `vault.lock` (2 s CLI, 5 s views), makes a backup first, and writes atomically [v1: Phase 2 item 8].
+The vault-writing verbs are `rule add|remove|move|triggers|accept|reject`, `thread close|keep`, `backlog add|add-to|edit|set|log|done|drop|accept|reject`, `snapshot`, `compact`, `digest`, `profiles`, `doctor --purge-synthetic` and the Phase 4 verbs of 14 (`card`, `knowledge add`, `note`, `decision`, `project`, `procedure`, `pitfall`, `idea`, `capture`, `self`, `fix`, `link`, `forget`, `undo`; `thread add` is logged too). Every write takes `vault.lock` (2 s CLI, 5 s views), makes a backup first, and writes atomically [v1: Phase 2 item 8].
 
 ### 8.2 Quotes
 
@@ -444,7 +444,7 @@ The shim is `juno <verb>`. Each verb with `--json` prints one JSON object. Exit 
 
 ### 9.1 Phase 4 write-gate verbs
 
-Specified in section 14: `card`, `knowledge add`, `note`, `decision`, `project`, `procedure`, `pitfall`, `idea`, `capture`, `self`, `fix`, `forget`, `undo`. `thread add` (9) also writes through the gate. `task` stays a Phase 3 verb.
+Specified in section 14: `card`, `knowledge add`, `note`, `decision`, `project`, `procedure`, `pitfall`, `idea`, `capture`, `self`, `fix`, `link`, `forget`, `undo`. `thread add` (9) also writes through the gate. `task` stays a Phase 3 verb.
 
 ### 9.2 `saga` compatibility shim
 
@@ -768,8 +768,8 @@ From Phase 4, every vault write goes through a `juno <verb>`. Verbs pass the che
 | Verb | Writes | Evidence | Notes |
 |---|---|---|---|
 | `card --learned L [--label --decision --links --tickets --repos] <2-5 lines>` | `handoffs/<routed>.md` | segment | file and heading from `routing.card_targets`; replaces this segment's own card or stub; ledger `card` event. `[[KEY]]` links matching `[jira] prefixes` become tickets of the card (and a ledger `keys` event). `--tickets K1,K2` overrides the card's tickets (heading key by the usual rank, file `handoffs/<KEY>.md`): each key must match the prefixes and have been seen in the segment or be a `[[KEY]]` in `--links`. `--repos r1,r2` overrides the repos: each must be touched in the segment or have `projects/<repo>.md`. A refusal is one line, exit 2 |
-| `knowledge add --topic T "fact"` | `knowledge/<T>.md` | ledger or user | line `- fact · src: <user pid8, repo r, ticket K or web URL> · date`; `--source web --url U [--url U2]` replaces the evidence; the line records `src: web U1, U2`; `--url` repeats at most once and two URLs need different registrable domains (approximated as the last two host labels, three after a two-letter TLD with a generic second level such as `co.uk`, no public-suffix list) |
-| `note [--slug --repos --tickets] "text"` | `notes/YYYY-MM-DD-<slug>.md` | segment | written once; a same-day near-duplicate body is not added |
+| `knowledge add --topic T [--link TARGET:REASON] "fact"` | `knowledge/<T>.md` | ledger or user | line `- fact · src: <user pid8, repo r, ticket K or web URL> · date`; `--source web --url U [--url U2]` replaces the evidence; the line records `src: web U1, U2`; `--url` repeats at most once and two URLs need different registrable domains (approximated as the last two host labels, three after a two-letter TLD with a generic second level such as `co.uk`, no public-suffix list). `--link` (here and on `note`, repeatable) writes or extends the file's final `Links:` line as `[[target]] (reason)`; the target must resolve through the link index, the reason is 2+ words and 8-200 characters, privacy scanned, without `]]`, `[[`, `\|`, parentheses, `·` or a newline; a repeated target updates its reason; for `knowledge add` the `Links:` line stays the last line |
+| `note [--slug --repos --tickets --link TARGET:REASON] "text"` | `notes/YYYY-MM-DD-<slug>.md` | segment | written once; a same-day near-duplicate body is not added |
 | `decision --topic T "text" [--supersedes N]` | `decisions/<T>.md` `## Current` (a ticket-shaped `T` such as `abc-1` is written as `ABC-1`) | user words | line `- text (user pid8, date)`; `--supersedes` moves line N to `## History` |
 | `thread add` | `threads.md` | segment | existing verb, now logged |
 | `project purpose, run, gotchas or links --repo R "line"` | `projects/<R>.md` section | ledger or user | skeleton created when missing; Purpose holds 3 lines; a `links` line is `[[target]] reason` and the target must be a vault file |
@@ -779,6 +779,7 @@ From Phase 4, every vault write goes through a `juno <verb>`. Verbs pass the che
 | `idea --slug S ["text"] [--status --note --outcome]` | `ideas/<S>.md` | segment | creates or updates; status default `planned` |
 | `capture "text"` | `inbox.md` | segment | `- text · seg8 · date` |
 | `self --file F "line"` | `self/<F>.md` (values, decisions, communication, tensions) | user words | line carries `src: user pid8` and the quote |
+| `link <notes\|knowledge/file>.md --link TARGET:REASON [--link ...] --evidence E` | that file | ledger or user | adds to (or starts) the final `Links:` line without touching any other line, as one write (one `undo`); only existing `notes/` and `knowledge/` files; same `--link` rules as `note` |
 | `fix <file>.md:<line> --was FRAG "new line"` | that file | ledger or user | the line must contain `--was` (8+ characters); not for `rules/`, `protocol/`, `archive/`, `_generated/`, `core.md` |
 | `fix --merge <file>.md:<a>,<b>,.. --was FRAG (one per line) "new line"` | that file and `archive/decayed/forgotten-YYYY-MM.md` | ledger or user | replaces lines of one section with one line as a single write (verb `merge`, plus a linked `merge-archive` record; one cap unit, one `undo`); `consolidate <file>.md [--section S]` is the read-only lister (pitfalldup similarity; backtick paths gone from the default branch: not tracked there AND deleted in its git history, printed with repo, ref and reason; config keys, URLs, refs and never-tracked files are not listed) |
 | `forget <file>.md:<line> --was FRAG` | that file and `archive/decayed/forgotten-YYYY-MM.md` | ledger or user | moves the line; two log records, linked. Last body line of a `notes/` file: the file is deleted in the same write (the archive line keeps the note's frontmatter; `undo` restores the file byte for byte) |

@@ -4,8 +4,8 @@ from collections.abc import Mapping
 
 from juno import config
 from juno.adapters import gate, store
-from juno.cmd import gateio, write
-from juno.core import fold, writegate
+from juno.cmd import gateio, linkargs, write
+from juno.core import fold, linkline, writegate
 from juno.core.errors import Refused
 
 MIN_CHARS = 20
@@ -16,6 +16,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--slug", help="file name part (default: from the text)")
     parser.add_argument("--repos", help="comma separated repos")
     parser.add_argument("--tickets", help="comma separated ticket keys")
+    linkargs.add_option(parser)
     parser.add_argument("text", help="the situational finding, written once")
 
 
@@ -40,6 +41,7 @@ def do(cfg: config.Config, args: argparse.Namespace) -> int:
     writegate.check_length(text, "note")
     slug = args.slug or fold.slug(text, write.preset(cfg))[:40].strip("-") or "note"
     writegate.check_slug(slug)
+    specs, canon = linkargs.prepare(cfg, args.link)
     day = write.today()
     rel = f"notes/{day}-{slug}.md"
     head = writegate.frontmatter(
@@ -50,6 +52,9 @@ def do(cfg: config.Config, args: argparse.Namespace) -> int:
             "source": seg.sid[:8],
         }
     )
+    content = head + "\n" + text + "\n"
+    if specs:
+        content = linkline.with_links(content, specs, canon)
     with write.locked(cfg):
         if gate.read(cfg, rel):
             raise Refused(f"{rel} exists; notes are written once (use another --slug or fix)")
@@ -57,9 +62,7 @@ def do(cfg: config.Config, args: argparse.Namespace) -> int:
         if same:
             print(f"Juno: already recorded in {same}; nothing written")
             return 0
-        res = gate.commit(
-            cfg, seg, "note", rel, head + "\n" + text + "\n", f"segment {seg.sid[:8]}"
-        )
+        res = gate.commit(cfg, seg, "note", rel, content, f"segment {seg.sid[:8]}")
     return gateio.report(res, "note written to")
 
 

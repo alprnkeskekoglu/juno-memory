@@ -51,6 +51,7 @@ VERBS: dict[str, tuple[str, str]] = {
     "capture": ("capture", "put a loose item in the inbox"),
     "self": ("self_", "record a line about the user from their words"),
     "fix": ("fix", "correct one vault line"),
+    "link": ("link", "add reasoned links to a note or knowledge file"),
     "consolidate": ("consolidate", "list near-duplicate and stale lines of a section (read-only)"),
     "forget": ("forget", "move a wrong vault line to the archive"),
     "privacy": ("privacy", "acknowledge an id finding on a line, or list the acknowledged ones"),

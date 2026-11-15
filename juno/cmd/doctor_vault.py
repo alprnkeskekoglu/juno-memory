@@ -21,7 +21,7 @@ from juno.adapters import status as status_io
 from juno.adapters.vaultview import DiskVault, scan_metas
 from juno.cmd import backlog as backlog_cmd
 from juno.core import backlog as bl
-from juno.core import doctor_fit, doctor_profiles, notebody, retire, selfmodel, topics
+from juno.core import doctor_fit, doctor_links, doctor_profiles, notebody, retire, selfmodel, topics
 from juno.core import doctor_vault as dv
 from juno.core import privacyack as ack_core
 from juno.core.doctor_vault import Check
@@ -151,6 +151,9 @@ def content_checks(cfg: config.Config, view: DiskVault) -> list[Check]:
     out = dv.privacy_checks(scanned, prefixes)
     out += [("INFO", "privacy", ack_core.count_line(acks))] if acks else []
     out += dv.link_checks(files)
+    out += doctor_links.info_checks(
+        files, {f"handoffs/{n}": view.read(f"handoffs/{n}") for n in view.names("handoffs")}
+    )
     note_texts = {n: view.read(f"notes/{n}") for n in view.names("notes")}
     out += dv.note_checks(note_texts)
     out += notebody.body_checks(note_texts)
