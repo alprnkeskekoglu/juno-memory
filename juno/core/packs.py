@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from juno import config
-from juno.core import fold, vaultfmt
+from juno.core import cardcopies, fold, vaultfmt
 from juno.core.inject import CONTEXT_LABEL, RULES_LABEL, neutralize, trim
 from juno.core.trim import trim_pack
 from juno.core.view import VaultView
@@ -66,7 +66,17 @@ def all_cards(view: VaultView) -> list[Card]:
         if view.hidden(rel, text):
             continue
         cards.extend(c for c in vaultfmt.parse_cards(text, rel) if c["valid"])
-    return sorted(cards, key=lambda c: str(c["time"]), reverse=True)
+    return one_per_segment(sorted(cards, key=lambda c: str(c["time"]), reverse=True))
+
+
+def one_per_segment(cards: list[Card]) -> list[Card]:
+    """A segment shows once; of its copies, one filed under a repo or ticket it names wins."""
+    best: dict[str, Card] = {}
+    for card in cards:
+        held = best.get(str(card["seg"]))
+        if held is None or (cardcopies.names_file(card) and not cardcopies.names_file(held)):
+            best[str(card["seg"])] = card
+    return [c for c in cards if best[str(c["seg"])] is c]
 
 
 def pack_sources(kind: str, key: str) -> dict[str, str]:

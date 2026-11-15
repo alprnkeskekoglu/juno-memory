@@ -210,6 +210,15 @@ class Subagent(unittest.TestCase):
         self.assertEqual(sum(ln.startswith("RULES (follow):") for ln in text.splitlines()), 1)
 
 
+class Copies(unittest.TestCase):
+    def test_a_segment_is_listed_once_preferring_the_repo_it_names(self) -> None:
+        view = vault(handoffs__b="# H\n\n" + CARD, handoffs__z="# H\n\n" + CARD)
+        cards = packs.all_cards(view)
+        self.assertEqual([c["path"] for c in cards], ["handoffs/a.md"])
+        text = packs.overview(view, Caps(), cards, 1000.0, True)
+        self.assertEqual(text.count("Did a thing"), 1)
+
+
 class Overview(unittest.TestCase):
     def test_overview_lists_cards_ideas_and_active_tickets(self) -> None:
         view = vault(

@@ -41,9 +41,7 @@ class Routing(unittest.TestCase):
         s = seg()
         self.assertEqual(routing.handoff_targets(s)[0]["path"], "handoffs/misc.md")
         s.apply({"ev": "tool", "repos": [["a", None], ["b", None]]})
-        self.assertEqual(
-            [t["path"] for t in routing.handoff_targets(s)], ["handoffs/a.md", "handoffs/b.md"]
-        )
+        self.assertEqual([t["path"] for t in routing.handoff_targets(s)], ["handoffs/a.md"])
         s.title = "Release prep"
         self.assertEqual(
             [t["path"] for t in routing.handoff_targets(s)], ["handoffs/release-prep.md"]
@@ -53,6 +51,19 @@ class Routing(unittest.TestCase):
         target = routing.handoff_targets(s)[0]
         self.assertEqual((target["path"], target["key"]), ("handoffs/ABC-2.md", "ABC-2"))
         self.assertEqual(target["tickets"], ["ABC-1", "ABC-2"])
+
+    def test_card_without_ticket_goes_to_its_own_repos_once(self) -> None:
+        s = seg()
+        s.apply({"ev": "tool", "repos": [["a", None], ["b", None], ["c", None]]})
+
+        def paths(repos: list[str]) -> list[str]:
+            return [t["path"] for t in routing.card_targets(s, repos)]
+
+        self.assertEqual(paths(["c", "a", "elsewhere"]), ["handoffs/c.md", "handoffs/a.md"])
+        self.assertEqual(paths(["elsewhere", "other"]), ["handoffs/elsewhere.md"])
+        self.assertEqual(paths(["-"]), ["handoffs/a.md"])
+        self.assertEqual(paths([]), ["handoffs/a.md"])
+        self.assertEqual(paths(["b", "b"]), ["handoffs/b.md"])
 
     def test_without_jira_everything_routes_by_name_repo_or_misc(self) -> None:
         s = Segment(SID, ledger.Rules())

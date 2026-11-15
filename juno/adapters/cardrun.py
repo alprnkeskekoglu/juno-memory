@@ -19,7 +19,7 @@ from juno.adapters import (
     store,
     threadwatch,
 )
-from juno.core import cardfmt, digest, extract, routing, selfmodel
+from juno.core import cardfmt, digest, extract, routing, selfmodel, vaultfmt
 from juno.core.ledger import Segment
 
 TRANSCRIPT_BYTES = 8 * 1024 * 1024
@@ -162,6 +162,8 @@ def write_valid_card(
             raise
         body = cardfmt.validate_card(masked, seg.sid[:8], key, stamp, prefixes)
         out["masked"] = counts
+    if not naming and not seg.card_files and key == "-":
+        targets = routing.card_targets(seg, vaultfmt.items(vaultfmt.card_field(body, "Repos")))
     if naming:
         slug = cardfmt.valid_slug(chosen, cardwrite.reserved_names(cfg))
         targets = [dict(targets[0], path=f"handoffs/{slug or 'misc'}.md")]

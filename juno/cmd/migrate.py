@@ -5,9 +5,10 @@ import time
 from collections.abc import Mapping
 
 from juno import config
-from juno.adapters import fs, migratesteps, protocolio, vault
+from juno.adapters import fs, migratesteps, protocolio, store, vault
+from juno.adapters.vaultview import DiskVault
 from juno.cmd.common import say
-from juno.core import migrate
+from juno.core import cardcopies, cardsettle, migrate, vaultfmt
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -16,6 +17,11 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "--protocol",
         action="store_true",
         help="bring protocol/*.md up to the plugin's templates (only files never edited here)",
+    )
+    parser.add_argument(
+        "--cards",
+        action="store_true",
+        help="drop extra copies of a card from handoff files of repos the card does not name",
     )
 
 
@@ -37,6 +43,31 @@ def sync_protocol(cfg: config.Config, dry_run: bool) -> int:
     return 0
 
 
+def drop_card_copies(cfg: config.Config, dry_run: bool) -> int:
+    view = DiskVault(cfg)
+    cards: list[dict[str, object]] = []
+    for name in view.names("handoffs"):
+        rel = f"handoffs/{name}"
+        text = view.read(rel)
+        if not view.hidden(rel, text):
+            cards.extend(vaultfmt.parse_cards(text, rel))
+    by_file: dict[str, list[str]] = {}
+    for card in cardcopies.extra_copies(cards, [n[:-3] for n in view.names("projects")]):
+        by_file.setdefault(str(card["path"]), []).append(str(card["seg"]))
+    for rel, found in sorted(by_file.items()):
+        segs = list(dict.fromkeys(found))
+        path = os.path.join(cfg.vault, *rel.split("/"))
+        text = store.read_text(path)
+        drop = [span for seg in segs for span in cardsettle.spans(text, seg)]
+        say(f"cards: {'would drop' if dry_run else 'dropped'} {len(segs)} copies from {rel}")
+        if not dry_run:
+            store.backup(cfg, path)
+            store.write_text(path, cardsettle.cut(text, drop))
+    if not by_file:
+        say("cards: no extra copies")
+    return 0
+
+
 def run(
     args: argparse.Namespace,
     env: Mapping[str, str],
@@ -51,6 +82,8 @@ def run(
         return 2
     if getattr(args, "protocol", False):
         return sync_protocol(cfg, args.dry_run)
+    if getattr(args, "cards", False):
+        return drop_card_copies(cfg, args.dry_run)
     current = vault.schema_version(cfg.vault)
     if current is None:
         say("Juno: juno-brain.toml has no schema_version")
