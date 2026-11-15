@@ -46,6 +46,16 @@ def format_block(core_md: str) -> str:
     return match.group(1).strip()
 
 
+def bare_links(links: str) -> list[str]:
+    """The `[[x]]` entries of a --links value that have no parenthesised reason right after."""
+    out = []
+    for link in LINK_RE.finditer(links):
+        reason = PAREN_REASON_RE.match(links[link.end() :])
+        if not (reason and REASON_RE.search(reason.group(1))):
+            out.append(link.group(0))
+    return out
+
+
 def build_prompt(
     *,
     name: str,
@@ -76,9 +86,10 @@ def build_prompt(
         "digest.",
         "- Optional `Links:` and `**Decision:**` lines as in the format; a decision only when "
         "the user decided it.",
-        "- Link a vault file only when the card relies on its content, and put a short reason "
-        "right after every link, e.g. `[[billing-api]] (repo profile with the run commands)`; "
-        "a link without a reason is unlinked.",
+        "- Link a vault file only when the card relies on its content. On the `Links:` line put "
+        "the reason in parentheses right after each link, e.g. `Links: [[billing-api]] (repo "
+        "profile with the run commands)`, even where the format above shows none; a link without "
+        "a reason is unlinked, and a card with no reasoned link writes `Links: -`.",
         "- When the digest has this segment's current card, keep its concrete details (commit "
         "hashes, test counts, file names, decisions) unless the new work superseded them.",
         '- Neutral voice: never address anyone as "you"; call the user "the user".',

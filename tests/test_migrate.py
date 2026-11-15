@@ -26,10 +26,10 @@ class Core(unittest.TestCase):
         with self.assertRaises(ValueError):
             migrate.plan(1, 4, steps)
 
-    def test_code_schema_is_four_with_three_steps(self) -> None:
-        self.assertEqual(migrate.CODE_SCHEMA_VERSION, 4)
-        self.assertEqual(sorted(migratesteps.STEPS), [1, 2, 3])
-        self.assertEqual(migrate.plan(1, 4, migratesteps.STEPS), [1, 2, 3])
+    def test_code_schema_is_five_with_four_steps(self) -> None:
+        self.assertEqual(migrate.CODE_SCHEMA_VERSION, 5)
+        self.assertEqual(sorted(migratesteps.STEPS), [1, 2, 3, 4])
+        self.assertEqual(migrate.plan(1, 5, migratesteps.STEPS), [1, 2, 3, 4])
 
     def test_decision_files_merge_without_duplicates(self) -> None:
         head = "---\ntopic: ABC-6\nupdated: 2026-05-03\nvalid_from: 2026-05-03\n---\n"
@@ -138,7 +138,7 @@ class Command(SandboxCase):
             handle.write(text.replace(migrate.PRIVACY_NEW, migrate.PRIVACY_OLD))
         self.set_schema(1)
         self.assertEqual(self.sb.cli("migrate")[0], 0)
-        self.assertEqual(self.schema(), 4)
+        self.assertEqual(self.schema(), 5)
         with open(core, encoding="utf-8") as handle:
             self.assertEqual(handle.read(), text)
         self.assertEqual(self.sb.cli("migrate")[0], 0)
@@ -169,7 +169,7 @@ class Command(SandboxCase):
     def test_step_two_rewrites_quote_rule_and_cap_sentence(self) -> None:
         rules, core = self.make_schema_two()
         self.assertEqual(self.sb.cli("migrate")[0], 0)
-        self.assertEqual(self.schema(), 4)
+        self.assertEqual(self.schema(), 5)
         self.assertEqual(self.read(os.path.join("protocol", "rules.md")), rules)
         self.assertEqual(self.read("core.md"), core)
         backups = os.listdir(os.path.join(self.sb.state, "backups"))
@@ -197,7 +197,7 @@ class Command(SandboxCase):
         self.write(os.path.join("protocol", "rules.md"), rules)
         self.write("core.md", core)
         self.assertEqual(self.sb.cli("migrate")[0], 0)
-        self.assertEqual(self.schema(), 4)
+        self.assertEqual(self.schema(), 5)
         self.assertEqual(self.read(os.path.join("protocol", "rules.md")), rules)
         self.assertEqual(self.read("core.md"), core)
 
@@ -222,7 +222,7 @@ class Command(SandboxCase):
             "---\ntitle: U\n---\n## Decisions\n- Only here (user pid1, 2026-05-04)\n",
         )
         self.assertEqual(self.sb.cli("migrate")[0], 0)
-        self.assertEqual(self.schema(), 4)
+        self.assertEqual(self.schema(), 5)
         task = self.read("tasks/ABC-1.md")
         self.assertNotIn("Decisions", task)
         self.assertIn("## Notes\n- keep", task)

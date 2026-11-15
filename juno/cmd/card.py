@@ -16,7 +16,11 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--label", default="work", help="short label for the heading")
     parser.add_argument("--learned", help="one sentence, or none (required for a card)")
     parser.add_argument("--decision", help="one line, only if the user decided something")
-    parser.add_argument("--links", help="wikilinks, e.g. '[[repo]], [[KEY]]'")
+    parser.add_argument(
+        "--links",
+        help="wikilinks, each with its reason in parentheses, e.g. "
+        "'[[repo]] (why this card relies on it), [[KEY]] (the ticket file)'",
+    )
     parser.add_argument(
         "--tickets",
         help="ticket keys for the card (override), e.g. 'ABC-1,ABC-2'; each must have been seen "
@@ -49,6 +53,12 @@ def build(cfg: config.Config, args: argparse.Namespace, target: routing.Target, 
     label = gate.scan_text(cfg, args.label, "label")
     if "·" in label or "\n" in label or len(label) > LABEL_MAX:
         raise Refused(f"label must be one line of at most {LABEL_MAX} characters, without '·'")
+    bare = cardfmt.bare_links(args.links or "")
+    if bare:
+        raise Refused(
+            f"--links entries without a reason: {', '.join(bare)}; write each as "
+            '--links "[[repo]] (why this card relies on it)"'
+        )
     body = [gate.scan_text(cfg, x, "card line") for x in args.lines]
     out = [
         f"## {routing.local_stamp()} · {target['key']} · {label} · {seg_id}",

@@ -177,7 +177,7 @@ class Card(WriteCase):
 
     def test_links_key_becomes_a_ticket(self) -> None:
         self.tool(repo="app")
-        code, out = self.card("--links", "[[app]], [[ABC-12]]")
+        code, out = self.card("--links", "[[app]] (the repo profile), [[ABC-12]] (the ticket file)")
         self.assertEqual(code, 0, out)
         text = self.get("handoffs/ABC-12.md")
         self.assertIn(f"· ABC-12 · work · {self.sid[:8]}", text)
@@ -188,7 +188,7 @@ class Card(WriteCase):
 
     def test_links_with_foreign_prefix_are_ignored(self) -> None:
         self.tool(repo="app")
-        self.assertEqual(self.card("--links", "[[XYZ-12]]")[0], 0)
+        self.assertEqual(self.card("--links", "[[XYZ-12]] (a foreign ticket)")[0], 0)
         self.assertIn("Tickets: -", self.get("handoffs/app.md"))
 
     def test_tickets_override_accepts_seen_keys(self) -> None:
@@ -202,7 +202,7 @@ class Card(WriteCase):
 
     def test_tickets_override_accepts_a_link_key(self) -> None:
         self.tool(repo="app")
-        code, out = self.card("--tickets", "ABC-9", "--links", "[[ABC-9]]")
+        code, out = self.card("--tickets", "ABC-9", "--links", "[[ABC-9]] (the ticket file)")
         self.assertEqual(code, 0, out)
         self.assertIn("Tickets: ABC-9", self.get("handoffs/ABC-9.md"))
 
