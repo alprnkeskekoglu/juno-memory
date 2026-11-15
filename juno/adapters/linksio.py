@@ -5,7 +5,7 @@ from typing import Any
 
 from juno import config
 from juno.adapters import fs, store
-from juno.core import fold, inject, links
+from juno.core import fold, inject, links, owners, vaultfmt
 
 CACHE_FILE = "links.json"
 MAX_READ_BYTES = 1 << 20
@@ -87,7 +87,38 @@ def anchored(
         return None
     files = link_map(cfg)
     anchor = links.anchor_of(kind, key, fold.safe_name(key))
-    return (anchor, files) if anchor in files else None
+    found, seen = legacy_links(cfg, kind, key, files, retired)
+    if anchor not in files:
+        if kind != "ticket" or not seen:
+            return None
+        # `juno migrate --decisions` creates this task file, so [[KEY]] resolves to it
+        stub: dict[str, Any] = {
+            "sig": None,
+            "title": links.title_of(anchor, ""),
+            "hidden": False,
+            "links": [],
+        }
+        files = {**files, anchor: stub}
+    if found:
+        files = {**files, anchor: {**files[anchor], "links": found + files[anchor]["links"]}}
+    return anchor, files
+
+
+def legacy_links(
+    cfg: config.Config, kind: str, key: str, files: dict[str, Any], retired: Collection[str]
+) -> tuple[list[list[Any]], bool]:
+    """Links in a not-yet-migrated `## Current` count for the owner, as after `juno migrate
+    --decisions` (which puts them in the owner's Decisions section, ahead of its other links)."""
+    found: list[list[Any]] = []
+    seen = False
+    for rel in owners.legacy_decision_rels(kind, key):
+        entry = files.get(rel)
+        if entry is None or entry["hidden"] or rel in retired:
+            continue
+        seen = True
+        text = store.read_text(os.path.join(cfg.vault, *rel.split("/")))
+        found += [[0, target] for _, target in links.wikilinks(vaultfmt.decision_current(text))]
+    return found, seen
 
 
 def linked_titles(
