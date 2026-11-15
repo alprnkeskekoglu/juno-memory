@@ -103,6 +103,27 @@ flowchart LR
 
 Edit and Write on vault files are refused by the PreToolUse hook, and the refusal names the verb to use. `juno init` also adds a Claude Code deny for edits under `rules/` and `.git/`. A Bash command that writes a vault file by hand is not detected; the vault's git snapshots are the fallback.
 
+### Claude's own memory on first install
+
+`juno init` turns Claude Code's auto memory off, so the notes Claude kept in `~/.claude/projects/*/memory/` would no longer be read. Instead of dropping them, Juno offers to import them once:
+
+```mermaid
+flowchart TD
+    A[juno init] --> B{native memory notes found?}
+    B -->|no| Z[nothing asked]
+    B -->|yes| C{"Import them into Juno? [Y/n]"}
+    C -->|no| L[later: juno import-memory]
+    C -->|yes| D[privacy scan per note]
+    D -->|hit| S[skipped, listed in the report]
+    D --> E{note type}
+    E -->|project / reference| F[projects/&lt;repo&gt;.md gotchas<br>or knowledge/&lt;slug&gt;.md]
+    E -->|feedback / user| G[rule candidates,<br>batch memory-import]
+    F --> U[juno undo --run id]
+    G --> H[next SessionStart:<br>one question: Accept all / Review / None]
+```
+
+Facts go straight in, with `import:memory/<project>/<file>` as their source. Anything that would become a rule waits for your choice, and one answer settles the whole batch. The original files are never changed, and a re-run adds nothing twice.
+
 ### Rules and context
 
 Juno keeps instructions and data apart:
@@ -136,7 +157,7 @@ All of these are off unless you turn them on.
    ./bin/juno init
    ```
 
-   `init` asks nothing and can be run again safely. Use `./bin/juno init --dry-run` to preview. It does exactly this:
+   `init` can be run again safely; in a terminal it asks a few optional questions once (status band, output style, stale fixer, and importing Claude's own memory). Use `./bin/juno init --dry-run` to preview. It does exactly this:
 
    - writes `juno.toml` (default `~/.config/juno/juno.toml`) with the interpreter and plugin root;
    - creates the state directory (on macOS `~/Library/Application Support/juno`, elsewhere `~/.local/state/juno`);
@@ -144,7 +165,9 @@ All of these are off unless you turn them on.
    - merges a small set of entries into `~/.claude/settings.json`: the vault as an additional directory, read and edit permissions for it, a deny on editing `rules/` and `.git/`, and `autoMemoryEnabled: false`. The original file is backed up first and every added entry is recorded in `install-manifest.json`;
    - installs a `juno` command at `~/.local/bin/juno`. Make sure that directory is on your PATH.
 
-   When an existing vault has an older schema, `init` stops and points to `juno migrate`. In a terminal it also asks two optional questions at the end (the weekly stale fixer and the output style); both default to off.
+   When an existing vault has an older schema, `init` stops and points to `juno migrate`. In a terminal it also asks optional questions at the end: the weekly stale fixer and the output style (both default to off), and the memory import below (defaults to yes).
+
+   Because `init` turns Claude's own auto memory off, it also looks at `~/.claude/projects/*/memory/`. If Claude had remembered notes there, it asks once `Claude's own memory has N notes in M projects. Import them into Juno? [Y/n]`. Run it later with `juno import-memory` (`--dry-run` to preview). Project and reference notes go straight into the vault; feedback and user notes only become rule candidates, and you approve them all with one question at your next session start. Your original files stay untouched and `juno undo --run <id>` reverts the vault writes.
 
 3. Install the plugin in Claude Code. `init` prints the exact commands; they look like this:
 

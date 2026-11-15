@@ -102,8 +102,10 @@ def extra_blocks(cfg: config.Config, source: str) -> list[str]:
 
     if learned.stale(cfg):
         learned.rebuild(cfg)
+    rules = queues.pending(cfg, queues.RULES)
     nudges = [
-        candidates.rules_nudge(queues.pending(cfg, queues.RULES)),
+        candidates.rules_nudge(rules),
+        candidates.import_nudge(rules),
         candidates.threads_nudge(queues.pending(cfg, queues.THREADS)),
     ]
     return [inject.context_block([n]) for n in nudges if n]

@@ -17,6 +17,10 @@ VERBS: dict[str, tuple[str, str]] = {
     "doctor": ("doctor", "check the installation"),
     "export": ("export", "write a tarball of the vault and config"),
     "import": ("import_", "restore a vault from a tarball"),
+    "import-memory": (
+        "import_memory",
+        "import Claude's own memory notes (queues rules for approval)",
+    ),
     "migrate": ("migrate", "upgrade the vault schema"),
     "dashboard": ("dashboard", "build the status page (on demand)"),
     "search": ("search", "search the vault (FTS5, typo tolerant)"),
@@ -65,7 +69,7 @@ def build_parser(verb: str) -> argparse.ArgumentParser:
 
 def top_help() -> str:
     lines = ["usage: juno <verb> [options]", "", "verbs:"]
-    lines += [f"  {name:<10} {text}" for name, (_, text) in VERBS.items()]
+    lines += [f"  {name:<13} {text}" for name, (_, text) in VERBS.items()]
     return "\n".join(lines) + "\n"
 
 

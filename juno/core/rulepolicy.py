@@ -96,6 +96,10 @@ def rule_line(date: str, rule: str, pid: str | None, quote: str | None) -> str:
     return f'- {date} · {rule} · src: user {pid[:8]} · "{quote.replace(chr(34), chr(39))}"'
 
 
+def import_line(date: str, rule: str, source: str) -> str:
+    return f"- {date} · {rule} · src: {source}"
+
+
 def append_line(text: str, scope: str, line: str, triggers: list[str] | None) -> str:
     body = text or f"# Rules: {scope}\n\n"
     if triggers:
