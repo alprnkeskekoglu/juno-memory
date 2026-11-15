@@ -5,7 +5,7 @@ from collections.abc import Collection, Mapping
 from typing import Any
 
 MAX_RUNNING = 2
-FEATURES = ("linked", "next", "self")
+FEATURES = ("linked", "next", "self", "ranked")
 GATED_BY_STATE = ("self",)  # features whose block follows a stopped or decided arm
 NAME_RE = re.compile(r"^[a-z][a-z0-9-]{1,30}$")
 DAY = 86400

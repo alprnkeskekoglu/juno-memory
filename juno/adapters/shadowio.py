@@ -1,4 +1,5 @@
 import contextlib
+import json
 import os
 import time
 from typing import Any
@@ -10,6 +11,8 @@ from juno.core.ledger import Segment
 from juno.core.view import VaultView
 
 SHADOW_FILE = "shadow.jsonl"
+TRIM_FILE = "shadow-trim.jsonl"
+TRIM_LOG_BYTES = 1 << 20
 DAY = 86400
 OVERFETCH = 15
 
@@ -27,6 +30,15 @@ def append(state: str, entry: shadow.Entry) -> None:
             raise OSError("short write to shadow log")
     finally:
         os.close(fd)
+
+
+def append_trim(cfg: config.Config, seg: Segment, on: bool, sections: list[dict[str, Any]]) -> None:
+    if not cfg.get_bool("shadow", "enabled") or not sections:
+        return
+    entry = {"ts": int(time.time()), "segment": seg.sid, "on": on, "sections": sections}
+    line = json.dumps(entry, ensure_ascii=False, separators=(",", ":"))
+    with contextlib.suppress(OSError):
+        fs.append_log(os.path.join(cfg.state, TRIM_FILE), line, TRIM_LOG_BYTES)
 
 
 def read(state: str) -> tuple[list[shadow.Entry], int]:

@@ -2,15 +2,20 @@ import dataclasses
 from typing import Any
 
 from juno import config
-from juno.adapters import armsio, ledgerio, nextio
-from juno.core import packs
+from juno.adapters import armsio, ledgerio, nextio, shadowio
+from juno.core import packs, trim
 from juno.core.ledger import Segment
 from juno.core.packs import Caps, Card, NextPlan, Wanted
 from juno.core.view import VaultView
 
 
+def ranked_on(cfg: config.Config, sid: str) -> bool:
+    side = armsio.side_of(cfg, sid, "ranked")
+    return side == "on" if side else cfg.get_bool("packs", "ranked_trim")
+
+
 def deliver_packs(
-    cfg: config.Config, view: VaultView, seg: Segment, wanted: Wanted, budget: int
+    cfg: config.Config, view: VaultView, seg: Segment, wanted: Wanted, budget: int, query: str = ""
 ) -> str:
     caps = Caps.from_config(cfg)
     side = armsio.side_of(cfg, seg.sid, "linked")
@@ -18,6 +23,7 @@ def deliver_packs(
         caps = dataclasses.replace(caps, linked=side == "on")
     next_side = armsio.side_of(cfg, seg.sid, "next")
     stored = nextio.load(cfg) if next_side else {}
+    ranking = trim.Ranking(query, ranked_on(cfg, seg.sid))
     parts: list[str] = []
     used = 0
     cards: list[Card] | None = None
@@ -32,7 +38,7 @@ def deliver_packs(
             if next_side
             else None
         )
-        text = packs.render_pack(view, caps, kind, key, cards, shown, plan)
+        text = packs.render_pack(view, caps, kind, key, cards, shown, plan, ranking)
         if not text:
             continue
         mode = "full"
@@ -50,4 +56,5 @@ def deliver_packs(
             held = not plan.show or f"[Next · {plan.seg}]" not in text
             event["next_held" if held else "next_shown"] = plan.seg
         ledgerio.record(cfg, seg, event)
+    shadowio.append_trim(cfg, seg, ranking.on, ranking.log)
     return "\n\n".join(parts)
