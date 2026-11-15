@@ -15,6 +15,9 @@ CLEAN = (
     "see comment 5632425 and Comment #5632425",
     "review 5626688704, Sentry issue 7790621826, Run 39486898219",
     "PR 1234567, pull #1234567, build 7654321, job 7654321",
+    "qa account 123456789012 (us-east-1)",
+    "QA /APP (123456789012, us-east-1)",
+    "qa account 123456789012, us-east-1",
 )
 FLAGGED = (
     "call 5551234567 now",
