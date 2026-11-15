@@ -400,3 +400,66 @@ class Cards(SandboxCase):
         self.assertEqual(self.sb.cli("migrate", "--cards")[0], 0)
         self.assertIn("aaaaaaaa", self.read("beta.md"))
         self.assertEqual(self.misfiled_warnings(), 0)
+
+    def five_shapes(self) -> dict[str, str]:
+        """Every shape of #25: named + extras, `-` cards, and a card filed once in each of 4 repos."""
+        self.profiles("alpha")
+        keep = "# H\n\n"
+        c = self.card
+        self.write(
+            "alpha.md",
+            keep + c("aaaa0001", "alpha") + c("aaaa0002", "alpha") + c("aaaa0003", "alpha"),
+        )
+        self.write("notes.md", keep + c("aaaa0001", "alpha") + c("aaaa0002", "alpha"))
+        self.write("ideas.md", keep + c("aaaa0002", "alpha") + c("aaaa0003", "alpha"))
+        self.write("todo.md", keep + c("aaaa0002", "alpha") + c("aaaa0003", "alpha"))
+        self.write("misc.md", keep + c("aaaa0004", "-"))
+        self.write("scratch.md", keep + c("aaaa0004", "-") + c("aaaa0005", "-"))
+        self.write("zzz.md", keep + c("aaaa0005", "-"))
+        for repo in ("r1", "r2", "r3", "r4"):
+            self.write(f"{repo}.md", keep + c("aaaa0006", "r1, r2, r3, r4"))
+        return {n: self.read(n) for n in os.listdir(os.path.join(self.sb.vault, "handoffs"))}
+
+    def copy_warnings(self) -> list[str]:
+        out = self.sb.cli("doctor")[1]
+        return [line for line in out.splitlines() if "card copies" in line]
+
+    def test_cards_doctor_and_migrate_agree_on_every_shape(self) -> None:
+        before = self.five_shapes()
+        warned = self.copy_warnings()
+        self.assertEqual(len(warned), 5)
+        self.assertFalse(any("aaaa0006" in line for line in warned))
+        code, out = self.sb.cli("migrate", "--cards", "--dry-run")
+        self.assertEqual(code, 0)
+        for rel, seg in [
+            ("notes.md", "aaaa0001"), ("notes.md", "aaaa0002"), ("ideas.md", "aaaa0002"),
+            ("todo.md", "aaaa0002"), ("ideas.md", "aaaa0003"), ("todo.md", "aaaa0003"),
+            ("scratch.md", "aaaa0004"), ("zzz.md", "aaaa0005"),
+        ]:  # fmt: skip
+            line = next((x for x in out.splitlines() if f"handoffs/{rel}" in x), "")
+            self.assertIn("would drop", line)
+            self.assertIn(seg, line)
+        self.assertEqual({n: self.read(n) for n in before}, before)
+        self.assertEqual(self.sb.cli("migrate", "--cards")[0], 0)
+        self.assertEqual(self.copy_warnings(), [])
+        after = {n: self.read(n) for n in os.listdir(os.path.join(self.sb.vault, "handoffs"))}
+        repos = {"aaaa0004": "-", "aaaa0005": "-", "aaaa0006": "r1, r2, r3, r4"}
+        for i in range(1, 7):
+            seg = f"aaaa000{i}"
+            held = [n for n, t in after.items() if seg in t]
+            self.assertGreaterEqual(len(held), 1)
+            for n in held:  # the surviving copy is byte-identical to what was filed
+                self.assertIn(self.card(seg, repos.get(seg, "alpha")), after[n])
+                self.assertIn(self.card(seg, repos.get(seg, "alpha")), before[n])
+        self.assertEqual([n for n, t in after.items() if "aaaa0001" in t], ["alpha.md"])
+        self.assertEqual([n for n, t in after.items() if "aaaa0004" in t], ["misc.md"])
+        self.assertEqual([n for n, t in after.items() if "aaaa0005" in t], ["scratch.md"])
+        self.assertEqual(len([n for n, t in after.items() if "aaaa0006" in t]), 4)
+        self.assertEqual(self.sb.cli("migrate", "--cards")[0], 0)
+        self.assertEqual(after, {n: self.read(n) for n in after})
+
+    def test_cards_four_repo_card_is_left_alone(self) -> None:
+        for repo in ("r1", "r2", "r3", "r4"):
+            self.write(f"{repo}.md", "# H\n\n" + self.card("aaaa0006", "r1, r2, r3, r4"))
+        self.assertEqual(self.copy_warnings(), [])
+        self.assertIn("no extra copies", self.sb.cli("migrate", "--cards", "--dry-run")[1])
