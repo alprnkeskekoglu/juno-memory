@@ -193,7 +193,7 @@ class AllowPrefixesAndObjectIds(unittest.TestCase):
 
 class DoctorAllowPrefixes(WriteCase):
     def privacy_status(self) -> str:
-        code, out = self.juno("doctor", "--json", *self.sb.install_args())
+        _, out = self.juno("doctor", "--json", *self.sb.install_args())
         found = [c["status"] for c in json.loads(out)["checks"] if c["name"] == "privacy"]
         return found[0]
 

@@ -1,5 +1,4 @@
 import json
-import time
 import unittest
 
 from juno.adapters import ledgerio
@@ -119,7 +118,7 @@ class Hook(HookCase):
         self.hook("post_tool_use", self.payload_for("Bash", {"command": "echo ABC-1"}, {}))
         self.assertNotIn("keys", self.tool_rows()[-1])
 
-    def cfg(self):  # noqa: ANN201
+    def cfg(self):
         from juno import config
 
         return config.load(self.env)

@@ -133,7 +133,7 @@ def blank(chars: list[tuple[str, int]], pattern: re.Pattern[str]) -> list[tuple[
     out: list[tuple[str, int]] = []
     pos = 0
     for m in pattern.finditer(text):
-        out += chars[pos : m.start()] + [(" ", -1)]
+        out += [*chars[pos : m.start()], (" ", -1)]
         pos = m.end()
     return out + chars[pos:]
 
