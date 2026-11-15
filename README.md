@@ -117,12 +117,15 @@ flowchart TD
     D -->|hit| S[skipped, listed in the report]
     D --> E{note type}
     E -->|project / reference| F[projects/&lt;repo&gt;.md gotchas<br>or knowledge/&lt;slug&gt;.md]
-    E -->|feedback / user| G[rule candidates,<br>batch memory-import]
+    E -->|feedback| G[rule candidates,<br>batch memory-import]
+    E -->|user| M[self candidates,<br>batch memory-import]
     F --> U[juno undo --run id]
     G --> H[next SessionStart:<br>one question: Accept all / Review / None]
+    M --> H
+    H -->|accepted| R[rules/ and self/communication.md]
 ```
 
-Facts go straight in, with `import:memory/<project>/<file>` as their source. Anything that would become a rule waits for your choice, and one answer settles the whole batch. The original files are never changed, and a re-run adds nothing twice.
+Facts go straight in, with `import:memory/<project>/<file>` as their source. Feedback notes become rule candidates and user notes (role, background, preferences) become self candidates; nothing reaches `rules/` or `self/` before you accept it, and one answer settles the whole batch, both kinds together (`juno import-memory accept` / `reject`). The batch has its own queue budget: it never uses up the slots of ordinary session-end rule candidates, and undecided import candidates do not expire. The original files are never changed, and a re-run adds nothing twice.
 
 ### Rules and context
 
@@ -167,7 +170,7 @@ All of these are off unless you turn them on.
 
    When an existing vault has an older schema, `init` stops and points to `juno migrate`. In a terminal it also asks optional questions at the end: the weekly stale fixer and the output style (both default to off), and the memory import below (defaults to yes).
 
-   Because `init` turns Claude's own auto memory off, it also looks at `~/.claude/projects/*/memory/`. If Claude had remembered notes there, it asks once `Claude's own memory has N notes in M projects. Import them into Juno? [Y/n]`. Run it later with `juno import-memory` (`--dry-run` to preview). Project and reference notes go straight into the vault; feedback and user notes only become rule candidates, and you approve them all with one question at your next session start. Your original files stay untouched and `juno undo --run <id>` reverts the vault writes.
+   Because `init` turns Claude's own auto memory off, it also looks at `~/.claude/projects/*/memory/`. If Claude had remembered notes there, it asks once `Claude's own memory has N notes in M projects. Import them into Juno? [Y/n]`. Run it later with `juno import-memory` (`--dry-run` to preview). Project and reference notes go straight into the vault; feedback notes only become rule candidates and user notes self candidates (lines for `self/communication.md`), and you approve them all with one question at your next session start. Your original files stay untouched and `juno undo --run <id>` reverts the vault writes.
 
 3. Install the plugin in Claude Code. `init` prints the exact commands; they look like this:
 

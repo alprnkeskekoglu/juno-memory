@@ -105,7 +105,7 @@ def extra_blocks(cfg: config.Config, source: str) -> list[str]:
     rules = queues.pending(cfg, queues.RULES)
     nudges = [
         candidates.rules_nudge(rules),
-        candidates.import_nudge(rules),
+        candidates.import_nudge([*rules, *queues.pending(cfg, queues.SELF)]),
         candidates.threads_nudge(queues.pending(cfg, queues.THREADS)),
     ]
     return [inject.context_block([n]) for n in nudges if n]
@@ -161,9 +161,11 @@ def session_context(
     previous = None if compact else stubs.stub_ended_segments(cfg, sid)
     lines = [segment_line(sid), f"Juno vault: {cfg.vault}."]
     if previous:
-        lines.append(routing.previous_segment_line(
+        lines.append(
+            routing.previous_segment_line(
                 *previous, failure=cardjob.card_failure(cfg, previous[0].sid)
-            ))
+            )
+        )
     if not compact:
         lines.append(hook_error_line(cfg))
         lines.append(weekly_report_line(cfg))

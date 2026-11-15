@@ -57,7 +57,7 @@ def prune_cards(cfg: config.Config, now: float) -> None:
         names = [n for n in os.listdir(cards) if n.endswith((".job.json", ".lock"))]
     except OSError:
         return
-    shared = {q.name + ".lock" for q in (queues.RULES, queues.THREADS, queues.BACKLOG)}
+    shared = {q.name + ".lock" for q in (queues.RULES, queues.THREADS, queues.BACKLOG, queues.SELF)}
     for name in names:
         path = os.path.join(cards, name)
         try:

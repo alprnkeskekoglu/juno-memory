@@ -100,6 +100,9 @@ class Base(WriteCase):
     def rules(self) -> list[dict[str, object]]:
         return queues.read(self.cfg, queues.RULES)
 
+    def mine(self) -> list[dict[str, object]]:
+        return queues.read(self.cfg, queues.SELF)
+
     def tree(self) -> dict[str, str]:
         found = {}
         for base, dirs, files in os.walk(self.sb.vault):
@@ -132,7 +135,15 @@ class Import(Base):
         self.assertEqual(self.get("self/values.md").count("data engineer"), 0)
         items = {i["rule"]: i for i in self.rules()}
         self.assertEqual(items["Prefer small commits always"]["scope"], "repo:app")
-        self.assertEqual(items["Works as a data engineer on pipelines"]["scope"], "global")
+        self.assertNotIn("Works as a data engineer on pipelines", items)
+        mine = queues.read(self.cfg, queues.SELF)
+        self.assertEqual(len(mine), 1)
+        self.assertEqual(mine[0]["text"], "Works as a data engineer on pipelines")
+        self.assertEqual(mine[0]["file"], "communication")
+        self.assertEqual(mine[0]["batch"], "memory-import")
+        self.assertEqual(mine[0]["source"], "import:memory/-tmp-elsewhere/me.md")
+        self.assertRegex(str(mine[0]["id"]), r"^s[0-9a-f]{6}$")
+        self.assertEqual(self.get("self/communication.md"), "")
         for item in items.values():
             self.assertEqual(item["status"], "pending")
             self.assertEqual(item["batch"], "memory-import")
@@ -194,6 +205,21 @@ class Import(Base):
         self.assertEqual(code, 0, out)
         self.assertIn("skipped -x/me.md", out)
         self.assertEqual(self.rules(), [])
+        self.assertEqual(queues.read(self.cfg, queues.SELF), [])
+
+    def test_over_the_hard_limit_is_reported_and_rerun_continues(self) -> None:
+        for n in range(5):
+            self.memory("-x", f"f{n}.md", note(f"f{n}", "feedback", f"Prefer approach number {n}"))
+        with mock.patch.object(nativememory, "BATCH_MAX", 3):
+            code, out = self.sb.cli("import-memory")
+            self.assertEqual(code, 0, out)
+            self.assertIn("2 over the limit of 3", out)
+            self.assertEqual(len(self.rules()), 3)
+            self.assertEqual(self.sb.cli("import-memory")[0], 0)
+            self.assertEqual(len(self.rules()), 3)
+            queues.update(self.cfg, queues.RULES, lambda q: queues.mark(q, "rejected"))
+            self.assertEqual(self.sb.cli("import-memory")[0], 0)
+        self.assertEqual(len(self.rules()), 5)
 
     def test_no_write_cap_truncation(self) -> None:
         self.set_config("[caps]\nrun_max = 1\n")
@@ -259,7 +285,7 @@ class Approval(Base):
         )
         entries = vaultfmt.rule_entries(text)
         self.assertEqual(entries[0].text, "Prefer small commits always")
-        self.assertIn("data engineer", self.get("rules/global.md"))
+        self.assertEqual(self.get("rules/global.md"), "")
         self.assertTrue(all(i["status"] == "accepted" for i in self.rules()))
 
     def test_batch_reject_and_pending_listing(self) -> None:
@@ -276,24 +302,180 @@ class Approval(Base):
         self.assertIn("Prefer small commits always", self.get("rules/repos/app.md"))
         self.assertEqual(self.get("rules/global.md"), "")
 
+    def test_rule_batch_command_settles_both_kinds(self) -> None:
+        self.answer("Accept all memory-import (Recommended)")
+        self.assertEqual(self.juno("rule", "accept", "--batch", "memory-import")[0], 0)
+        self.assertIn("data engineer", self.get("self/communication.md"))
+        self.assertTrue(all(i["status"] == "accepted" for i in self.mine()))
+
     def test_ids_and_batch_together_refused(self) -> None:
         self.answer("Accept all memory-import")
         code, _ = self.juno("rule", "accept", "--batch", "memory-import", "r000000")
         self.assertEqual(code, 2)
 
 
+class Settle(Base):
+    """One command per outcome settles the rule and the self candidates of the batch together."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.seed()
+        self.sb.cli("import-memory")
+
+    def test_nothing_in_self_until_chosen(self) -> None:
+        code, out = self.juno("import-memory", "accept")
+        self.assertEqual(code, 2)
+        self.assertIn("did not choose", out)
+        self.assertEqual(self.get("self/communication.md"), "")
+        self.assertEqual(self.get("rules/repos/app.md"), "")
+        self.assertTrue(all(i["status"] == "pending" for i in self.mine()))
+
+    def test_accept_writes_self_line_and_rule(self) -> None:
+        self.answer("Accept all memory-import (Recommended)")
+        code, out = self.juno("import-memory", "accept")
+        self.assertEqual(code, 0, out)
+        text = self.get("self/communication.md")
+        self.assertRegex(
+            text,
+            r"- Works as a data engineer on pipelines · \d{4}-\d\d-\d\d · "
+            r"src: import:memory/-tmp-elsewhere/me\.md\n",
+        )
+        self.assertIn("Prefer small commits always", self.get("rules/repos/app.md"))
+        self.assertEqual(self.get("rules/global.md"), "")
+        self.assertTrue(all(i["status"] == "accepted" for i in self.mine() + self.rules()))
+        self.assertIn("self/communication.md", out)
+        self.assertEqual(self.juno("import-memory", "accept")[0], 2)
+
+    def test_reject_settles_both_and_writes_nothing(self) -> None:
+        code, out = self.juno("import-memory", "reject")
+        self.assertEqual(code, 0, out)
+        self.assertTrue(all(i["status"] == "rejected" for i in self.mine() + self.rules()))
+        self.assertEqual(self.get("self/communication.md"), "")
+
+    def test_review_path_takes_self_ids(self) -> None:
+        sid = str(self.mine()[0]["id"])
+        rid = str(next(i for i in self.rules() if i["kind"] == "feedback")["id"])
+        self.assertEqual(self.juno("import-memory", "accept", sid)[0], 2)
+        self.answer(f"{sid} Works as a data engineer")
+        code, out = self.juno("import-memory", "accept", sid)
+        self.assertEqual(code, 0, out)
+        self.assertIn("data engineer", self.get("self/communication.md"))
+        self.assertEqual(self.get("rules/repos/app.md"), "")
+        code, out = self.juno("import-memory", "reject", rid)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.rules()[0]["status"], "rejected")
+
+    def test_stance_is_refused_at_accept_and_nothing_is_written(self) -> None:
+        self.mine()  # queue exists
+        queues.update(
+            self.cfg,
+            queues.SELF,
+            lambda q: q[0].update(text="Believes that tabs are the best way to indent"),
+        )
+        self.answer("Accept all memory-import")
+        code, out = self.juno("import-memory", "accept")
+        self.assertEqual(code, 2)
+        self.assertIn("stance", out)
+        self.assertEqual(self.get("self/communication.md"), "")
+
+    def test_session_start_asks_one_question_for_both_kinds(self) -> None:
+        from juno.handlers import session_start
+
+        blocks = [
+            b for b in session_start.extra_blocks(self.cfg, "startup") if "memory-import" in b
+        ]
+        self.assertEqual(len(blocks), 1)
+        self.assertIn(f"{self.mine()[0]['id']} · self · communication", blocks[0])
+        self.assertIn("· rule · repo:app · Prefer small commits always", blocks[0])
+        self.assertIn("juno import-memory accept <ids>", blocks[0])
+
+    def test_pending_lists_both_kinds(self) -> None:
+        out = self.juno("rule", "pending")[1]
+        self.assertIn("self/communication", out)
+        self.assertIn("Works as a data engineer", out)
+
+
+class Budget(unittest.TestCase):
+    NOW = 1_000_000_000.0
+
+    def imports(self, count: int) -> list[dict[str, object]]:
+        return [
+            {
+                "id": f"r{n:06x}",
+                "rule": f"imported rule {n}",
+                "scope": "global",
+                "batch": "memory-import",
+                "t": self.NOW,
+                "status": "pending",
+            }
+            for n in range(count)
+        ]
+
+    def test_import_candidates_do_not_fill_the_ordinary_cap(self) -> None:
+        queue = self.imports(candidates.PENDING_CAP + 5)
+        fresh = [{"scope": "global", "rule": "Always run the tests", "quote": "run the tests"}]
+        queue, counts = candidates.add_rules(
+            queue, fresh, "sid-1", self.NOW, set(), set(), "none", lambda q, p: q
+        )
+        self.assertEqual(counts, {"queued": 1, "duplicate": 0, "capped": 0})
+        self.assertEqual(len(candidates.pending(queue)), candidates.PENDING_CAP + 6)
+
+    def test_ordinary_cap_is_unchanged(self) -> None:
+        queue: list[dict[str, object]] = [
+            {"id": f"r{n:06x}", "rule": f"x{n}", "t": self.NOW, "status": "pending"}
+            for n in range(candidates.PENDING_CAP)
+        ]
+        fresh = [{"scope": "global", "rule": "One more rule", "quote": "one more"}]
+        _, counts = candidates.add_rules(
+            queue, fresh, "sid-1", self.NOW, set(), set(), "none", lambda q, p: q
+        )
+        self.assertEqual(counts["capped"], 1)
+
+    def test_nudges_do_not_share_the_shown_limit(self) -> None:
+        items = [
+            *self.imports(candidates.NUDGE_SHOWN + 3),
+            {"id": "rffffff", "rule": "Ordinary one", "scope": "global", "quote": "q"},
+        ]
+        self.assertIn("rffffff", candidates.rules_nudge(items))
+        self.assertIn("(1 pending", candidates.rules_nudge(items))
+        self.assertNotIn("rffffff", candidates.import_nudge(items))
+
+    def test_pending_import_candidates_do_not_expire_ordinary_ones_do(self) -> None:
+        late = self.NOW + 400 * candidates.DAY
+        ordinary = {"id": "raaaaaa", "rule": "x", "t": self.NOW, "status": "pending"}
+        kept = candidates.prune([*self.imports(2), ordinary], late)
+        self.assertEqual([i["status"] for i in kept[:2]], ["pending", "pending"])
+        self.assertEqual(kept[2]["status"], "expired")
+
+    def test_decided_import_candidates_follow_the_normal_retention(self) -> None:
+        item = dict(self.imports(1)[0], status="rejected", decided_t=self.NOW)
+        gone = candidates.prune([item], self.NOW + (candidates.DECIDED_DAYS + 1) * candidates.DAY)
+        self.assertEqual(gone, [])
+
+
 class Nudge(unittest.TestCase):
     ITEMS: ClassVar[list[dict[str, str]]] = [
         {"id": "raaaaaa", "rule": "x", "scope": "global", "batch": "memory-import"},
-        {"id": "rbbbbbb", "rule": "y", "scope": "global", "batch": "memory-import"},
+        {
+            "id": "sabcdef",
+            "text": "y",
+            "file": "communication",
+            "batch": "memory-import",
+            "target": "self",
+        },
     ]
 
     def test_one_question_for_the_batch(self) -> None:
         text = candidates.import_nudge(self.ITEMS)
         self.assertIn("ask the user ONCE", text)
         self.assertIn("Accept all memory-import (Recommended)", text)
-        self.assertIn("juno rule accept --batch memory-import", text)
+        self.assertIn("juno import-memory accept", text)
+        self.assertIn("juno import-memory reject", text)
+        self.assertIn("juno import-memory accept <ids>", text)
         self.assertIn("Review memory-import", text)
+        self.assertIn("raaaaaa · rule · global · x", text)
+        self.assertIn("sabcdef · self · communication · y", text)
+        self.assertIn("(1 rule, 1 self; 2 pending", text)
         self.assertEqual(candidates.rules_nudge(self.ITEMS), "")
 
     def test_plain_candidates_keep_their_own_question(self) -> None:
@@ -337,7 +519,7 @@ class InitQuestion(Base):
             asked, ["Claude's own memory has 4 notes in 2 projects. Import them into Juno? [Y/n] "]
         )
         self.assertIn("Merge freeze", self.get("projects/app.md"))
-        self.assertEqual(len(self.rules()), 2)
+        self.assertEqual((len(self.rules()), len(self.mine())), (1, 1))
         self.assertTrue(os.path.exists(os.path.join(self.sb.state, "memory-import-asked")))
 
     def test_no_prints_the_later_command(self) -> None:

@@ -27,7 +27,9 @@ class Queue:
 
     @property
     def hint(self) -> str:
-        return "juno backlog list" if self.noun == "backlog" else f"juno {self.noun} pending"
+        if self.noun == "backlog":
+            return "juno backlog list"
+        return "juno rule pending" if self.noun == "self" else f"juno {self.noun} pending"
 
     def valid_id(self, value: object) -> bool:
         return re.fullmatch(self.letter + "[0-9a-f]{6}", str(value)) is not None
@@ -36,6 +38,8 @@ class Queue:
 RULES = Queue("candidates", "candidates.json", "r", 512 * 1024, "rule")
 THREADS = Queue("thread-candidates", "thread-candidates.json", "t", 256 * 1024, "thread")
 BACKLOG = Queue("backlog-suggestions", "backlog-suggestions.json", "b", 256 * 1024, "backlog")
+
+SELF = Queue("self-candidates", "self-candidates.json", "s", 512 * 1024, "self")
 
 Item = dict[str, Any]
 

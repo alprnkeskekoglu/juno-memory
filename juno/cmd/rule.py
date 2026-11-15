@@ -239,6 +239,11 @@ def do_pending(cfg: config.Config, args: argparse.Namespace) -> int:
     items = queues.pending(cfg, queues.RULES)
     keys = ("id", "scope", "triggers", "rule", "quote", "seg8", "pid", "t")
     data = [{k: i.get(k) for k in keys} for i in items]
+    mine = queues.pending(cfg, queues.SELF)
+    data += [
+        {"id": i["id"], "scope": f"self/{i.get('file')}", "rule": i.get("text"), "kind": "self"}
+        for i in mine
+    ]
     lines = []
     for i in items:
         topic = f" (new topic, triggers: {', '.join(i['triggers'])})" if i.get("triggers") else ""
@@ -248,6 +253,11 @@ def do_pending(cfg: config.Config, args: argparse.Namespace) -> int:
             else f'src: user {i.get("pid")} (segment {i.get("seg8")}) · "{i.get("quote")}"'
         )
         lines.append(f"{i['id']} · {i.get('scope')}{topic} · {i.get('rule')} · {src}")
+    lines += [
+        f"{i['id']} · self/{i.get('file')} · {i.get('text')} · src: {i.get('source')} "
+        f"(native memory, batch {nativememory.BATCH}; a line for self/, not a rule)"
+        for i in mine
+    ]
     write.emit(args, data, "\n".join(lines) if lines else "Juno: no pending rule candidates.")
     return 0
 
@@ -256,7 +266,23 @@ def imported(item: queues.Item) -> bool:
     return item.get("batch") == nativememory.BATCH
 
 
-def accept_one(cfg: config.Config, item: queues.Item) -> tuple[str, str, bool, list[str] | None]:
+Accepted = tuple[str, str, bool, list[str] | None]
+
+
+def report_accepted(cfg: config.Config, seg: Segment, item: queues.Item, result: Accepted) -> None:
+    scope, line, present, triggers = result
+    relpath = rulepolicy.parse_scope(scope).relpath
+    if present:
+        print(f"Juno: rule candidate {item['id']} already present in {relpath}: {item['rule']}")
+    else:
+        added(cfg, seg, scope, str(item["rule"]), str(item["id"]))
+        print(
+            f"Juno: rule candidate {item['id']} added to {relpath}:\n{line}"
+            f"{triggers_note(triggers)}"
+        )
+
+
+def accept_one(cfg: config.Config, item: queues.Item) -> Accepted:
     scope = rulepolicy.parse_scope(str(item.get("scope") or ""))
     rule = rule_text(cfg, str(item.get("rule") or ""))
     if imported(item):
@@ -299,14 +325,7 @@ def accept_one(cfg: config.Config, item: queues.Item) -> tuple[str, str, bool, l
 def select(
     args: argparse.Namespace, queue: list[queues.Item]
 ) -> tuple[list[str], list[queues.Item]]:
-    """Ids and items named by ids or by --batch (the whole native-memory import batch)."""
-    if args.batch:
-        if args.ids:
-            raise Refused("give ids or --batch, not both")
-        items = [i for i in queue if i.get("status") == "pending" and imported(i)]
-        if not items:
-            raise Refused(f"no pending candidates in batch {args.batch}")
-        return [str(i["id"]) for i in items], items
+    """Ids and items named by ids (`--batch` is settled by `import_settle`)."""
     if not args.ids:
         raise Refused(f"give candidate ids or --batch {nativememory.BATCH}")
     ids = queues.clean_ids(queues.RULES, args.ids)
@@ -314,8 +333,10 @@ def select(
 
 
 def do_accept(cfg: config.Config, args: argparse.Namespace) -> int:
+    if args.batch:
+        return settle_batch(cfg, args)
     seg = write.guard(cfg)
-    done: list[tuple[queues.Item, tuple[str, str, bool, list[str] | None]]] = []
+    done: list[tuple[queues.Item, Accepted]] = []
     with queues.locked(cfg, queues.RULES):
         queue = queues.read(cfg, queues.RULES)
         _, items = select(args, queue)
@@ -334,20 +355,23 @@ def do_accept(cfg: config.Config, args: argparse.Namespace) -> int:
         finally:
             if done:
                 queues.write(cfg, queues.RULES, queue)
-    for item, (scope, line, present, triggers) in done:
-        relpath = rulepolicy.parse_scope(scope).relpath
-        if present:
-            print(f"Juno: rule candidate {item['id']} already present in {relpath}: {item['rule']}")
-        else:
-            added(cfg, seg, scope, str(item["rule"]), str(item["id"]))
-            print(
-                f"Juno: rule candidate {item['id']} added to {relpath}:\n{line}"
-                f"{triggers_note(triggers)}"
-            )
+    for item, result in done:
+        report_accepted(cfg, seg, item, result)
     return 0
 
 
+def settle_batch(cfg: config.Config, args: argparse.Namespace) -> int:
+    """`--batch` settles the whole import batch, rule and self candidates alike."""
+    from juno.cmd import import_settle  # late: import_settle builds on this module
+
+    if args.ids:
+        raise Refused("give ids or --batch, not both")
+    return import_settle.do(cfg, argparse.Namespace(action=args.action, ids=[]))
+
+
 def do_reject(cfg: config.Config, args: argparse.Namespace) -> int:
+    if args.batch:
+        return settle_batch(cfg, args)
     seg = write.guard(cfg)
     with queues.locked(cfg, queues.RULES):
         queue = queues.read(cfg, queues.RULES)

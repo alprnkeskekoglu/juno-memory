@@ -55,6 +55,11 @@ def vault_line(found: Mapping[str, str], today: str) -> str:
     return f'- {found["text"]} · {today} · src: user {found["pid"]} · "{found["quote"]}"'
 
 
+def import_line(text: str, today: str, source: str) -> str:
+    """A self line from the native-memory import: no quote, the import source as evidence."""
+    return f"- {text} · {today} · src: {source}"
+
+
 def is_unit(row: Mapping[str, Any]) -> bool:
     return not row.get("multi") and row.get("rec", -1) >= 0
 
@@ -170,7 +175,7 @@ def block(files: Sequence[str], max_lines: int, max_chars: int) -> str:
     rows = ranked(files)
     used = len(inject.CONTEXT_LABEL) + len(HEADER) + 2
     for line in rows:
-        shown = inject.neutralize(re.sub(r" · src: user \S+", "", line))
+        shown = inject.neutralize(re.sub(r" · src: (?:user |import:memory/)\S+", "", line))
         if len(kept) < max_lines and used + len(shown) + 1 <= max_chars:
             kept.append(shown)
             used += len(shown) + 1

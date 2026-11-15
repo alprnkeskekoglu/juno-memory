@@ -7,6 +7,8 @@ TYPES = ("user", "feedback", "project", "reference")
 BATCH = "memory-import"
 INDEX_NAME = "MEMORY.md"
 TEXT_MAX = 280
+BATCH_MAX = 200
+SELF_FILE = "communication"
 SOURCE_RE = re.compile(r"^import:memory/[^/\s]{1,200}/[^/\s]{1,120}\.md$")
 FM_LINE_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*)[ \t]*:[ \t]*(.*)$")
 MARKUP_RE = re.compile(r"[*_`#>]+")
@@ -98,12 +100,23 @@ def source(slug: str, file: str) -> str:
 
 
 def target(note: Note, repo: str | None) -> str:
-    """Where a note lands: profile (gotchas), knowledge, rule candidate or user candidate."""
+    """Where a note lands: profile (gotchas), knowledge, rule candidate or self candidate."""
     if note.type == "feedback":
         return "rule"
     if note.type == "user":
         return "user"
     return "profile" if repo else "knowledge"
+
+
+def self_file(note: Note) -> str:
+    """The self/ file a user note is proposed for.
+
+    self/ holds how to work with the person. Of its four files, `communication` is the only one
+    for role, background and preferences; `values` and `tensions` would turn a note into a
+    stance or a conflict and `decisions` needs a choice with a reason. So every user note goes
+    to `communication` (the user can still `juno fix` a line afterwards).
+    """
+    return SELF_FILE
 
 
 def rule_scope(repo: str | None) -> str:
