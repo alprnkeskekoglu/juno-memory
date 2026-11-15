@@ -773,6 +773,7 @@ From Phase 4, every vault write goes through a `juno <verb>`. Verbs pass the che
 | `capture "text"` | `inbox.md` | segment | `- text · seg8 · date` |
 | `self --file F "line"` | `self/<F>.md` (values, decisions, communication, tensions) | user words | line carries `src: user pid8` and the quote |
 | `fix <file>.md:<line> --was FRAG "new line"` | that file | ledger or user | the line must contain `--was` (8+ characters); not for `rules/`, `protocol/`, `archive/`, `_generated/`, `core.md` |
+| `fix --merge <file>.md:<a>,<b>,.. --was FRAG (one per line) "new line"` | that file and `archive/decayed/forgotten-YYYY-MM.md` | ledger or user | replaces lines of one section with one line as a single write (verb `merge`, plus a linked `merge-archive` record; one cap unit, one `undo`); `consolidate <file>.md [--section S]` is the read-only lister (pitfalldup similarity; paths gone from the default branch) |
 | `forget <file>.md:<line> --was FRAG` | that file and `archive/decayed/forgotten-YYYY-MM.md` | ledger or user | moves the line; two log records, linked |
 | `undo <write id>` | the written file | - | see 14.3 |
 

@@ -51,6 +51,7 @@ VERBS: dict[str, tuple[str, str]] = {
     "capture": ("capture", "put a loose item in the inbox"),
     "self": ("self_", "record a line about the user from their words"),
     "fix": ("fix", "correct one vault line"),
+    "consolidate": ("consolidate", "list near-duplicate and stale lines of a section (read-only)"),
     "forget": ("forget", "move a wrong vault line to the archive"),
     "undo": ("undo", "revert a write by its id"),
     "cap": ("cap", "show or (user-approved) raise this session's write cap"),

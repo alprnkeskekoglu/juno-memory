@@ -12,10 +12,23 @@ WAS_MIN = 8
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("ref", help="<vault-relative file>.md:<line number>")
-    parser.add_argument("--was", required=True, help="a fragment of the line as it is now")
+    parser.add_argument("ref", nargs="?", help="<vault-relative file>.md:<line number>")
+    parser.add_argument(
+        "--was",
+        required=True,
+        action="append",
+        help="a fragment of the line as it is now; with --merge give one per line, in the "
+        "order of the line numbers, each must match its own line",
+    )
+    parser.add_argument(
+        "--merge",
+        metavar="FILE:A,B,C",
+        help="replace lines A,B,C of one section of FILE with the one text, as a single write "
+        "(one write id, one undo, one cap unit); the removed lines go to the archive. "
+        "Give no <file>:<line> then. `juno consolidate` lists candidates",
+    )
     gateio.evidence_option(parser)
-    parser.add_argument("text", help="the corrected line")
+    parser.add_argument("text", nargs="?", help="the corrected line")
 
 
 def locate(cfg: config.Config, ref: str, was: str, forget: bool) -> tuple[str, list[str], int]:
@@ -34,13 +47,19 @@ def locate(cfg: config.Config, ref: str, was: str, forget: bool) -> tuple[str, l
 
 
 def do(cfg: config.Config, args: argparse.Namespace) -> int:
+    if args.merge:
+        from juno.cmd import fixmerge
+
+        return fixmerge.do(cfg, args)
+    if args.ref is None or args.text is None or len(args.was) != 1:
+        raise Refused("fix takes <file>:<line>, one --was and the corrected line")
     seg = write.guard(cfg)
     evidence = gate.anchor(cfg, seg, args.evidence, user_only=False)
     text = gate.scan_text(cfg, args.text, "line")
     if "\n" in text or len(text) > NEW_MAX:
         raise Refused(f"the corrected line must be one line of at most {NEW_MAX} characters")
     with write.locked(cfg):
-        rel, lines, index = locate(cfg, args.ref, args.was, forget=False)
+        rel, lines, index = locate(cfg, args.ref, args.was[0], forget=False)
         bullet = lines[index].startswith("- ") and not text.startswith("- ")
         lines[index] = ("- " if bullet else "") + text
         res = gate.commit(cfg, seg, "fix", rel, writegate.join(lines), evidence)

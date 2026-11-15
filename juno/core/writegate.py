@@ -84,7 +84,7 @@ def touched(items: list[Hunk]) -> set[str]:
 
 def revert(current: str, items: list[Hunk]) -> str | None:
     lines = current.splitlines()
-    for h in sorted(items, key=lambda x: -x.start):
+    for h in sorted(items, key=lambda x: x.start):  # h.start is in old coordinates: go forward
         if h.new:
             at = find_run(lines, h.new, h.start)
             if at is None:

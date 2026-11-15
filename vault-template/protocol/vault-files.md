@@ -21,6 +21,7 @@ Part of [[core]]. Every write is a `juno` verb; Edit and Write on vault files ar
 ## Correcting
 - A wrong or outdated line: `juno fix <file>:<line> --was "<part of the line as it is now>" --evidence E "<corrected line>"`.
 - A wrong line that should leave the vault: `juno forget <file>:<line> --was "..." --evidence E` (moves it to `archive/decayed/`).
+- A section over its pack budget (doctor `pack fit`): `juno consolidate projects/<repo>.md --section Gotchas` (read-only) lists near-duplicate lines and lines citing a file gone from the default branch; merge a group into one line with `juno fix --merge <file>:<a>,<b>,<c> --was "<part of line a>" --was "<part of line b>" --was "<part of line c>" --evidence E "<one new line>"` (one `--was` per line, in the line order; one write id, one cap unit, the old lines go to `archive/decayed/`).
 - Your own last write: `juno undo <write id>`. It refuses, with a pointer to the last snapshot, when a later write changed the same lines.
 
 ## Ticket files

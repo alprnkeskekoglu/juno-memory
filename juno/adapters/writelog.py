@@ -47,5 +47,6 @@ def live_count(records: list[dict[str, object]], sid: str) -> int:
         if r.get("sid") == sid
         and r.get("verb") != "undo"
         and not r.get("engine")
+        and not r.get("link")
         and r.get("id") not in gone
     )
