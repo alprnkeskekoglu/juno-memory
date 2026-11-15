@@ -5,13 +5,24 @@ import time
 from typing import Any
 
 from juno import config
-from juno.adapters import cardjob, learned, ledgerio, protocolio, queues, repos, selfio, store
+from juno.adapters import (
+    cardjob,
+    learned,
+    ledgerio,
+    privacyack,
+    protocolio,
+    queues,
+    repos,
+    selfio,
+    store,
+)
 from juno.adapters import status as status_io
 from juno.adapters.vaultview import DiskVault, scan_metas
 from juno.cmd import backlog as backlog_cmd
 from juno.core import backlog as bl
 from juno.core import doctor_fit, retire, selfmodel, topics
 from juno.core import doctor_vault as dv
+from juno.core import privacyack as ack_core
 from juno.core.doctor_vault import Check
 from juno.core.vaultfmt import (
     NEVER_INJECTED_KINDS,
@@ -128,7 +139,14 @@ def content_checks(cfg: config.Config, view: DiskVault) -> list[Check]:
         for rel, text in markdown_files(cfg.vault).items()
         if kind_of(rel) not in NEVER_INJECTED_KINDS and kind_of(rel) != "archive"
     }
-    out = dv.privacy_checks(files, cfg.privacy_prefixes())
+    acks = privacyack.read(cfg)
+    prefixes = cfg.privacy_prefixes()
+    scanned = {
+        rel: ack_core.without_acked(text, ack_core.hashes(acks, rel), prefixes)
+        for rel, text in files.items()
+    }
+    out = dv.privacy_checks(scanned, prefixes)
+    out += [("INFO", "privacy", ack_core.count_line(acks))] if acks else []
     out += dv.link_checks(files)
     out += dv.note_checks({n: view.read(f"notes/{n}") for n in view.names("notes")})
     knowledge: dict[str, tuple[str, bool]] = {}

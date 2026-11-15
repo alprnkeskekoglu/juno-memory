@@ -1,5 +1,6 @@
+import hashlib
 import re
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 
 from juno.core import fold
 from juno.core.errors import Refused
@@ -161,13 +162,31 @@ def personal_spans(
     return spans
 
 
-def mask(text: str, prefixes: Sequence[str] | None = None) -> tuple[str, dict[str, int]]:
+def span_hash(span: str) -> str:
+    """Fingerprint of an id span (whitespace dropped), as `juno privacy ack` records it."""
+    return hashlib.sha256("".join(span.split()).encode()).hexdigest()[:24]
+
+
+def live_spans(
+    text: str, prefixes: Sequence[str] | None, acked: Collection[str]
+) -> list[tuple[int, int, str]]:
+    """personal_spans minus the id spans whose fingerprint was acknowledged (never other kinds)."""
+    spans = personal_spans(text, prefixes)
+    if not acked:
+        return spans
+    return [s for s in spans if not (s[2] == "id" and span_hash(text[s[0] : s[1]]) in acked)]
+
+
+def mask(
+    text: str, prefixes: Sequence[str] | None = None, acked: Collection[str] = ()
+) -> tuple[str, dict[str, int]]:
     """Replace personal spans with <id>, <phone>, <email>; return the text and counts by kind.
 
-    Secrets are not handled here. Text with no personal data comes back unchanged."""
+    Secrets are not handled here. Text with no personal data comes back unchanged.
+    Acknowledged id spans (`acked`: fingerprints) are kept."""
     counts: dict[str, int] = {}
     for _ in range(MASK_PASSES):
-        spans = sorted(personal_spans(text, prefixes))
+        spans = sorted(live_spans(text, prefixes, acked))
         if not spans:
             break
         out: list[str] = []
@@ -182,14 +201,25 @@ def mask(text: str, prefixes: Sequence[str] | None = None) -> tuple[str, dict[st
     return text, counts
 
 
-def scan(text: str | None, prefixes: Sequence[str] | None = None) -> str | None:
-    text = text or ""
-    return "secret" if find_secrets(text) else personal(text, prefixes)
+def personal_live(text: str, prefixes: Sequence[str] | None, acked: Collection[str]) -> str | None:
+    if not acked:
+        return personal(text, prefixes)
+    found = {kind for _, _, kind in live_spans(text, prefixes, acked)}
+    return next((k for k in ("email", "phone", "id") if k in found), None)
 
 
-def kinds(text: str | None, prefixes: Sequence[str] | None = None) -> list[str]:
+def scan(
+    text: str | None, prefixes: Sequence[str] | None = None, acked: Collection[str] = ()
+) -> str | None:
     text = text or ""
-    other = personal(text, prefixes)
+    return "secret" if find_secrets(text) else personal_live(text, prefixes, acked)
+
+
+def kinds(
+    text: str | None, prefixes: Sequence[str] | None = None, acked: Collection[str] = ()
+) -> list[str]:
+    text = text or ""
+    other = personal_live(text, prefixes, acked)
     return [*find_secrets(text), *([other] if other else [])]
 
 

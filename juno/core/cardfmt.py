@@ -1,6 +1,6 @@
 import json
 import re
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from typing import Any
 
 from juno.core import privacy, vaultfmt
@@ -176,7 +176,12 @@ def normalise_heading(card: str, seg8: str, key: str, stamp: str) -> str:
 
 
 def validate_card(
-    card: str, seg8: str, key: str, stamp: str, prefixes: Sequence[str] | None = None
+    card: str,
+    seg8: str,
+    key: str,
+    stamp: str,
+    prefixes: Sequence[str] | None = None,
+    acked: Collection[str] = (),
 ) -> str:
     lines = card.splitlines()
     head = HEADING_RE.match(lines[0]) if lines else None
@@ -195,7 +200,7 @@ def validate_card(
             raise Failed(f"invalid: missing {name} line")
     if not vaultfmt.card_field(card, "Learned"):
         raise Failed("invalid: missing Learned line")
-    problem = privacy.scan(card.replace(f" · {seg8}\n", "\n", 1), prefixes)
+    problem = privacy.scan(card.replace(f" · {seg8}\n", "\n", 1), prefixes, acked)
     if problem:
         raise Failed(
             "invalid: secret-like text"
@@ -212,7 +217,11 @@ PRIVATE_FAILURE_RE = re.compile(r"^invalid: private data \((?:id|phone|email)\)$
 
 
 def mask_private(
-    card: str, seg8: str, reason: str, prefixes: Sequence[str] | None = None
+    card: str,
+    seg8: str,
+    reason: str,
+    prefixes: Sequence[str] | None = None,
+    acked: Collection[str] = (),
 ) -> tuple[str, dict[str, int]]:
     """Mask the personal spans of a card that failed with private data; secrets never."""
     if not PRIVATE_FAILURE_RE.match(reason):
@@ -223,7 +232,7 @@ def mask_private(
         head = head[: -len(suffix)]
     else:
         suffix = ""
-    masked, counts = privacy.mask(head + sep + rest, prefixes)
+    masked, counts = privacy.mask(head + sep + rest, prefixes, acked)
     first, sep2, tail = masked.partition("\n")
     return first + suffix + sep2 + tail, counts
 

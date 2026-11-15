@@ -73,6 +73,7 @@ files = ["juno"]
   "juno.cmd.decay",
   "juno.cmd.report",
   "juno.cmd.schedule",
+  "juno.cmd.privacy",
 ]
 "tests.test_launcher" = [
   "juno.cli",

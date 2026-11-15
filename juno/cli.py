@@ -52,6 +52,7 @@ VERBS: dict[str, tuple[str, str]] = {
     "self": ("self_", "record a line about the user from their words"),
     "fix": ("fix", "correct one vault line"),
     "forget": ("forget", "move a wrong vault line to the archive"),
+    "privacy": ("privacy", "acknowledge an id finding on a line, or list the acknowledged ones"),
     "undo": ("undo", "revert a write by its id"),
     "cap": ("cap", "show or (user-approved) raise this session's write cap"),
     "decay": ("decay", "list vault files with no recorded use (read-only)"),

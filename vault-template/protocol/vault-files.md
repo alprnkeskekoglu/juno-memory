@@ -21,6 +21,7 @@ Part of [[core]]. Every write is a `juno` verb; Edit and Write on vault files ar
 ## Correcting
 - A wrong or outdated line: `juno fix <file>:<line> --was "<part of the line as it is now>" --evidence E "<corrected line>"`.
 - A wrong line that should leave the vault: `juno forget <file>:<line> --was "..." --evidence E` (moves it to `archive/decayed/`).
+- A doctor privacy WARN for an `id` that is not personal data (a cloud account id, a build or object number): `juno privacy ack <file>:<line> --was "<the digits>" --evidence E`, only when I confirm it is harmless; secret, phone and email findings are never acknowledged, and a line whose digits change needs a new ack. `juno privacy list` shows the acknowledged ones.
 - Your own last write: `juno undo <write id>`. It refuses, with a pointer to the last snapshot, when a later write changed the same lines.
 
 ## Ticket files
