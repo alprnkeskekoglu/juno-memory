@@ -85,7 +85,7 @@ class Pure(unittest.TestCase):
         self.assertEqual(dv.note_checks({"a.md": "x\n" * 61})[0][0], "WARN")
         out = dv.knowledge_checks({"a.md": ("x" * 8001, False)})
         self.assertEqual(len(out), 2)
-        line = "- Use tabs · triggers: tabs · evidence · 2026-01-01"
+        line = "- Use tabs · triggers: tabs, --tabs · evidence · 2026-01-01"
         self.assertEqual(dv.pitfall_checks(line + "\n", "none")[0][0], "PASS")
         self.assertEqual(dv.pitfall_checks("- broken\n", "none")[0][0], "WARN")
         many = "\n".join(
@@ -93,6 +93,16 @@ class Pure(unittest.TestCase):
             for i in range(61)
         )
         self.assertEqual(dv.pitfall_checks(many, "none")[0][0], "PASS")
+
+    def test_plain_word_only_pitfall_triggers_are_flagged(self) -> None:
+        text = (
+            "- Plain only · triggers: pending, git · e · 2026-01-01\n"
+            "- Shaped · triggers: pending, x.db · e · 2026-01-01\n"
+            "- Tool name · triggers: kubectl · e · 2026-01-01\n"
+        )
+        out = dv.pitfall_checks(text, "none")
+        self.assertEqual(out[0][:2], ("WARN", "pitfalls"))
+        self.assertIn("2 lines (1, 3)", out[0][2])
 
     def test_near_duplicate_pitfall_pairs_are_flagged(self) -> None:
         err = "(eval):1: == not found"
