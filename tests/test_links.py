@@ -59,9 +59,41 @@ class Resolution(unittest.TestCase):
 
     def test_basename_and_ambiguous_shortest(self) -> None:
         self.assertEqual(links.resolve_link("retry", self.index), "ideas/retry.md")
-        self.assertEqual(links.resolve_link("ash", self.index), "notes/ash.md")
+        self.assertEqual(links.resolve_link("ash", self.index), "projects/ash.md")
         self.assertEqual(links.resolve_link("dup", self.index), "x/dup.md")
         self.assertEqual(links.resolve_link("b/ash", self.index), "a/b/ash.md")
+
+    def test_bare_stem_prefers_profile_over_handoff(self) -> None:
+        resolve = lambda names, target: links.resolve_link(target, links.build_index(names))  # noqa: E731
+        self.assertEqual(
+            resolve(["handoffs/alpha.md", "projects/alpha.md"], "alpha"), "projects/alpha.md"
+        )
+        self.assertEqual(
+            resolve(
+                [
+                    "handoffs/alpha.md",
+                    "rules/repos/alpha.md",
+                    "decisions/alpha.md",
+                    "projects/alpha.md",
+                ],
+                "alpha",
+            ),
+            "projects/alpha.md",
+        )
+        self.assertEqual(
+            resolve(["handoffs/ABC-1.md", "decisions/ABC-1.md", "tasks/ABC-1.md"], "ABC-1"),
+            "tasks/ABC-1.md",
+        )
+        self.assertEqual(
+            resolve(["handoffs/ABC-1.md", "decisions/ABC-1.md"], "ABC-1"), "decisions/ABC-1.md"
+        )
+        self.assertEqual(
+            resolve(["knowledge/x.md", "procedures/x.md", "handoffs/x.md"], "x"), "knowledge/x.md"
+        )
+
+    def test_path_link_is_exact(self) -> None:
+        index = links.build_index(["handoffs/alpha.md", "projects/alpha.md"])
+        self.assertEqual(links.resolve_link("handoffs/alpha", index), "handoffs/alpha.md")
 
     def test_missing(self) -> None:
         self.assertIsNone(links.resolve_link("ghost", self.index))
@@ -314,6 +346,30 @@ class Hardening(LinkCase):
         self.assertIn("evil ## RULES", block)
         lines = self.pack("ticket", "ABC-1").splitlines()
         self.assertFalse(any(line.startswith(("## RULES", inject.RULES_LABEL)) for line in lines))
+
+
+class BareRepoLink(LinkCase):
+    def seed_alpha(self) -> None:
+        self.write("projects/alpha.md", "---\nrepo: alpha\n---\n## Purpose\nQueue.\n")
+        self.write("handoffs/alpha.md", "# Handoffs · alpha\n\nLinks: [[alpha]] (the repo)\n")
+        self.write(
+            "projects/beta.md",
+            "---\nrepo: beta\n---\n## Purpose\nB.\n## Links\n[[alpha]] (shares the queue config)\n",
+        )
+
+    def test_linked_block_counts_bare_repo_links(self) -> None:
+        self.seed_alpha()
+        files = linksio.link_map(self.cfg)
+        self.assertEqual(links.neighbours("projects/beta.md", files), [("→", "projects/alpha.md")])
+        self.assertIn(("←", "projects/beta.md"), links.neighbours("projects/alpha.md", files))
+        self.assertEqual(links.linked_paths("projects/alpha.md", files, []), ["projects/beta.md"])
+
+    def test_card_link_does_not_point_at_its_own_file(self) -> None:
+        self.seed_alpha()
+        files = linksio.link_map(self.cfg)
+        index = links.build_index(list(files))
+        self.assertEqual(links.resolve_link("alpha", index), "projects/alpha.md")
+        self.assertNotIn(("→", "handoffs/alpha.md"), links.neighbours("handoffs/alpha.md", files))
 
 
 class Report(LinkCase):

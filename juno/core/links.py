@@ -13,6 +13,7 @@ SHOWN_TARGET = 60
 LINKED_ENTRIES = 5
 LINKED_CHARS = 500
 SKIPPED_DIRS = ("handoffs/", "archive/")
+BARE_DIRS = ("tasks/", "projects/", "decisions/", "knowledge/", "procedures/")
 PREFERRED_DIRS = ("decisions/", "knowledge/", "procedures/", "tasks/", "projects/")
 LINK_RE = re.compile(r"\[\[([^\[\]\n]+?)\]\]")
 FENCE_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})")
@@ -67,6 +68,11 @@ def key_of(text: str) -> str:
     return unicodedata.normalize("NFC", text).casefold()
 
 
+def bare_rank(relpath: str) -> tuple[int, int, int, str]:
+    rank = next((i for i, d in enumerate(BARE_DIRS) if relpath.startswith(d)), len(BARE_DIRS))
+    return (rank, relpath.count("/"), len(relpath), relpath)
+
+
 def build_index(relpaths: Collection[str]) -> LinkIndex:
     paths: dict[str, str] = {}
     stems: dict[str, list[str]] = {}
@@ -75,7 +81,7 @@ def build_index(relpaths: Collection[str]) -> LinkIndex:
         paths[noext] = relpath
         stems.setdefault(noext.rsplit("/", 1)[-1], []).append(relpath)
     for names in stems.values():
-        names.sort(key=lambda r: (r.count("/"), len(r), r))
+        names.sort(key=bare_rank)
     return {"paths": paths, "stems": stems}
 
 
