@@ -95,7 +95,7 @@ def do(cfg: config.Config, args: argparse.Namespace) -> int:
             else:
                 if args.ids:
                     write.require_chosen(cfg, seg, every)
-                elif not write.chosen(cfg, seg, nativememory.BATCH):
+                elif not write.chosen(cfg, seg, f"accept all {nativememory.BATCH}"):
                     raise Refused(
                         f"the user did not choose {nativememory.BATCH} in this segment: the "
                         f"option label 'Accept all {nativememory.BATCH}' must be an "

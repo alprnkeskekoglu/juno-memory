@@ -288,6 +288,13 @@ class Approval(Base):
         self.assertEqual(self.get("rules/global.md"), "")
         self.assertTrue(all(i["status"] == "accepted" for i in self.rules()))
 
+    def test_review_choice_does_not_accept_the_whole_batch(self) -> None:
+        self.answer("Review memory-import")
+        code, out = self.juno("import-memory", "accept")
+        self.assertEqual(code, 2)
+        self.assertIn("did not choose", out)
+        self.assertTrue(all(i["status"] == "pending" for i in self.rules()))
+
     def test_batch_reject_and_pending_listing(self) -> None:
         self.assertIn("native memory", self.juno("rule", "pending")[1])
         code, out = self.juno("rule", "reject", "--batch", "memory-import")
