@@ -6,9 +6,10 @@ import time
 from collections.abc import Callable
 
 from juno import config
-from juno.adapters import fs, repos, store
+from juno.adapters import fs, privacyack, repos, store
 from juno.adapters.vaultview import SKIP_DIRS, STALE_FILE, DiskVault
 from juno.core import decisionmove, owners, vaultfmt
+from juno.core import privacyack as ack_core
 
 
 def vault_path(cfg: config.Config, rel: str) -> str:
@@ -63,7 +64,10 @@ def vault_texts(cfg: config.Config) -> dict[str, str]:
 
 
 def count_links(cfg: config.Config, plan: decisionmove.Plan) -> int:
-    return decisionmove.count_path_links(vault_texts(cfg), {m.source for m in plan.moves})
+    return decisionmove.count_path_links(
+        vault_texts(cfg),
+        {m.source for m in plan.moves} | {d.source for d in plan.drops},
+    )
 
 
 def write_checked(cfg: config.Config, rel: str, text: str, mtime: float | None) -> bool:
@@ -114,4 +118,72 @@ def apply(cfg: config.Config, plan: decisionmove.Plan, say: Callable[[str], None
             resign_stale(cfg, move.owner.rel)
         store.backup(cfg, source)
         os.remove(source)
+    for drop in plan.drops:
+        source = vault_path(cfg, drop.source)
+        if not os.path.exists(source):
+            continue
+        if drop.archive_text is not None and not write_checked(
+            cfg, drop.archive_rel, drop.archive_text, None
+        ):
+            say(f"decisions: {drop.archive_rel} did not read back as written; {drop.source} kept")
+            return 1
+        store.backup(cfg, source)
+        os.remove(source)
+    return 0
+
+
+def ack_targets(cfg: config.Config, plan: decisionmove.Plan) -> dict[str, tuple[str, str]]:
+    """Where each acknowledged `decisions/<x>.md` went or goes: the planned moves (their owner text
+    after the move) and the orphans, whose file is gone and whose owner exists."""
+    targets = {m.source: (m.owner.rel, m.owner_text) for m in plan.moves}
+    view = DiskVault(cfg)
+    profiles = [n[:-3] for n in view.names("projects") if not view.hidden(f"projects/{n}")]
+    tickets = repos.tickets_from(cfg)
+    for rec in privacyack.read(cfg):
+        rel = str(rec["file"])
+        if rel in targets or not rel.startswith("decisions/") or view.exists(rel):
+            continue
+        found = decisionmove.owner_of(rel, profiles, tickets)
+        if found is not None and view.exists(found.rel):
+            targets[rel] = (found.rel, view.read(found.rel))
+    return targets
+
+
+def rehomed_acks(cfg: config.Config, plan: decisionmove.Plan) -> tuple[str, str, int, int] | None:
+    """(ack file path, its new text, moved, stayed) of the re-homing; None without an ack file."""
+    path = store.vault_file(cfg, ack_core.ACK_FILE)
+    if path is None or not os.path.isfile(path):
+        return None
+    new, moved, stayed = ack_core.rehome(
+        store.read_text(path), ack_targets(cfg, plan), cfg.privacy_prefixes()
+    )
+    return path, new, moved, stayed
+
+
+def acks_to_move(cfg: config.Config, plan: decisionmove.Plan) -> int:
+    """How many acknowledgements `carry_acks` would move; reads, never writes."""
+    found = rehomed_acks(cfg, plan)
+    return found[2] if found else 0
+
+
+def carry_acks(
+    cfg: config.Config, plan: decisionmove.Plan, dry_run: bool, say: Callable[[str], None]
+) -> int:
+    """Re-home the privacy acknowledgements of moved decision files (backup, atomic write)."""
+    found = rehomed_acks(cfg, plan)
+    if found is None:
+        return 0
+    path, new, moved, stayed = found
+    if moved:
+        verb = "would move" if dry_run else "moved"
+        say(f"decisions: {moved} privacy acknowledgements {verb} with their lines")
+        if not dry_run:
+            store.backup(cfg, path)
+            store.write_text(path, new)
+            if fs.read_bytes(path) != new.encode("utf-8"):
+                say(f"decisions: {ack_core.ACK_FILE} did not read back as written")
+                return 1
+    if stayed:
+        why = "their line is not in the owner file"
+        say(f"decisions: {stayed} privacy acknowledgements stay ({why})")
     return 0

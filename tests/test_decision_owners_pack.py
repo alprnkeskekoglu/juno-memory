@@ -7,7 +7,7 @@ import unittest
 
 from juno.adapters import store, vaultview
 from juno.adapters.vaultview import DiskVault
-from juno.core import inject, migrate, packs
+from juno.core import inject, migrate, packs, taskfile
 from juno.core.ledger import Segment
 from juno.core.packs import Caps
 from juno.handlers import delivery
@@ -112,7 +112,10 @@ class Proof(WriteCase):
         caps = Caps.from_config(cfg)
         small = dataclasses.replace(caps, pack_chars=600)
         cards = packs.all_cards(view)
-        wanted = [("ticket", k) for k in [*dv.TICKETS, "XYZ-9"]] + [("repo", r) for r in REPOS]
+        lineless = [dv.LINELESS, dv.LINELESS_HISTORY]
+        wanted = [("ticket", k) for k in [*dv.TICKETS, *lineless, "XYZ-9"]] + [
+            ("repo", r) for r in REPOS
+        ]
         out: dict[str, str] = {}
         for n, (kind, key) in enumerate(wanted):
             seg = Segment(f"sid-{n}")
@@ -143,7 +146,7 @@ class Proof(WriteCase):
         stale_copy = os.path.join(self.sb.state, "stale.orig")
         shutil.copy2(os.path.join(self.sb.state, "stale.json"), stale_copy)
         before = self.renders()
-        self.assertEqual(len(before), (len(dv.TICKETS) + 1 + len(REPOS)) * 4 + 2)
+        self.assertEqual(len(before), (len(dv.TICKETS) + 3 + len(REPOS)) * 4 + 2)
         self.assertTrue(all(before[f"ticket:{k}:deliver"] for k in dv.TICKETS))
         self.assertTrue(any("may be stale since" in v for v in before.values()))
         self.assertTrue(any("Linked" in v and "notes/index.md" in v for v in before.values()))
@@ -154,6 +157,9 @@ class Proof(WriteCase):
         self.run_migrate("--decisions")
         self.check(before)
         moved = snapshot(self.sb.vault)
+        for key in (dv.LINELESS, dv.LINELESS_HISTORY):
+            self.assertFalse(os.path.exists(self.vp(f"tasks/{key}.md")), key)
+            self.assertFalse(os.path.exists(self.vp(f"decisions/{key}.md")), key)
         self.run_migrate("--decisions")
         self.assertEqual(snapshot(self.sb.vault), moved)
         for topic in ("gamma", "delta", *dv.OWNERLESS):
@@ -174,6 +180,37 @@ class Proof(WriteCase):
         self.assertEqual(migrate.read_schema(self.get("juno-brain.toml")), 6)
         self.check(before)
         self.assertEqual(snapshot(self.sb.vault).keys(), moved.keys())
+
+
+class EmptyStub(WriteCase):
+    """A task file that holds nothing renders and is pointed at like a missing one."""
+
+    TICKETS = True
+
+    def views(self) -> tuple[DiskVault, Caps]:
+        return DiskVault(self.cfg), Caps.from_config(self.cfg)
+
+    def test_empty_stub_is_not_named_and_renders_like_a_missing_file(self) -> None:
+        self.put("tasks/ABC-40.md", taskfile.stub("ABC-40", "2026-11-01"))
+        self.put("tasks/ABC-41.md", taskfile.stub("ABC-41", "2026-11-01") + "\n- a note\n")
+        view, caps = self.views()
+        cards = packs.all_cards(view)
+        missing = packs.pack_pointer(view, "ticket", "ABC-42")
+        self.assertIn("handoff cards in handoffs/", missing)
+        self.assertEqual(
+            packs.pack_pointer(view, "ticket", "ABC-40"), missing.replace("ABC-42", "ABC-40")
+        )
+        self.assertIn("tasks/ABC-41.md", packs.pack_pointer(view, "ticket", "ABC-41"))
+        self.assertEqual(
+            packs.render_pack(view, caps, "ticket", "ABC-40", cards).replace("ABC-40", "K"),
+            packs.render_pack(view, caps, "ticket", "ABC-42", cards).replace("ABC-42", "K"),
+        )
+
+    def test_stub_with_a_legacy_decision_line_is_still_named(self) -> None:
+        self.put("tasks/ABC-40.md", taskfile.stub("ABC-40", "2026-11-01"))
+        self.put("decisions/ABC-40.md", dv.decision_file("ABC-40", [dv.line("a choice")]))
+        view, _ = self.views()
+        self.assertIn("tasks/ABC-40.md", packs.pack_pointer(view, "ticket", "ABC-40"))
 
 
 if __name__ == "__main__":

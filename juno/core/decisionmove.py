@@ -32,6 +32,16 @@ class Move:
 
 
 @dataclass(frozen=True)
+class Drop:
+    """A decision file with no `## Current` line whose owner does not exist: no owner is made."""
+
+    source: str
+    archive_rel: str
+    archive_text: str | None  # None when the file has no History line
+    history: int
+
+
+@dataclass(frozen=True)
 class Skip:
     source: str
     reason: str
@@ -40,6 +50,7 @@ class Skip:
 @dataclass
 class Plan:
     moves: list[Move] = field(default_factory=list)
+    drops: list[Drop] = field(default_factory=list)
     skips: list[Skip] = field(default_factory=list)
 
 
@@ -105,13 +116,24 @@ def plan(
             result.skips.append(Skip(rel, "it has text outside ## Current and ## History"))
             continue
         created = found.rel not in owner_now
+        current = vaultfmt.section(body, "Current")
+        if created and not any(x.strip() for x in current.splitlines()):
+            history = [x for x in vaultfmt.section(body, "History").splitlines() if x.strip()]
+            archive_rel = owners.archive_rel(found.topic)
+            archive_text = None
+            if history:
+                archive_text = owners.archive_append(
+                    archive_now.get(archive_rel, ""), found.topic, history
+                )
+                archive_now[archive_rel] = archive_text
+            result.drops.append(Drop(rel, archive_rel, archive_text, len(history)))
+            continue
         if created:
             url = taskfile.default_url(base_url, found.topic) if found.kind == "ticket" else ""
             base = taskfile.stub(found.topic, today, url or None)
         else:
             base = owner_now[found.rel]
         base = owners.ensure_section(base, "Decisions", first=True)
-        current = vaultfmt.section(body, "Current")
         merged = owners.merged_decisions(vaultfmt.section(base, "Decisions"), current)
         owner_now[found.rel] = owners.set_section_lines(base, "Decisions", merged)
         history = [x for x in vaultfmt.section(body, "History").splitlines() if x.strip()]

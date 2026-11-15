@@ -91,6 +91,38 @@ def resolve(text: str, rec: Record, prefixes: Sequence[str] | None = None) -> in
     return None
 
 
+def rehome(
+    text: str, targets: Mapping[str, tuple[str, str]], prefixes: Sequence[str] | None = None
+) -> tuple[str, int, int]:
+    """Move each record whose file is a key of `targets` to that value's (file, text), at the
+    line where its span now is. A record whose span is not there stays as it is. Returns the new
+    ignore file, the number moved and the number left; a moved record that the new file already
+    holds (same file and span) is dropped, since the ack is bound to one file."""
+    kept = {(r["file"], r["h"]) for r in parse(text)}
+    out: list[str] = []
+    moved = stayed = 0
+    for raw in text.splitlines():
+        rows = parse(raw)
+        rec = rows[0] if rows else None
+        target = targets.get(rec["file"]) if rec else None
+        line = resolve(target[1], rec, prefixes) if rec and target else None
+        if rec is None or target is None:
+            out.append(raw)
+        elif line is None:
+            stayed += 1
+            out.append(raw)
+        else:
+            moved += 1
+            if (target[0], rec["h"]) not in kept:
+                kept.add((target[0], rec["h"]))
+                out.append(
+                    json.dumps(
+                        {**rec, "file": target[0], "line": line}, ensure_ascii=False, sort_keys=True
+                    )
+                )
+    return ("\n".join(out) + "\n" if moved else text), moved, stayed
+
+
 def count_line(records: Collection[Record]) -> str:
     n = len(records)
     return f"{n} acknowledged id finding{'s' if n != 1 else ''} (juno privacy list)"

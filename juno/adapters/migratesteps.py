@@ -101,7 +101,10 @@ def steps_for(cfg: config.Config) -> dict[int, migrate.Step]:
     """STEPS plus the steps that need the configuration (routing by `[jira] prefixes`)."""
 
     def owner_decisions(vault: str) -> None:
-        if decisionmoveio.apply(cfg, decisionmoveio.plan_for(cfg), lambda _: None):
+        plan = decisionmoveio.plan_for(cfg)
+        if decisionmoveio.apply(cfg, plan, lambda _: None) or decisionmoveio.carry_acks(
+            cfg, plan, False, lambda _: None
+        ):
             raise RuntimeError("decisions: a file did not read back as written; run juno migrate")
 
     return {**STEPS, 5: owner_decisions}
