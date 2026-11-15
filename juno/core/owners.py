@@ -84,3 +84,34 @@ def set_section_lines(text: str, name: str, lines: list[str]) -> str:
     body = ["", *lines] if lines else []
     tail = [""] * max(blanks, 1)
     return "\n".join([*parts[: head + 1], *body, *tail, *parts[end:]])
+
+
+ARCHIVE_DIR = "archive/decisions"
+
+
+def archive_rel(topic: str) -> str:
+    return f"{ARCHIVE_DIR}/{topic}.md"
+
+
+def archive_append(text: str, topic: str, lines: list[str]) -> str:
+    """Append `lines` under `## History` of an archive file ("" when missing); idempotent."""
+    if not text.strip():
+        text = f"# Superseded decisions: {topic}\n\n## History\n"
+    present = set(text.split("\n"))
+    new = [x for x in dict.fromkeys(lines) if x not in present]
+    parts = ensure_section(text, "History", first=False).split("\n")
+    head = heading_index(parts, "History")
+    assert head is not None
+    end = next((i for i in range(head + 1, len(parts)) if HEADING_RE.match(parts[i])), len(parts))
+    last = end
+    while last > head + 1 and parts[last - 1] == "":
+        last -= 1
+    body = parts[head + 1 : last]
+    if not body:
+        new = ["", *new]
+    rest = parts[last:] or [""]
+    return "\n".join([*parts[:last], *new, *rest])
+
+
+def superseded_line(old: str, day: str, owner_rel: str, write_id: str) -> str:
+    return f"{old} · superseded {day} · from {owner_rel} · {write_id}"

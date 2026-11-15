@@ -119,6 +119,37 @@ class SetSectionTests(unittest.TestCase):
         self.assertEqual(got, "## Decisions\n\n- a\n\n## Notes\n")
 
 
+class ArchiveTests(unittest.TestCase):
+    def test_rel(self) -> None:
+        self.assertEqual(owners.ARCHIVE_DIR, "archive/decisions")
+        self.assertEqual(owners.archive_rel("APP-1"), "archive/decisions/APP-1.md")
+
+    def test_skeleton(self) -> None:
+        self.assertEqual(
+            owners.archive_append("", "caching", ["- a", "- b"]),
+            "# Superseded decisions: caching\n\n## History\n\n- a\n- b\n",
+        )
+
+    def test_append_and_idempotent(self) -> None:
+        once = owners.archive_append("", "t", ["- a"])
+        twice = owners.archive_append(once, "t", ["- b", "- a", "- c"])
+        self.assertEqual(twice, once + "- b\n- c\n")
+        self.assertEqual(owners.archive_append(twice, "t", ["- b", "- c"]), twice)
+
+    def test_history_not_last(self) -> None:
+        text = "# T\n\n## History\n\n- a\n\n## Other\n\n- x\n"
+        self.assertEqual(
+            owners.archive_append(text, "t", ["- b"]),
+            "# T\n\n## History\n\n- a\n- b\n\n## Other\n\n- x\n",
+        )
+
+    def test_superseded_line(self) -> None:
+        self.assertEqual(
+            owners.superseded_line("- x", "2026-01-02", "tasks/A-1.md", "user ab"),
+            "- x · superseded 2026-01-02 · from tasks/A-1.md · user ab",
+        )
+
+
 class StubTests(unittest.TestCase):
     def test_stub(self) -> None:
         head = taskfile.merge("", "APP-1", {}, "2026-01-02").split("\n---\n")[0]
