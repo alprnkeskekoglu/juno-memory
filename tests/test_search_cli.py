@@ -53,6 +53,21 @@ class SearchCli(SandboxCase):
         out = self.sb.cli("search", "archivedterm", "--archive")[1]
         self.assertIn("archive/handoffs/2026-01.md [archive] · Archived", out)
 
+    def test_superseded_decision_in_the_archive_is_flagged(self) -> None:
+        self.write(
+            "archive/decisions/db.md",
+            "# Superseded decisions: db\n\n## History\n\n"
+            "- Use Postgres gluonterm (user p1, 2026-11-01) · superseded 2026-11-02"
+            " · from projects/app.md · w-1\n",
+        )
+        data = self.search("gluonterm", "--archive")[1]
+        self.assertEqual(
+            [(r["relpath"], r.get("superseded")) for r in data["results"]],
+            [("archive/decisions/db.md", True)],
+        )
+        out = self.sb.cli("search", "gluonterm", "--archive")[1]
+        self.assertIn("[archive] [superseded]", out)
+
     def test_kinds_are_spread(self) -> None:
         for i in range(6):
             self.write(

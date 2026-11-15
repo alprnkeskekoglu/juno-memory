@@ -199,6 +199,8 @@ def passage_day(head: str, raw: str, fallback: str) -> str:
 
 
 def is_superseded(relpath: str, head: str) -> bool:
+    if relpath.startswith("archive/decisions/"):
+        return True
     return relpath.startswith("decisions/") and head.rpartition(" > ")[2] == "History"
 
 
