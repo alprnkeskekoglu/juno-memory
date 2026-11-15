@@ -4,8 +4,8 @@ from collections.abc import Callable, Collection, Iterator
 from typing import Any
 
 from juno import config
-from juno.adapters import fs, store
-from juno.core import fold, inject, links, owners, vaultfmt
+from juno.adapters import fs, repos, store
+from juno.core import decisionmove, fold, inject, links
 
 CACHE_FILE = "links.json"
 MAX_READ_BYTES = 1 << 20
@@ -87,38 +87,45 @@ def anchored(
         return None
     files = link_map(cfg)
     anchor = links.anchor_of(kind, key, fold.safe_name(key))
-    found, seen = legacy_links(cfg, kind, key, files, retired)
-    if anchor not in files:
-        if kind != "ticket" or not seen:
-            return None
-        # `juno migrate --decisions` creates this task file, so [[KEY]] resolves to it
-        stub: dict[str, Any] = {
-            "sig": None,
-            "title": links.title_of(anchor, ""),
-            "hidden": False,
-            "links": [],
-        }
-        files = {**files, anchor: stub}
-    if found:
-        files = {**files, anchor: {**files[anchor], "links": found + files[anchor]["links"]}}
-    return anchor, files
+    files = virtual_move(cfg, files, retired)
+    return (anchor, files) if anchor in files else None
 
 
-def legacy_links(
-    cfg: config.Config, kind: str, key: str, files: dict[str, Any], retired: Collection[str]
-) -> tuple[list[list[Any]], bool]:
-    """Links in a not-yet-migrated `## Current` count for the owner, as after `juno migrate
-    --decisions` (which puts them in the owner's Decisions section, ahead of its other links)."""
-    found: list[list[Any]] = []
-    seen = False
-    for rel in owners.legacy_decision_rels(kind, key):
-        entry = files.get(rel)
-        if entry is None or entry["hidden"] or rel in retired:
-            continue
-        seen = True
-        text = store.read_text(os.path.join(cfg.vault, *rel.split("/")))
-        found += [[0, target] for _, target in links.wikilinks(vaultfmt.decision_current(text))]
-    return found, seen
+def pending_move(cfg: config.Config, files: dict[str, Any], retired: Collection[str]) -> bool:
+    """Cheap precheck on the link map alone: does any visible `decisions/<x>.md` have an owner?"""
+    legacy = [
+        rel
+        for rel, entry in files.items()
+        if rel.startswith("decisions/") and rel.count("/") == 1 and not entry["hidden"]
+    ]
+    if not legacy:
+        return False
+    profiles = [
+        rel[9:-3]
+        for rel, entry in files.items()
+        if rel.startswith("projects/") and rel.count("/") == 1 and not entry["hidden"]
+    ]
+    tickets = repos.tickets_from(cfg)
+    return any(
+        rel not in retired and decisionmove.owner_of(rel, profiles, tickets) for rel in legacy
+    )
+
+
+def virtual_move(
+    cfg: config.Config, files: dict[str, Any], retired: Collection[str]
+) -> dict[str, Any]:
+    """The link graph as `juno migrate --decisions` will leave it, so a pack's Linked block reads
+    the same before and after: each planned owner gets the links of its post-move text, the legacy
+    file leaves the graph (its History goes to `archive/`, which the walk skips)."""
+    if not pending_move(cfg, files, retired):
+        return files
+    from juno.adapters import decisionmoveio
+
+    out = dict(files)
+    for move in decisionmoveio.plan_for(cfg).moves:
+        out.pop(move.source, None)
+        out[move.owner.rel] = links.parse_file(move.owner.rel, move.owner_text, None)
+    return out
 
 
 def linked_titles(

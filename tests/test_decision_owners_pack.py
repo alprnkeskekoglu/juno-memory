@@ -59,6 +59,7 @@ class Proof(WriteCase):
         self.add_line("decisions/ABC-2.md", LINKED_LINE)
         self.add_line("decisions/ABC-20.md", LINKED_LINE)
         self.add_line("decisions/alpha.md", LINKED_REPO_LINE)
+        self.link_graph()
         for rel in ("decisions/ABC-2.md", "decisions/alpha.md", "decisions/payments-design.md"):
             for n in range(12):
                 self.add_line(
@@ -66,6 +67,29 @@ class Proof(WriteCase):
                 )
         for rel in STALE_FILES:
             self.mark_stale(rel)
+
+    def link_graph(self) -> None:
+        """Links that cross owners: the linked-to packs must not notice the move."""
+        for name in ("zeta", "extra", "pre", "late"):
+            self.put(f"notes/{name}.md", f"# {name.title()}\n\nA note.\n")
+        beta = "# beta\n\nSee [[notes/pre]] first.\n\n## Gotchas\n- slow cold start, see [[notes/late]]\n"
+        self.put("projects/beta.md", beta)
+        alpha = self.get("projects/alpha.md")
+        alpha = alpha.replace(
+            "Only in the profile (user", "Only in the profile [[notes/zeta]] (user"
+        )
+        alpha = alpha.replace("needs the VPN", "needs the VPN, see [[notes/late]]")
+        self.put("projects/alpha.md", alpha)
+        for rel in ("projects/alpha.md", "projects/beta.md"):
+            os.utime(self.vp(rel), (dv.OWNER_MTIME, dv.OWNER_MTIME))
+        crossing = "- Needs [[notes/extra]], [[beta]] and [[ABC-5]] (user pid00001, 2026-11-01)"
+        self.add_line("decisions/alpha.md", crossing)
+        self.add_line("decisions/ABC-9.md", "- Mirrors [[gamma]] (user pid00001, 2026-11-01)")
+        history = self.get("decisions/ABC-1.md").rstrip("\n")
+        self.put(
+            "decisions/ABC-1.md", history + "\n- Old, see [[beta]] (user pid00001, 2026-09-01)\n"
+        )
+        os.utime(self.vp("decisions/ABC-1.md"), (dv.SOURCE_MTIME, dv.SOURCE_MTIME))
 
     def add_line(self, rel: str, text: str) -> None:
         old = self.get(rel)
@@ -125,6 +149,8 @@ class Proof(WriteCase):
         self.assertTrue(any("Linked" in v and "notes/index.md" in v for v in before.values()))
         self.assertTrue(any(MARKER_HEAD in v for k, v in before.items() if k.endswith(":600")))
 
+        self.assertIn("\u2190 alpha \u00b7 projects/alpha.md", before["ticket:ABC-5:deliver"])
+        self.assertNotIn("ABC-1.md", before["repo:beta:deliver"])
         self.run_migrate("--decisions")
         self.check(before)
         moved = snapshot(self.sb.vault)
