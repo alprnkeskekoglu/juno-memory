@@ -292,7 +292,7 @@ def matches(
         hits.append(entry)
     ranked = sorted(range(len(spots)), key=lambda i: -scores[i])
     picked = [hits[spots[i]] for i in ranked]
-    for spot, entry in zip(spots, picked):
+    for spot, entry in zip(spots, picked, strict=True):
         hits[spot] = entry
     return hits
 

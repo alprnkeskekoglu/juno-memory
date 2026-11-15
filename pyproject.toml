@@ -20,6 +20,7 @@ ignore = ["SIM905"]
 "juno/cli.py" = ["E402", "UP036"]
 "juno/config.py" = ["RUF001"]
 "juno/core/fold.py" = ["RUF001"]
+"juno/core/selfmodel.py" = ["RUF001"]
 "juno/adapters/vaultview.py" = ["RUF001"]
 "tests/**" = ["B011", "E501", "UP031", "SIM115", "SIM117", "RUF001", "RUF015", "C416"]
 

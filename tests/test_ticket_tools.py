@@ -1,5 +1,4 @@
 import json
-import time
 import unittest
 
 from juno.adapters import ledgerio
@@ -32,8 +31,12 @@ class ToolKeys(unittest.TestCase):
 
     def test_create_response_key(self) -> None:
         body = json.dumps({"id": "10", "key": "DEF-7", "self": "https://x"})
-        self.assertEqual(self.keys(CREATE, {"summary": "s"}, [{"type": "text", "text": body}]), ["DEF-7"])
-        self.assertEqual(self.keys(CREATE, {}, {"content": [{"type": "text", "text": body}]}), ["DEF-7"])
+        self.assertEqual(
+            self.keys(CREATE, {"summary": "s"}, [{"type": "text", "text": body}]), ["DEF-7"]
+        )
+        self.assertEqual(
+            self.keys(CREATE, {}, {"content": [{"type": "text", "text": body}]}), ["DEF-7"]
+        )
         self.assertEqual(self.keys(CREATE, {}, {"key": "DEF-8"}), ["DEF-8"])
         self.assertEqual(self.keys(CREATE, {}, body), ["DEF-7"])
         self.assertEqual(self.keys("mcp__a__searchJira", {}, body), [])
@@ -63,7 +66,9 @@ class Fold(unittest.TestCase):
         s = Segment(SID, RULES)
         s.apply({"ev": "tool", "repos": [["app", None]]})
         target = routing.handoff_targets(s)[0]
-        self.assertEqual((target["path"], target["key"], target["tickets"]), ("handoffs/app.md", "-", []))
+        self.assertEqual(
+            (target["path"], target["key"], target["tickets"]), ("handoffs/app.md", "-", [])
+        )
 
     def test_prefixes_unset_ignores_keys(self) -> None:
         s = Segment(SID)
@@ -78,14 +83,20 @@ class Fold(unittest.TestCase):
         self.assertEqual(routing.handoff_targets(s)[0]["key"], "ABC-2")
 
     def test_oversized_keys_shrink_instead_of_failing(self) -> None:
-        rec = {"ev": "tool", "keys": [f"ABC-{i}" for i in range(5)], "repos": [[f"r{i}", None] for i in range(400)]}
+        rec = {
+            "ev": "tool",
+            "keys": [f"ABC-{i}" for i in range(5)],
+            "repos": [[f"r{i}", None] for i in range(400)],
+        }
         _, data, changed = ledger.encode_capped(rec)
         self.assertTrue(changed)
         self.assertLessEqual(len(data), ledger.MAX_LINE_BYTES)
 
 
 class Hook(HookCase):
-    def payload_for(self, tool: str, tool_in: dict, response: object = None, **extra: object) -> dict:
+    def payload_for(
+        self, tool: str, tool_in: dict, response: object = None, **extra: object
+    ) -> dict:
         return self.payload(
             "PostToolUse", tool_name=tool, tool_input=tool_in, tool_response=response, **extra
         )
@@ -119,7 +130,7 @@ class Hook(HookCase):
         self.hook("post_tool_use", self.payload_for("Bash", {"command": "echo ABC-1"}, {}))
         self.assertNotIn("keys", self.tool_rows()[-1])
 
-    def cfg(self):  # noqa: ANN201
+    def cfg(self):
         from juno import config
 
         return config.load(self.env)
@@ -217,7 +228,7 @@ class Card(WriteCase):
         self.assertEqual(self.get("handoffs/ghost.md"), "")
 
     def test_without_prefixes_tickets_flag_is_refused(self) -> None:
-        self.set_config('[jira]\nprefixes = []\n')
+        self.set_config("[jira]\nprefixes = []\n")
         self.tool(repo="app")
         self.assertIn("prefixes", self.refused("--tickets", "ABC-1"))
 

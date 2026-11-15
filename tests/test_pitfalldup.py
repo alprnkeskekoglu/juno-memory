@@ -58,7 +58,7 @@ class Near(unittest.TestCase):
         self.assertFalse(pitfalldup.same_error(ZSH_ERR, CLAUDE_ERR))
 
     def test_distinct_real_pitfalls_stay_separate(self) -> None:
-        for a, b in itertools.combinations(REAL_OTHERS + [CLAUDE_A, ZSH_A], 2):
+        for a, b in itertools.combinations([*REAL_OTHERS, CLAUDE_A, ZSH_A], 2):
             self.assertFalse(pitfalldup.near_text(a, b), (a, b))
 
     def test_find_by_text_or_evidence(self) -> None:
@@ -115,7 +115,9 @@ class Pairs(unittest.TestCase):
         self.assertEqual(pitfalldup.pairs(text), [(4, 7), (6, 8)])
 
     def test_real_distinct_lines_have_no_pairs(self) -> None:
-        text = "\n".join(line(t, evidence=f"evidence number {i}") for i, t in enumerate(REAL_OTHERS))
+        text = "\n".join(
+            line(t, evidence=f"evidence number {i}") for i, t in enumerate(REAL_OTHERS)
+        )
         self.assertEqual(pitfalldup.pairs(text), [])
 
 

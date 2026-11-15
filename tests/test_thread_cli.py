@@ -101,8 +101,7 @@ class Stale(WriteCase):
             "threads.md",
             "# Threads\n\n"
             + "".join(
-                f"- [app] Open question number {n} here · since {d}\n"
-                for n, d in enumerate(stamps)
+                f"- [app] Open question number {n} here · since {d}\n" for n, d in enumerate(stamps)
             ),
         )
 

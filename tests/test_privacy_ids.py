@@ -55,7 +55,12 @@ class LongIdFalsePositives(unittest.TestCase):
             self.assertNotEqual(privacy.mask(text, ABC)[0], text, text)
 
     def test_unit_and_word_must_touch_the_number(self) -> None:
-        for text in ("102400 and bytes", "comment on 5632425", "run at 39486898219", "prun 39486898219"):
+        for text in (
+            "102400 and bytes",
+            "comment on 5632425",
+            "run at 39486898219",
+            "prun 39486898219",
+        ):
             self.assertIsNotNone(privacy.scan(text), text)
 
 
@@ -193,7 +198,7 @@ class AllowPrefixesAndObjectIds(unittest.TestCase):
 
 class DoctorAllowPrefixes(WriteCase):
     def privacy_status(self) -> str:
-        code, out = self.juno("doctor", "--json", *self.sb.install_args())
+        _, out = self.juno("doctor", "--json", *self.sb.install_args())
         found = [c["status"] for c in json.loads(out)["checks"] if c["name"] == "privacy"]
         return found[0]
 

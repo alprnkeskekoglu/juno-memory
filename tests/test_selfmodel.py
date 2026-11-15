@@ -169,7 +169,13 @@ class Kinds(CardCase):
 
     def test_instruction_accepts_a_single_signal_and_gives_examples(self) -> None:
         text = "\n".join(self.instructions())
-        for word in ("correction", "rejection", "stated preference", "longest", "wants a drawn mockup"):
+        for word in (
+            "correction",
+            "rejection",
+            "stated preference",
+            "longest",
+            "wants a drawn mockup",
+        ):
             self.assertIn(word, text)
         self.assertNotIn("only when this segment shows a pattern", text)
         self.assertIn("20-200 chars", text)

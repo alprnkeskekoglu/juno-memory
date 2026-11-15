@@ -63,9 +63,7 @@ class CardMasking(CardCase):
             "Card job failed (invalid: secret-like text); Juno wrote this stub", self.handoff()
         )
         self.assertNotIn("ended without a card", self.handoff())
-        line = routing.previous_segment_line(
-            *found, failure=cardjob.card_failure(self.cfg(), SID)
-        )
+        line = routing.previous_segment_line(*found, failure=cardjob.card_failure(self.cfg(), SID))
         self.assertIn("card job failed (invalid: secret-like text)", line)
 
     def test_model_error_is_not_reported_as_an_invalid_card(self) -> None:

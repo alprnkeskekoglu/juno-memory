@@ -106,9 +106,7 @@ class Summary(unittest.TestCase):
             line("D", "2026-11-01"),
         ]
         self.assertEqual(selfmodel.summary(files), (4, 2, 3))
-        self.assertEqual(
-            selfmodel.summary_text(files), "4 lines (2 superseded), top line seen 3×"
-        )
+        self.assertEqual(selfmodel.summary_text(files), "4 lines (2 superseded), top line seen 3×")
         self.assertEqual(selfmodel.summary(["# Values\n"]), (0, 0, 0))
 
 

@@ -31,7 +31,7 @@ def instructions(ctx: Ctx) -> list[str]:
         "working behaviour (process, format, communication, workflow), never an opinion or "
         'stance on a topic ("believes X is best", "thinks Y is wrong"). Never health, religion, '
         "politics, sexuality, ethnicity, immigration or legal status, personal finances, family "
-        "or relationships. Skip what the existing self lines already say. Add \"supersedes\": "
+        'or relationships. Skip what the existing self lines already say. Add "supersedes": '
         "the exact text of one existing line, only when the user's new words clearly reverse "
         "that behaviour." + note
     ]

@@ -79,7 +79,7 @@ def commit_all(
     """Write every file; the later writes link to the first so one `juno undo` reverts all."""
     first: gate.Result | None = None
     for rel, new in edits.items():
-        extra = {"link": first.id} if first else None
+        extra: dict[str, object] | None = {"link": first.id} if first else None
         res = gate.commit(cfg, seg, verb, rel, new, evidence, extra=extra, run_cap=first is None)
         first = first or res
     if archive:
