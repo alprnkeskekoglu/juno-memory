@@ -4,7 +4,7 @@ from collections.abc import Mapping
 
 from juno import config
 from juno.adapters import checks, repos, taskio, vault
-from juno.cmd import write
+from juno.cmd import tasklog, write
 from juno.cmd.common import say
 from juno.core import taskfile
 from juno.core.errors import Refused
@@ -21,6 +21,13 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     put.add_argument("--url", help="ticket link (default: <base_url>/browse/<KEY>)")
     put.add_argument("--slack-checked", metavar="YYYY-MM-DD", help="day the Slack digest ran")
     put.add_argument("--repo", action="append", default=[], help="repo the ticket touches")
+    log = sub.add_parser("log", help="write keyed digest lines into tasks/<KEY>.md")
+    log.add_argument("key")
+    log.add_argument("text", nargs="?", help="the line (one line, no '·')")
+    log.add_argument("--section", help="digest section, e.g. Plan")
+    log.add_argument("--key", dest="entry", help="line key; the same section and key replaces")
+    log.add_argument("--batch-file", help='JSON lines {"section","key","line"} (/tmp or state dir)')
+    log.add_argument("--evidence", help="your own words, or ticket:<KEY> of this ticket")
     show = sub.add_parser("show", help="print tasks/<KEY>.md")
     show.add_argument("key")
     show.add_argument("--json", action="store_true")
@@ -115,4 +122,8 @@ def run(args: argparse.Namespace, env: Mapping[str, str]) -> int:
         return 2
     if args.action == "set":
         return run_set(cfg, key, args)
-    return run_show(cfg, key, args.json)
+    if args.action == "log":
+        return tasklog.run_log(cfg, key, args)
+    if args.action == "show":
+        return run_show(cfg, key, args.json)
+    return fail(f"unknown task action {args.action!r}")

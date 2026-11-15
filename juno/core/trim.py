@@ -121,13 +121,18 @@ def trim_pack(
     ranking: Ranking | None = None,
     reserve_first: bool = False,
 ) -> str:
-    """Trim sections to the budget. `reserve_first` is for P4 (task digests): when true the first
-    section is satisfied in full before the others share the rest; ignored for now."""
+    """Trim sections to the budget. With `reserve_first` the first section (Decisions) is kept in
+    full before the others share the rest, if it takes at most half of the room."""
     fixed = "\n".join(head)
     room = budget - len(fixed) - sum(len(title) + 4 for title, _ in sections)
     if room < 0:
         return inject.trim(full, budget, "the pack")
-    shares = share_room([len(body) for _, body in sections], room)
+    sizes = [len(body) for _, body in sections]
+    if reserve_first and sizes and sizes[0] * 2 <= room:
+        rest = share_room(sizes[1:], room - sizes[0])
+        shares = {0: sizes[0], **{i + 1: share for i, share in rest.items()}}
+    else:
+        shares = share_room(sizes, room)
     parts = [
         f"[{title}]\n{trim_body(body, shares[i], section_source(title), ranking)}"
         for i, (title, body) in enumerate(sections)

@@ -115,16 +115,18 @@ def body_roots(cfg: config.Config) -> list[str]:
     return [os.path.realpath("/tmp"), os.path.realpath(cfg.state)]
 
 
-def read_body_text(cfg: config.Config, raw: str) -> str:
+def read_body_text(
+    cfg: config.Config, raw: str, flag: str = "--body-file", limit: int = bl.BODY_BYTES
+) -> str:
     path = os.path.abspath(raw)
     if os.path.islink(path) or not os.path.isfile(path):
-        raise Refused(f"--body-file {raw} is not a regular file")
+        raise Refused(f"{flag} {raw} is not a regular file")
     real = os.path.realpath(path)
     if store.in_vault(cfg, real) or not any(store.is_within(real, r) for r in body_roots(cfg)):
-        raise Refused("--body-file must live under /tmp or the Juno state dir")
-    if os.path.getsize(real) > bl.BODY_BYTES:
+        raise Refused(f"{flag} must live under /tmp or the Juno state dir")
+    if os.path.getsize(real) > limit:
         os.unlink(real)
-        raise Refused(f"--body-file is over {bl.BODY_BYTES} bytes")
+        raise Refused(f"{flag} is over {limit} bytes")
     text = store.read_text(real)
     os.unlink(real)
     return text
