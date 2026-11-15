@@ -18,6 +18,7 @@ from juno.adapters import (
     topicsio,
 )
 from juno.adapters.vaultview import DiskVault
+from juno.core import arms as core_arms
 from juno.core import inject, packs, routing
 from juno.core.packs import Caps
 from juno.core.tomlio import read_key, set_runtime
@@ -169,12 +170,21 @@ def session_context(
     if not compact:
         blocks.append(topicsio.general_block(cfg))
     blocks += extra_blocks(cfg, source)
-    if arms.get("self") != "off":
+    if self_injected(cfg, sid):
         blocks.append(selfio.model_block(cfg))
     left = budget - sum(len(b) + 2 for b in blocks)
     blocks.append(start_context(cfg, view, seg, found, cwd, left))
     status.update(cfg, seg)
     return "\n\n".join(b for b in blocks if b)
+
+
+def self_injected(cfg: config.Config, sid: str) -> bool:
+    latest = armsio.latest_arm(cfg, "self")
+    return core_arms.injects(
+        armsio.side_of(cfg, sid, "self"),
+        latest.get("status") if latest else None,
+        cfg.get_bool("self", "inject"),
+    )
 
 
 def handle(payload: dict[str, Any], cfg: config.Config) -> dict[str, Any] | None:

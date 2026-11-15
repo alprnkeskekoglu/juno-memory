@@ -5,6 +5,8 @@ from collections.abc import Collection, Mapping
 from typing import Any
 
 MAX_RUNNING = 2
+FEATURES = ("linked", "next", "self")
+GATED_BY_STATE = ("self",)  # features whose block follows a stopped or decided arm
 NAME_RE = re.compile(r"^[a-z][a-z0-9-]{1,30}$")
 DAY = 86400
 TEXT_KEYS = ("hypothesis", "unit", "stop_rule", "decision")
@@ -78,3 +80,16 @@ def decide_refusal(
         f"{counts.get('off', 0)} off){why}, the stop rule has not fired and max_days "
         f"{prereg['max_days']} has not passed"
     )
+
+
+def feature_of(name: str, data: Mapping[str, Any]) -> str:
+    feature = data.get("feature")
+    return feature if isinstance(feature, str) and feature else name
+
+
+def injects(side: str | None, latest_status: str | None, fallback: bool) -> bool:
+    """Whether a feature is on: a running arm decides by its side; a stopped arm
+    with no decision falls back to `fallback` (default off); otherwise as without an arm."""
+    if side is not None:
+        return side == "on"
+    return fallback if latest_status == "stopped" else True

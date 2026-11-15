@@ -98,7 +98,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "packs": {"purpose": False},
     "decay": {"window_days": 90},
     "keys": {"weight": 0.0, "model": ""},
-    "self": {"max_lines": 12, "max_chars": 1200},
+    "self": {"max_lines": 12, "max_chars": 1200, "inject": False},
     "stale": {
         "auto_fix": False,
         "weekday": "sun",

@@ -19,6 +19,10 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     sub = parser.add_subparsers(dest="action", required=True)
     start = sub.add_parser("start", help="start a pre-registered arm (max 2 running)")
     start.add_argument("name")
+    start.add_argument(
+        "--feature",
+        help="the feature the arm gates (default: the name, when it is a feature)",
+    )
     start.add_argument("--prereg", required=True, metavar="FILE", help="JSON under /tmp or state")
     status = sub.add_parser("status", help="list the arms with their live counts")
     status.add_argument("--json", action="store_true")
@@ -111,15 +115,22 @@ def do_start(cfg: config.Config, args: argparse.Namespace) -> int:
     problems = arms.validate(prereg, armmetrics.METRICS)
     if problems:
         raise Refused("pre-registration refused: " + "; ".join(problems))
+    feature = args.feature or args.name
+    if args.feature and args.feature not in arms.FEATURES:
+        raise Refused(f"unknown feature {args.feature!r} (known: {', '.join(arms.FEATURES)})")
     fs.ensure_private_dir(armsio.arms_dir(cfg))
     with fs.locked(os.path.join(armsio.arms_dir(cfg), "arms.lock")):
         if os.path.exists(armsio.arm_path(cfg, args.name)):
             raise Refused(f"arm {args.name} already exists; names are never reused")
+        same = [n for n in running_names(cfg) if armsio.feature_of(cfg, n) == feature]
+        if same and feature in arms.FEATURES:
+            raise Refused(f"arm {same[0]} already runs feature {feature}")
         live = running_names(cfg)
         if len(live) >= arms.MAX_RUNNING:
             raise Refused(f"{len(live)} arms already running ({', '.join(live)}); the limit is 2")
         data = {
             "name": args.name,
+            "feature": feature,
             "prereg": prereg,
             "salt": secrets.token_hex(8),
             "started": int(time.time()),
@@ -172,6 +183,7 @@ def describe(cfg: config.Config, name: str) -> dict[str, Any]:
     prereg = data["prereg"]
     row: dict[str, Any] = {
         "name": name,
+        "feature": arms.feature_of(name, data),
         "status": data.get("status"),
         "fraction": prereg["assignment"]["fraction"],
         "min_n": prereg["min_n"],
@@ -187,10 +199,33 @@ def describe(cfg: config.Config, name: str) -> dict[str, Any]:
     return row
 
 
+def forced_features(cfg: config.Config) -> dict[str, dict[str, str]]:
+    """Features a stopped or decided arm decides while no arm of that feature runs."""
+    found: dict[str, dict[str, str]] = {}
+    for feature in arms.GATED_BY_STATE:
+        latest = armsio.latest_arm(cfg, feature)
+        if latest is None or armsio.running_feature(cfg, feature):
+            continue
+        if latest.get("status") == "stopped":
+            forced = "on" if cfg.get_bool("self", "inject") else "off"
+        elif latest.get("status") == "decided":
+            forced = "on"
+        else:
+            continue
+        found[feature] = {
+            "arm": str(latest.get("name")),
+            "forced": forced,
+            "status": str(latest["status"]),
+        }
+    return found
+
+
 def status_report(cfg: config.Config, as_json: bool) -> int:
     rows = [describe(cfg, n) for n in armsio.names(cfg)]
+    forced = forced_features(cfg)
     if as_json:
-        print(json.dumps({"arms": rows}, ensure_ascii=False, indent=2, sort_keys=True))
+        body = {"arms": rows, "forced": forced}
+        print(json.dumps(body, ensure_ascii=False, indent=2, sort_keys=True))
         return 0
     if not rows:
         print("no arms")
@@ -203,6 +238,8 @@ def status_report(cfg: config.Config, as_json: bool) -> int:
             f"segments on {n.get('on', '-')} / off {n.get('off', '-')}, "
             f"min_n {r['min_n']}, max_days {r['max_days']}"
         )
+    for feature, row in sorted(forced.items()):
+        print(f"feature {feature}: {row['forced']} (arm {row['arm']} {row['status']})")
     return 0
 
 

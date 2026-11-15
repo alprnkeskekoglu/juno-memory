@@ -58,7 +58,9 @@ def build(cfg: config.Config, sid: str, stamp: float) -> dict[str, Any] | None:
     cues = cfg.language_list("correction_cues")
     preset = cfg.get_str("language", "preset")
     typed = list(ledgerio.fold(cfg, sid).prompts.values())
-    counters = {n: COUNTERS[n](cfg, sid, n) for n in sides if n in COUNTERS}
+    counters = {
+        n: COUNTERS[f](cfg, sid, n) for n in sides if (f := armsio.feature_of(cfg, n)) in COUNTERS
+    }
     return {
         "t": stamp,
         "sid": sid,

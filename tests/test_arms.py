@@ -357,6 +357,41 @@ class Cli(WriteCase):
         self.assertEqual(self.juno("arm", "stop", "demo", "--reason", "again")[0], 2)
         self.assertEqual(self.start("demo")[0], 2)
 
+    def test_a_stopped_feature_arm_can_be_restarted_under_a_new_name(self) -> None:
+        self.assertEqual(self.start("self")[0], 0)
+        self.assertEqual(self.stored("self")["feature"], "self")
+        self.assertEqual(self.juno("arm", "stop", "self", "--reason", "empty")[0], 0)
+        self.assertEqual(self.start("self")[0], 2)
+        path = self.body_file(json.dumps(PREREG), "p2.json")
+        code, out = self.juno("arm", "start", "self-2", "--feature", "self", "--prereg", path)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.stored("self-2")["feature"], "self")
+        self.assertEqual(armsio.running_feature(self.cfg, "self"), "self-2")
+        self.assertEqual(self.stored("self")["status"], "stopped")
+
+    def test_two_running_arms_for_one_feature_are_refused(self) -> None:
+        self.assertEqual(self.start("self")[0], 0)
+        path = self.body_file(json.dumps(PREREG), "p2.json")
+        code, out = self.juno("arm", "start", "self-2", "--feature", "self", "--prereg", path)
+        self.assertEqual(code, 2)
+        self.assertIn("feature self", out)
+
+    def test_unknown_feature_is_refused(self) -> None:
+        path = self.body_file(json.dumps(PREREG), "p2.json")
+        code, _ = self.juno("arm", "start", "x1", "--feature", "nope", "--prereg", path)
+        self.assertEqual(code, 2)
+
+    def test_status_shows_features_forced_by_stopped_or_decided_arms(self) -> None:
+        self.start("self")
+        self.juno("arm", "stop", "self", "--reason", "empty")
+        code, out = self.juno("arm", "status")
+        self.assertEqual(code, 0, out)
+        self.assertIn("feature self: off (arm self stopped)", out)
+        data = json.loads(self.juno("arm", "status", "--json")[1])
+        self.assertEqual(
+            data["forced"], {"self": {"arm": "self", "forced": "off", "status": "stopped"}}
+        )
+
     def test_decide_refused_before_min_n_then_writes_result_once(self) -> None:
         self.start()
         code, out = self.juno("arm", "decide", "demo")
