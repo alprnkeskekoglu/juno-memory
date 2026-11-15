@@ -13,11 +13,10 @@ def deliver_packs(
     cfg: config.Config, view: VaultView, seg: Segment, wanted: Wanted, budget: int
 ) -> str:
     caps = Caps.from_config(cfg)
-    arms = armsio.arms_for(cfg, seg.sid)
-    side = arms.get("linked")
+    side = armsio.side_of(cfg, seg.sid, "linked")
     if side:
         caps = dataclasses.replace(caps, linked=side == "on")
-    next_side = arms.get("next")
+    next_side = armsio.side_of(cfg, seg.sid, "next")
     stored = nextio.load(cfg) if next_side else {}
     parts: list[str] = []
     used = 0

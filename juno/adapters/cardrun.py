@@ -106,7 +106,7 @@ def build(
 def assistant_turns(
     cfg: config.Config, transcript: object
 ) -> tuple[list[tuple[int, str]], int] | None:
-    if "self" not in armsio.running(cfg):
+    if armsio.running_feature(cfg, "self") is None:
         return None
     facts = digest.facts_from_lines(transcript_lines(transcript), os.path.expanduser("~"))
     shown, total = selfmodel.label_turns([e.text for e in facts.events if e.kind == "assistant"])

@@ -67,6 +67,28 @@ def running(cfg: config.Config) -> dict[str, tuple[str, float]]:
     return found
 
 
+def feature_of(cfg: config.Config, name: str) -> str:
+    return arms.feature_of(name, read_arm(arm_path(cfg, name)) or {})
+
+
+def running_feature(cfg: config.Config, feature: str) -> str | None:
+    return next((n for n in sorted(running(cfg)) if feature_of(cfg, n) == feature), None)
+
+
+def side_of(cfg: config.Config, sid: str, feature: str) -> str | None:
+    name = running_feature(cfg, feature)
+    return arms_for(cfg, sid).get(name) if name else None
+
+
+def latest_arm(cfg: config.Config, feature: str) -> dict[str, Any] | None:
+    found = [
+        d
+        for n in names(cfg)
+        if (d := read_arm(arm_path(cfg, n))) and arms.feature_of(n, d) == feature
+    ]
+    return max(found, key=lambda d: (d.get("started") or 0, str(d.get("name"))), default=None)
+
+
 def arms_for(cfg: config.Config, sid: str) -> dict[str, str]:
     if not sid:
         return {}

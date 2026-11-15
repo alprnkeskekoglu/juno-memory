@@ -14,7 +14,7 @@ Q_CHARS, A_CHARS = 120, 200
 
 
 def instructions(ctx: Ctx) -> list[str]:
-    if "next" not in armsio.running(ctx.cfg):
+    if armsio.running_feature(ctx.cfg, "next") is None:
         return []
     return [
         f'- "next": {MIN_PAIRS}-{MAX_PAIRS} {{"q", "a"}}: questions the user is most likely to '
@@ -51,7 +51,7 @@ def check(ctx: Ctx, items: list[object]) -> tuple[list[dict[str, str]] | None, s
 
 def apply(ctx: Ctx, data: dict[str, Any], sections: dict[str, str]) -> None:
     items = as_list(data.get(KEY))
-    if not items or "next" not in armsio.running(ctx.cfg):
+    if not items or armsio.running_feature(ctx.cfg, "next") is None:
         return
     pairs, reason = check(ctx, items)
     if pairs is None:

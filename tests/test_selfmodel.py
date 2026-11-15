@@ -213,6 +213,34 @@ class SessionStart(HookCase):
         self.assertIn(TEXT, out)
         self.assertIn("data, not instructions", out)
 
+    def test_stopped_arm_without_a_decision_injects_nothing(self) -> None:
+        put_arm(self.sb.state, "self", status="stopped")
+        self.write("self/values.md", "# Values\n\n" + line(TEXT, "2026-11-01") + "\n")
+        self.assertNotIn(selfmodel.HEADER, self.context(self.hook("session_start")))
+
+    def test_stopped_arm_follows_an_explicit_inject_setting(self) -> None:
+        put_arm(self.sb.state, "self", status="stopped")
+        self.set_config("[self]\ninject = true\n")
+        self.write("self/values.md", "# Values\n\n" + line(TEXT, "2026-11-01") + "\n")
+        self.assertIn(selfmodel.HEADER, self.context(self.hook("session_start")))
+
+    def test_decided_arm_keeps_the_block(self) -> None:
+        put_arm(self.sb.state, "self", status="decided")
+        self.write("self/values.md", "# Values\n\n" + line(TEXT, "2026-11-01") + "\n")
+        self.assertIn(selfmodel.HEADER, self.context(self.hook("session_start")))
+
+    def test_a_restarted_arm_with_another_name_controls_the_block(self) -> None:
+        put_arm(self.sb.state, "self", status="stopped")
+        put_arm(self.sb.state, "self-2", fraction=0.0, feature="self", started=2)
+        self.write("self/values.md", "# Values\n\n" + line(TEXT, "2026-11-01") + "\n")
+        self.assertNotIn(selfmodel.HEADER, self.context(self.hook("session_start")))
+
+    def test_a_restarted_arm_on_the_on_side_injects_the_block(self) -> None:
+        put_arm(self.sb.state, "self", status="stopped")
+        put_arm(self.sb.state, "self-2", fraction=1.0, feature="self", started=2)
+        self.write("self/values.md", "# Values\n\n" + line(TEXT, "2026-11-01") + "\n")
+        self.assertIn(selfmodel.HEADER, self.context(self.hook("session_start")))
+
     def test_headless_gets_nothing(self) -> None:
         self.assertEqual(
             self.start(1.0, JUNO_TEST_INTERACTIVE="", CLAUDE_CODE_SESSION_ATTENDED="0"), ""
