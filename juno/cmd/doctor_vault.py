@@ -120,7 +120,8 @@ def vault_checks(cfg: config.Config) -> list[Check]:
     out += dv.handoff_size_checks(sizes)
     out += dv.learned_check(learned_stale(cfg))
     out += content_checks(cfg, view)
-    out += doctor_decisions.decision_checks(decisionmoveio.plan_for(cfg))
+    moves = decisionmoveio.plan_for(cfg)
+    out += doctor_decisions.decision_checks(moves, decisionmoveio.acks_to_move(cfg, moves))
     return out
 
 

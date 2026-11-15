@@ -149,15 +149,31 @@ def ack_targets(cfg: config.Config, plan: decisionmove.Plan) -> dict[str, tuple[
     return targets
 
 
+def rehomed_acks(cfg: config.Config, plan: decisionmove.Plan) -> tuple[str, str, int, int] | None:
+    """(ack file path, its new text, moved, stayed) of the re-homing; None without an ack file."""
+    path = store.vault_file(cfg, ack_core.ACK_FILE)
+    if path is None or not os.path.isfile(path):
+        return None
+    new, moved, stayed = ack_core.rehome(
+        store.read_text(path), ack_targets(cfg, plan), cfg.privacy_prefixes()
+    )
+    return path, new, moved, stayed
+
+
+def acks_to_move(cfg: config.Config, plan: decisionmove.Plan) -> int:
+    """How many acknowledgements `carry_acks` would move; reads, never writes."""
+    found = rehomed_acks(cfg, plan)
+    return found[2] if found else 0
+
+
 def carry_acks(
     cfg: config.Config, plan: decisionmove.Plan, dry_run: bool, say: Callable[[str], None]
 ) -> int:
     """Re-home the privacy acknowledgements of moved decision files (backup, atomic write)."""
-    path = store.vault_file(cfg, ack_core.ACK_FILE)
-    if path is None or not os.path.isfile(path):
+    found = rehomed_acks(cfg, plan)
+    if found is None:
         return 0
-    old = store.read_text(path)
-    new, moved, stayed = ack_core.rehome(old, ack_targets(cfg, plan), cfg.privacy_prefixes())
+    path, new, moved, stayed = found
     if moved:
         verb = "would move" if dry_run else "moved"
         say(f"decisions: {moved} privacy acknowledgements {verb} with their lines")

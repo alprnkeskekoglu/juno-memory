@@ -17,6 +17,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from unittest import mock
 
+from juno.core.privacy import span_hash
 from tests import test_protocolsync as protocolsync
 from tests.support import REPO, decision_vault, fakeclaude
 from tests.support import legacy_vault as legacy
@@ -125,6 +126,18 @@ def many_cards(case: WriteCase) -> None:
 def owned_decisions(case: WriteCase) -> None:
     case.set_config('[jira]\nprefixes = ["ABC"]')
     decision_vault.build(case.sb.vault)
+
+
+def orphaned_ack(case: WriteCase) -> None:
+    """A vault the 1.0.11 move already ran on: the ack still points at the removed file."""
+    owned_decisions(case)
+    case.juno("migrate", "--decisions")
+    line = "- Pull from the mirror at 000000000000 (user pid00001, 2026-11-01)"
+    edit(
+        case, "tasks/ABC-1.md", lambda t: t.replace("## Decisions\n", f"## Decisions\n{line}\n", 1)
+    )
+    rec = {"file": "decisions/ABC-1.md", "h": span_hash("000000000000"), "line": 3, "t": "x"}
+    case.put(".privacy-ack.jsonl", json.dumps(rec) + "\n")
 
 
 def ticket_rules(case: WriteCase) -> None:
@@ -261,6 +274,22 @@ ROWS = (
         "juno migrate --decisions",
         ("migrate", "--decisions"),
         owned_decisions,
+    ),
+    Row(
+        "lineless decisions",
+        "juno migrate --decisions",
+        "decisions",
+        "has no current lines",
+        ("migrate", "--decisions"),
+        owned_decisions,
+    ),
+    Row(
+        "orphaned acks",
+        "juno migrate --decisions",
+        "decisions",
+        "privacy acknowledgements point at",
+        ("migrate", "--decisions"),
+        orphaned_ack,
     ),
     # notes, rules, pitfalls
     Row(
