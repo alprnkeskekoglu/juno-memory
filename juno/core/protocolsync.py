@@ -8,20 +8,14 @@ the new version's hash here and never remove old ones (tests enforce the append)
 import hashlib
 
 SHIPPED: dict[str, tuple[str, ...]] = {
-    "backlog.md": (
-        "fc564ea12783546eee9cfa0dd11d514487260e3e53fb0e653d388265ca746075",
-    ),
+    "backlog.md": ("fc564ea12783546eee9cfa0dd11d514487260e3e53fb0e653d388265ca746075",),
     "handoffs.md": (
         "2a4d8f5cd4bf2ecd58bd2e33bef5fab1020b4a0eb1823b451eef86cfb0f36ef1",
         "73cffd01b5dac3251e426a12695b3c33c58b040d7c34304bebad030e7ba2e77d",
         "62b26533b3498c75dd32af4c13dcef1cf31366a96229f4f14125d5ce685f6cae",
     ),
-    "ideas.md": (
-        "722d5ce96d710b3fed6e1b7a1e4cb4c7289cd5d4abded1710107662d5db87b70",
-    ),
-    "links.md": (
-        "52f6a64781690a136a4638017b1b6a9d5089520b898e9f485d1839fb3ac51dae",
-    ),
+    "ideas.md": ("722d5ce96d710b3fed6e1b7a1e4cb4c7289cd5d4abded1710107662d5db87b70",),
+    "links.md": ("52f6a64781690a136a4638017b1b6a9d5089520b898e9f485d1839fb3ac51dae",),
     "rules.md": (
         "5b70d10e0727bd2763787ae4314c9b445e9e5d3584cf0a15f2666807bff8ae47",
         "5d0b7d46a8e9e6308286b8185f65aba3fbc6a64dee508d0c0e06f2a8aa6d9c8d",

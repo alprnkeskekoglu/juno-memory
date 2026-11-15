@@ -133,7 +133,7 @@ def checkout_version(path: str) -> str:
     try:
         with open(path, encoding="utf-8") as handle:
             return str(json.load(handle).get("version", ""))
-    except (OSError, ValueError, AttributeError):
+    except OSError, ValueError, AttributeError:
         return ""
 
 
@@ -146,7 +146,7 @@ def checkout_head(root: str, env: Mapping[str, str]) -> str:
             timeout=10,
             env=dict(env),
         )
-    except (OSError, subprocess.SubprocessError):
+    except OSError, subprocess.SubprocessError:
         return ""
     return done.stdout.strip() if done.returncode == 0 else ""
 

@@ -115,7 +115,9 @@ class Pairs(unittest.TestCase):
         self.assertEqual(pitfalldup.pairs(text), [(4, 7), (6, 8)])
 
     def test_real_distinct_lines_have_no_pairs(self) -> None:
-        text = "\n".join(line(t, evidence=f"evidence number {i}") for i, t in enumerate(REAL_OTHERS))
+        text = "\n".join(
+            line(t, evidence=f"evidence number {i}") for i, t in enumerate(REAL_OTHERS)
+        )
         self.assertEqual(pitfalldup.pairs(text), [])
 
 

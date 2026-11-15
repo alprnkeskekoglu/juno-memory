@@ -100,7 +100,17 @@ class Settle(WriteCase):
         self.two_stubs()
         self.refused(*self.replace_args(evidence=MADE_UP))
         self.put("handoffs/self.md", "# Handoffs · self\n\n" + stub(seg=self.sid[:8]))
-        self.refused("card", "--segment", self.sid[:8], "--learned", "none", "--evidence", QUOTE, "a b", "c d")
+        self.refused(
+            "card",
+            "--segment",
+            self.sid[:8],
+            "--learned",
+            "none",
+            "--evidence",
+            QUOTE,
+            "a b",
+            "c d",
+        )
         self.assertIn("auto: true", self.get("handoffs/app.md"))
 
     def test_dismiss_archives_every_stub_with_its_excerpt_and_undoes(self) -> None:

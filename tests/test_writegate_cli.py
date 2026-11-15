@@ -117,11 +117,19 @@ class Pitfall(Base):
 
     def test_near_duplicate_updates_instead_of_appending(self) -> None:
         self.ok(
-            "pitfall", "--triggers", "terraform,plan", "--evidence", QUOTE,
+            "pitfall",
+            "--triggers",
+            "terraform,plan",
+            "--evidence",
+            QUOTE,
             "Run terraform plan before apply on shared state",
         )
         self.ok(
-            "pitfall", "--triggers", "apply", "--evidence", QUOTE,
+            "pitfall",
+            "--triggers",
+            "apply",
+            "--evidence",
+            QUOTE,
             "Always run terraform plan before apply on shared remote state files",
         )
         rows = [x for x in self.get("pitfalls.md").splitlines() if x.startswith("- ")]

@@ -18,9 +18,7 @@ GIT_HASH_RE = re.compile(
     re.I,
 )
 RUN_ID_RE = re.compile(r"\b[A-Z][A-Z0-9]{1,9}-20\d{2}(?:0[1-9]|1[0-2])\d{2,8}\b")
-NUMBER_UNIT_RE = re.compile(
-    r"(?<![\w.])\d{6,} ?(?:bytes|B|KB|MB|GB|ms|s|sec|seconds)(?!\w)", re.I
-)
+NUMBER_UNIT_RE = re.compile(r"(?<![\w.])\d{6,} ?(?:bytes|B|KB|MB|GB|ms|s|sec|seconds)(?!\w)", re.I)
 # Object word + id, plural too; ids chained with `,`/`and` must be 6-10 digits without a
 # leading zero, so a phone or TCKN cannot ride along.
 OBJECT_ID_RE = re.compile(
@@ -138,9 +136,7 @@ def blank(chars: list[tuple[str, int]], pattern: re.Pattern[str]) -> list[tuple[
     return out + chars[pos:]
 
 
-def personal_spans(
-    text: str, prefixes: Sequence[str] | None = None
-) -> list[tuple[int, int, str]]:
+def personal_spans(text: str, prefixes: Sequence[str] | None = None) -> list[tuple[int, int, str]]:
     """(start, end, kind) of every span personal() would object to, in text offsets."""
     spans: list[tuple[int, int, str]] = []
     for m in URL_RE.finditer(text):
