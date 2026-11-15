@@ -17,7 +17,33 @@ REPO_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}")
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 FENCE_RE = re.compile(r"^[ \t]*(`{3,}|~{3,})[^\n]*\n.*?(?:^[ \t]*\1[ \t]*$|\Z)", re.M | re.S)
 
+DECISIONS_HEAD_RE = re.compile(r"^##\s+Decisions\s*$")
+SECTION_HEAD_RE = re.compile(r"^#{1,2}\s")
+
 Entry = dict[str, Any]
+
+
+def decisions_span(lines: list[str]) -> tuple[int, int] | None:
+    """Line indexes [start, end) of the first `## Decisions` section, heading included; ends where
+    `vaultfmt.section` ends it (the next `#` or `##` heading)."""
+    start = next((i for i, x in enumerate(lines) if DECISIONS_HEAD_RE.match(x)), None)
+    if start is None:
+        return None
+    end = next(
+        (i for i in range(start + 1, len(lines)) if SECTION_HEAD_RE.match(lines[i])), len(lines)
+    )
+    return start, end
+
+
+def in_decisions(lines: list[str], index: int) -> bool:
+    span = decisions_span(lines)
+    return span is not None and span[0] <= index < span[1]
+
+
+def without_decisions(body: str) -> str:
+    lines = body.split("\n")
+    span = decisions_span(lines)
+    return body if span is None else "\n".join(lines[: span[0]] + lines[span[1] :])
 
 
 def as_list(value: str | list[str] | None) -> list[str]:

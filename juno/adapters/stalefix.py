@@ -199,6 +199,8 @@ def scan_file(
         return reason
     fields, body = vaultfmt.parse_frontmatter(text)
     since, _ = stale.baseline(fields, os.stat(path).st_mtime)
+    if kind == "profile":
+        body = stale.without_decisions(body)
     tokens = stale.path_tokens(body)
     if not tokens:
         return "no code anchor"
@@ -214,7 +216,7 @@ def scan_file(
         return "fresh"
     lines = text.splitlines()
     found, skipped = core.candidate_lines(
-        lines, [*drifted, *missing], cfg.get_int("stale", "max_lines_per_file")
+        lines, [*drifted, *missing], cfg.get_int("stale", "max_lines_per_file"), kind == "profile"
     )
     safe = [c for c in found if redact.redact(c.text) == c.text]
     if not safe:

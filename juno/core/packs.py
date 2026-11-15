@@ -105,7 +105,26 @@ def context_sections(kind: str, purpose: bool = False) -> tuple[list[str], list[
 
 
 def own_files(kind: str, key: str) -> set[str]:
-    return {v for v in pack_sources(kind, key).values() if isinstance(v, str)}
+    src = pack_sources(kind, key)
+    return {v for v in src.values() if isinstance(v, str)} | set(src["legacy"])
+
+
+def decisions_owner(view: VaultView, src: dict[str, Any], kind: str) -> str:
+    """Where the decisions block is filed, by routing: the ticket file, a visible profile, else
+    the first legacy file. Never depends on where the lines currently sit."""
+    profile = view.exists(src["doc"]) and not view.hidden(src["doc"])
+    return src["doc"] if kind == "ticket" or profile else str(src["legacy"][0])
+
+
+def decision_lines(view: VaultView, src: dict[str, Any], doc: str) -> list[str]:
+    """Owner `## Decisions` merged with the visible legacy `## Current` texts; a pure function of
+    that content, so it reads the same before and after `juno migrate --decisions`."""
+    legacy: list[str] = []
+    for rel in src["legacy"]:
+        text = view.read(rel)
+        if text and not view.hidden(rel, text):
+            legacy.append(vaultfmt.decision_current(text))
+    return owners.merged_decisions(vaultfmt.section(doc, "Decisions"), *legacy)
 
 
 def visible_rules(view: VaultView, rel: str) -> list[str]:
@@ -159,7 +178,7 @@ def optional_blocks(
 
 def missing_task_hint(key: str) -> str:
     return (
-        "missing. Fill it once with the title and status from the session's Jira tool: "
+        "has no title yet. Fill it once with the title and status from the session's Jira tool: "
         f'`juno task set {key} --title "<title>" --status "<status>"`.'
     )
 
@@ -180,17 +199,10 @@ def render_pack(
     doc = view.read(src["doc"])
     if view.hidden(src["doc"], doc):
         doc = ""
-    decisions_text = view.read(src["decisions"])
-    current = (
-        ""
-        if view.hidden(src["decisions"], decisions_text)
-        else vaultfmt.decision_current(decisions_text)
-    )
     head, tail = context_sections(kind, caps.purpose)
     doc_title = src["doc"] + view.stale_mark(src["doc"])
-    legacy = vaultfmt.section(doc, "Decisions") if kind == "ticket" else ""
-    decisions_title = src["decisions"] if current or not legacy else src["doc"]
-    current = "\n".join(x for x in (current, legacy) if x)
+    decisions_title = decisions_owner(view, src, kind)
+    current = "\n".join(decision_lines(view, src, doc))
     blocks: list[tuple[str, str]] = [(f"Decisions · {decisions_title}", current)]
     digests = taskdigest.blocks(doc, doc_title) if kind == "ticket" else []
     blocks += digests
@@ -207,7 +219,7 @@ def render_pack(
             nexts = [(f"Next · {seg}", plan.stored[seg])]
     blocks += [("Card · " + c["path"], c["body"]) for c in mentioned]
     blocks += [(f"{n} · {doc_title}", vaultfmt.section(doc, n)) for n in tail]
-    if kind == "ticket" and not doc:
+    if kind == "ticket" and not vaultfmt.parse_frontmatter(doc)[0].get("title"):
         blocks.append(("Task file · " + src["doc"], missing_task_hint(key)))
     blocks = [(title, neutralize(body)) for title, body in blocks if body]
     extras = [
@@ -241,11 +253,12 @@ def render_pack(
 
 def pack_pointer(view: VaultView, kind: str, key: str) -> str:
     src = pack_sources(kind, key)
-    files = [
-        p
-        for p in (src["rules"], src["doc"], src["decisions"])
-        if view.exists(p) and not view.hidden(p)
-    ]
+    doc = view.read(src["doc"])
+    doc = "" if view.hidden(src["doc"], doc) else doc
+    owner = decisions_owner(view, src, kind)
+    files = [p for p in (src["rules"], src["doc"]) if view.exists(p) and not view.hidden(p)]
+    if owner not in files and decision_lines(view, src, doc):
+        files.append(owner)
     where = ", ".join(files) if files else "handoff cards in handoffs/"
     return f"Juno pointer ({CONTEXT_LABEL}): {kind} {key} has memory in {where}."
 
