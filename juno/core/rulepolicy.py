@@ -38,6 +38,14 @@ def parse_scope(scope: str) -> Scope:
     raise Refused("scope must be global, repo:<repo> or topic:<slug>")
 
 
+def parse_source(scope: str) -> Scope:
+    """Like parse_scope, and a legacy `ticket:<KEY>` file, which can be moved out but not into."""
+    kind, _, name = scope.partition(":")
+    if kind == "ticket" and TICKET_SHAPE_RE.fullmatch(name):
+        return Scope(scope, f"rules/{name}.md", "scoped_rule_lines")
+    return parse_scope(scope)
+
+
 def scope_of_path(relpath: str) -> str | None:
     return vaultfmt.rule_scope(relpath)
 

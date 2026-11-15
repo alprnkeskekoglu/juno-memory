@@ -6,6 +6,7 @@ from juno.adapters import migratesteps
 from juno.cmd import migrate as cmd
 from juno.core import migrate
 from tests.support import REPO, SandboxCase
+from tests.support import legacy_vault as legacy
 
 
 class Core(unittest.TestCase):
@@ -457,6 +458,20 @@ class Cards(SandboxCase):
         self.assertEqual(len([n for n, t in after.items() if "aaaa0006" in t]), 4)
         self.assertEqual(self.sb.cli("migrate", "--cards")[0], 0)
         self.assertEqual(after, {n: self.read(n) for n in after})
+
+    def test_cards_clear_every_warning_of_the_legacy_vault(self) -> None:
+        legacy.build(self.sb.vault)
+        out = self.sb.cli("doctor")[1]
+        self.assertEqual(out.count("card copies"), 4)
+        self.assertEqual(out.count("misfiled cards"), 1)
+        self.assertEqual(self.sb.cli("migrate", "--cards")[0], 0)
+        out = self.sb.cli("doctor")[1]
+        self.assertEqual((out.count("card copies"), out.count("misfiled cards")), (0, 0))
+        self.assertIn(legacy.MISFILED, self.read("delta.md"))
+        self.assertNotIn(legacy.MISFILED, self.read("gamma.md"))
+        self.assertEqual(sum(legacy.FOUR_REPOS in self.read(f"{r}.md") for r in legacy.FOUR), 4)
+        self.assertIn(legacy.DASH_TWICE, self.read("misc.md"))
+        self.assertNotIn(legacy.DASH_TWICE, self.read("scratch.md"))
 
     def test_cards_four_repo_card_is_left_alone(self) -> None:
         for repo in ("r1", "r2", "r3", "r4"):

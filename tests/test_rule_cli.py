@@ -205,6 +205,21 @@ class ListAndEdit(WriteCase):
         self.assertFalse(os.path.exists(self.vp("rules/repos/app.md")))
         self.assertIn("Keep scripts quiet", self.get("rules/global.md"))
 
+    def test_move_out_of_a_legacy_ticket_file(self) -> None:
+        self.put(
+            "rules/ABC-12.md", "# Rules\n\n- 2026-01-01 · Keep scripts quiet · src: unquoted\n"
+        )
+        self.prompt("move the quiet scripts rule from the old ticket file to the app", "pid00003")
+        args = ("rule", "move", "--quote", "move the quiet scripts rule from the old ticket file")
+        self.assertEqual(
+            self.juno(*args, "--from", "ticket:ABC-12", "--to", "ticket:ABC-12", "1")[0], 2
+        )
+        code, out = self.juno(*args, "--from", "ticket:ABC-12", "--to", "repo:app", "1")
+        self.assertEqual(code, 0, out)
+        self.assertFalse(os.path.exists(self.vp("rules/ABC-12.md")))
+        self.assertIn("Keep scripts quiet", self.get("rules/repos/app.md"))
+        self.assertEqual(self.juno(*args, "--from", "repo:app", "--to", "ticket:ABC-12", "1")[0], 2)
+
     def test_triggers_added_to_a_topic(self) -> None:
         self.put(
             "rules/topics/fmt.md",
