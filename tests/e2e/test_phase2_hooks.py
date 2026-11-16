@@ -154,7 +154,7 @@ class RepoPackOnFirstTouch(Case):
 @e2e
 class UserPromptTopicTrigger(Case):
     def test_topic_rule_and_cue_arrive_with_the_prompt(self) -> None:
-        trigger, rule = "zebrafish" + uuid.uuid4().hex[:6], self.token("TOPIC")
+        trigger, rule = "zebrafish9" + uuid.uuid4().hex[:6], self.token("TOPIC")
         self.write(
             "rules/topics/fish.md",
             f"# Rules: topic:fish\ntriggers: {trigger}\n" + RULE.format(rule),
