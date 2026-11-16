@@ -5,7 +5,7 @@ run only queues them, the user confirms."""
 import re
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 
 from juno.core import fold, topics
 
@@ -21,6 +21,11 @@ WORD_RE = re.compile(r"\w[\w./-]*")
 LETTERS_RE = re.compile(r"[^\W\d_]{5,}")
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}(?!\d)")
 TICKET_RE = re.compile(r"[A-Z][A-Z0-9]*-\d+")
+HEX_RE = re.compile(r"[0-9a-f]{7,40}")
+UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+ORIGIN = "origin/"
+PLAIN_MIN_COUNT = 2  # a plain word must occur this often in the file
+PLAIN_MAX_OTHERS = 3  # and in fewer than this many other knowledge files
 COMMON_SHARE = 4  # a token in more than 1/COMMON_SHARE of the knowledge files is not specific
 COMMON_MIN_FILES = 4  # below this a quarter is under one file, so no token counts as common
 STOP = frozenset(
@@ -58,6 +63,13 @@ class Vocab:
 
     prefixes: tuple[str, ...] = ()
     common: frozenset[str] = frozenset()
+    folders: frozenset[str] = frozenset()  # vault top-level folders; `<folder>/...` is a path
+    slugs: frozenset[str] = frozenset()  # stems of the vault's knowledge and other topic files
+    docs: Mapping[str, int] = field(default_factory=dict)  # knowledge files holding each token
+
+    def without(self, own: str) -> Vocab:
+        """The vocabulary for the file whose slug is `own` (its own slug is a topic, not a link)."""
+        return replace(self, slugs=self.slugs - {own}) if own in self.slugs else self
 
 
 def common_tokens(docs: Mapping[str, int], total: int) -> frozenset[str]:
@@ -74,6 +86,36 @@ def ticket_like(raw: str, prefixes: Sequence[str]) -> bool:
     return any(re.fullmatch(re.escape(p) + r"-\d+", raw, re.I) for p in prefixes if p)
 
 
+def hash_like(part: str) -> bool:
+    """A uuid, or a git hash: 7-40 hex chars with a digit and a letter (so `added`, `face`,
+    `1234567` are not hashes)."""
+    low = part.lower()
+    if UUID_RE.fullmatch(low):
+        return True
+    return bool(HEX_RE.fullmatch(low)) and not low.isdigit() and any(c.isdigit() for c in low)
+
+
+def part_rejected(part: str, folded: str, vocab: Vocab) -> bool:
+    return (
+        bool(DATE_RE.match(part))
+        or ticket_like(part, vocab.prefixes)
+        or hash_like(part)
+        or folded in vocab.common
+        or folded.removesuffix(".md") in vocab.slugs
+    )
+
+
+def path_noise(word: str, raw: str, vocab: Vocab) -> bool:
+    """A vault or remote path (`handoffs/x`, `origin/x`), or a token with a rejected part."""
+    if word.startswith(ORIGIN) or (word.split("/", 1)[0] in vocab.folders and "/" in word):
+        return True
+    raws = raw.split("/")
+    folds = word.split("/")
+    if len(raws) != len(folds):
+        raws = folds
+    return any(part_rejected(r, f, vocab) for r, f in zip(raws, folds, strict=True) if f)
+
+
 def usable(word: str, vocab: Vocab = Vocab(), raw: str = "") -> bool:
     """`word` is the folded token, `raw` the token as written (ticket ids need their case)."""
     raw = raw or word
@@ -81,11 +123,9 @@ def usable(word: str, vocab: Vocab = Vocab(), raw: str = "") -> bool:
         0 < len(word) <= MAX_WORD
         and not word.isdigit()
         and not word.startswith("http")
-        and not DATE_RE.match(raw)
-        and not ticket_like(raw, vocab.prefixes)
+        and not path_noise(word, raw, vocab)
         and word not in STOP
         and word not in topics.GENERIC_TRIGGERS
-        and word not in vocab.common
         and topics.trigger_problem(word) is None
     )
 
@@ -102,9 +142,22 @@ def tokens(title: str, body: str, preset: str = "none", vocab: Vocab = Vocab()) 
     return found
 
 
-def propose(title: str, body: str, preset: str = "none", vocab: Vocab = Vocab()) -> list[str]:
-    """Up to four triggers: terms that are specific by shape, in the title or said twice."""
+def plain_ok(word: str, count: int, vocab: Vocab) -> bool:
+    if topics.is_specific(word):
+        return True
+    others = max(vocab.docs.get(word, 0) - 1, 0)  # the file itself is one of the documents
+    return count >= PLAIN_MIN_COUNT and others < PLAIN_MAX_OTHERS
+
+
+def propose(
+    title: str, body: str, preset: str = "none", vocab: Vocab = Vocab(), own: str = ""
+) -> list[str]:
+    """Up to four triggers: terms that are specific by shape, in the title or said twice. A plain
+    word must also occur twice in the file and in fewer than 3 other knowledge files. `own` is
+    the file's slug, which stays proposable."""
+    vocab = vocab.without(own)
     seen: Counter[str] = Counter()
+    count: Counter[str] = Counter()
     for weight, text in ((TITLE_WEIGHT, title), (1, CODE_RE.sub(" ", body))):
         for raw in WORD_RE.findall(text):
             stripped = raw.strip("./-_")
@@ -115,7 +168,8 @@ def propose(title: str, body: str, preset: str = "none", vocab: Vocab = Vocab())
             if len(word) < (MIN_SPECIFIC if specific else MIN_PLAIN):
                 continue
             seen[word] += weight * (SPECIFIC_WEIGHT if specific else 1)
-    kept = [w for w, score in seen.items() if score >= 2]
+            count[word] += 1
+    kept = [w for w, score in seen.items() if score >= 2 and plain_ok(w, count[w], vocab)]
     kept.sort(key=lambda w: (-seen[w], -len(w), w))
     return kept[:MAX_PROPOSED]
 

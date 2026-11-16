@@ -34,7 +34,9 @@ def proposals(cfg: config.Config) -> tuple[list[tuple[str, list[str]]], int]:
         fields, body = vaultfmt.parse_frontmatter(text)
         if topics.field_list(fields.get("triggers"), preset):
             continue
-        proposed = triggerprop.propose(str(fields.get("title") or ""), body, preset, words)
+        proposed = triggerprop.propose(
+            str(fields.get("title") or ""), body, preset, words, name[: -len(".md")]
+        )
         if proposed:
             found.append((rel, proposed))
         else:
