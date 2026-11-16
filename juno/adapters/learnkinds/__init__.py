@@ -8,8 +8,21 @@ from juno.adapters.learnkinds import (
     rules,
     selfmodel,
     threads,
+    ticket,
     turns,
 )
 
-KINDS = (rules, knowledge, threads, pitfalls, backlog, keys, procedures, selfmodel, turns, next)
+KINDS = (
+    rules,
+    knowledge,
+    threads,
+    pitfalls,
+    backlog,
+    keys,
+    procedures,
+    ticket,
+    selfmodel,
+    turns,
+    next,
+)
 KEYS = tuple(kind.KEY for kind in KINDS)

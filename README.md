@@ -26,7 +26,7 @@ Juno only acts in interactive sessions. Sessions run with `-p`, from scripts, or
 | `knowledge/<slug>.md` | durable facts, each with its source and date |
 | `projects/<repo>.md` | repo profiles: purpose, how to run, gotchas, links |
 | `procedures/<slug>.md` | step sequences that worked |
-| `tasks/<KEY>.md` | one file per ticket, only when Jira prefixes are configured; holds its decisions and the sections `juno task log` writes |
+| `tasks/<KEY>.md` | one file per ticket, only when Jira prefixes are configured; holds its decisions and the sections `juno task log` writes; the session-end run also fills Summary, Criteria, Work, Tests and Cause from what the session did on the ticket (`[handoff] ticket_chars`) |
 | `notes/` | dated situational notes |
 | `self/` | lines about you, from your own words: values, decisions, communication, tensions; and `voice.md`, your measured writing voice (generated, private) |
 | `ideas/`, `backlog/` | saved ideas, and your personal work list |
@@ -71,6 +71,7 @@ The detached card run reads the session's own ledger and transcript (typed promp
 - the **handoff card** in `handoffs/`: what was done, where it stopped, what is next, and one `Learned:` line;
 - repo gotchas, knowledge, pitfalls and procedures whose evidence is found in the session;
 - open and closed **threads**;
+- for a ticket the session worked on, the facts of its **ticket file** (`tasks/<KEY>.md`: summary, acceptance criteria, work, tests, root cause), each line anchored in the session; nothing is written for a ticket that was only mentioned;
 - **rule candidates** (queued, never written to `rules/`) and backlog suggestions.
 
 Each part is validated on its own, so a bad card drops only the card. A session that ends without a card gets a stub, filled in later. At the next SessionStart the candidates are offered once as a multiple-choice question; only the ones you pick become rules or closed threads.

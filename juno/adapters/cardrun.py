@@ -101,6 +101,7 @@ def build(
         cfg.get_int("handoff", "digest_chars"),
         cfg.language_list("user_cues"),
         cfg.language_list("self_cues"),
+        cfg.get_int("handoff", "ticket_chars") if learnio.enabled(cfg) else 0,
     )
 
 
