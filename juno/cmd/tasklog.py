@@ -1,26 +1,19 @@
 import argparse
 import json
 import time
-from dataclasses import dataclass
 
 from juno import config
 from juno.adapters import checks, gate, taskio, vault
 from juno.cmd import backlog, write
 from juno.cmd.common import say
-from juno.core import taskdigest, taskfile, writegate
+from juno.core import taskdigest, writegate
 from juno.core.errors import Refused
 from juno.core.ledger import Segment
+from juno.core.taskrows import Row
 
 MAX_ROWS = 40
 MAX_BYTES = 16 * 1024
 FIELDS = frozenset({"section", "key", "line"})
-
-
-@dataclass(frozen=True)
-class Row:
-    section: str
-    key: str
-    text: str
 
 
 def clean_row(cfg: config.Config, section: object, key: object, line: object) -> Row:
@@ -82,22 +75,6 @@ def evidence_for(cfg: config.Config, seg: Segment, key: str, raw: str | None) ->
     raise Refused(f"evidence must be {taskdigest.ALLOWED.format(key=key)}; got {kind}")
 
 
-def apply(text: str, key: str, rows: list[Row], day: str) -> tuple[str, int, int]:
-    digests = taskdigest.listed(text)
-    added = replaced = 0
-    for row in rows:
-        line = taskdigest.item_line(row.key, row.text, day)
-        text, how = taskdigest.put_line(text, digests, row.section, row.key, line)
-        added += how == "added"
-        replaced += how == "replaced"
-        if row.section not in digests:
-            digests.append(row.section)
-    text = taskfile.merge(text, key, {}, day)
-    if digests != taskdigest.listed(text):
-        text = taskdigest.set_digests(text, digests)
-    return text, added, replaced
-
-
 def run_log(cfg: config.Config, key: str, args: argparse.Namespace) -> int:
     try:
         seg = write.guard(cfg)
@@ -108,14 +85,7 @@ def run_log(cfg: config.Config, key: str, args: argparse.Namespace) -> int:
         day = time.strftime("%Y-%m-%d")
         rel = taskio.rel(key)
         with write.locked(cfg):
-            current = taskio.read(cfg, key)
-            if current is None:
-                if taskio.path(cfg, key) is None:
-                    raise Refused(f"{rel} is outside the vault (symlink)")
-                url = taskfile.default_url(cfg.get_str("jira", "base_url"), key)
-                current = taskfile.stub(key, day, url)
-            new, added, replaced = apply(current, key, rows, day)
-            res = gate.commit(cfg, seg, "task-log", rel, new, evidence)
+            res, added, replaced = taskio.put_rows(cfg, seg, key, rows, evidence, day)
     except Refused as error:
         say(checks.refusal_line(str(error)))
         return 2

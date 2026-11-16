@@ -83,6 +83,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "min_run_usd": 0.05,
         "timeout_seconds": 240,
         "digest_chars": 16000,
+        "ticket_chars": 6000,
         "extract": True,
         "claude_bin": "",
         "launch_path": LAUNCH_PATH,

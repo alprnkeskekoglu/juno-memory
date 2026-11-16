@@ -3,7 +3,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from juno.core import fold, prompts
+from juno.core import fold, prompts, ticketdigest, ticketwork
 from juno.core.ledger import Segment
 from juno.core.redact import redact
 
@@ -15,6 +15,7 @@ FILES_KEEP = 30
 COMMANDS_KEEP = 12
 COMMAND_CHARS = 200
 RESULT_CHARS = 300
+TOOL_CHARS = 600
 MOMENTS_KEEP = 8
 MOMENT_CHARS = 500
 MOMENTS_CHARS = 5000
@@ -48,6 +49,7 @@ class Facts:
     commands: list[str] = field(default_factory=list)
     events: list[Event] = field(default_factory=list)
     bash: dict[str, str] = field(default_factory=dict)
+    calls: list[tuple[int, str]] = field(default_factory=list)
 
 
 def clip(text: str, limit: int) -> str:
@@ -107,6 +109,7 @@ def entry_item(facts: Facts, kind: object, item: dict[str, Any], home: str) -> N
         if not isinstance(args, dict):
             return
         tool_use(facts, item.get("name"), args, home)
+        facts.calls.append((len(facts.events), json.dumps(args, ensure_ascii=False)[:TOOL_CHARS]))
         command = args.get("command")
         if item.get("name") == "Bash" and isinstance(command, str) and item.get("id"):
             facts.bash[str(item["id"])] = " ".join(command.split())[:COMMAND_CHARS]
@@ -266,6 +269,18 @@ def typed_prompts(seg: Segment) -> str:
     return "\n".join(note + lines) or "-"
 
 
+def ticket_block(seg: Segment, facts: Facts, chars: int) -> str:
+    """The per-ticket block, outside the `digest_chars` budget so the other sections keep theirs."""
+    if chars <= 0:
+        return ""
+    keys = ticketwork.worked(seg, any(b.startswith("PR ") for b in facts.boundaries))
+    return redact(
+        ticketdigest.block(
+            keys, ticketdigest.merge(facts.calls, [(e.kind, e.text) for e in facts.events]), chars
+        )
+    )
+
+
 def build_digest(
     seg: Segment,
     facts: Facts,
@@ -273,6 +288,7 @@ def build_digest(
     limit: int,
     user_cues: list[str],
     self_cues: list[str],
+    ticket_chars: int = 0,
 ) -> str:
     preset = seg.rules.preset
     parts = [
@@ -303,4 +319,6 @@ def build_digest(
     moments = redact(learning_moments(facts.events, user_cues, self_cues, preset))
     moments = clip(moments, limit // 3) if moments else ""
     body = clip(redact("\n\n".join(parts)), limit - len(moments) - 2 if moments else limit)
-    return body + "\n\n" + moments if moments else body
+    text = body + "\n\n" + moments if moments else body
+    tickets = ticket_block(seg, facts, ticket_chars)
+    return text + "\n\n" + tickets if tickets else text
