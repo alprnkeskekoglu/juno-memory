@@ -3,7 +3,17 @@ import os
 from typing import Any
 
 from juno import config
-from juno.adapters import agentcalls, armsio, asklog, ledgerio, repos, status, store, usageio
+from juno.adapters import (
+    agentcalls,
+    armsio,
+    asklog,
+    ledgerio,
+    repos,
+    status,
+    store,
+    usageio,
+    voiceio,
+)
 from juno.adapters.vaultview import DiskVault
 from juno.core import packs, rank, toolrec, vaultfmt
 from juno.core.ledger import Record, Segment
@@ -140,6 +150,7 @@ def handle(payload: dict[str, Any], cfg: config.Config) -> dict[str, Any] | None
         usageio.record_touch(cfg, sid, tool, tool_in, cwd)
     if not seg.private and touches_private_file(cfg, tool, tool_in, cwd):
         ledgerio.record(cfg, seg, {"ev": "private", "why": "visibility"})
+    voiceio.collect(cfg, seg, payload, tool, tool_in)
     if payload.get("agent_id"):
         return None
     if tool == toolrec.ASK_TOOL:

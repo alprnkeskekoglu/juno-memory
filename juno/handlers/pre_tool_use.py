@@ -1,7 +1,7 @@
 from typing import Any
 
 from juno import config
-from juno.adapters import agentcalls, ledgerio, store, topicsio
+from juno.adapters import agentcalls, ledgerio, store, topicsio, voiceio
 from juno.core import toolrec, vaultfmt, vaultroute
 from juno.handlers.common import main_session, output, payload_cwd, tool_input
 
@@ -70,5 +70,7 @@ def handle(payload: dict[str, Any], cfg: config.Config) -> dict[str, Any] | None
         refusal = vault_refusal(cfg, payload)
         if refusal:
             return refusal
-    text = topicsio.for_tool(cfg, payload, cfg.get_int("caps", "hook_output_chars"))
-    return output(cfg, "PreToolUse", text)
+    cap = cfg.get_int("caps", "hook_output_chars")
+    voice = voiceio.pre_tool(cfg, payload, tool_input(payload))
+    text = topicsio.for_tool(cfg, payload, cap - len(voice) - 2 if voice else cap)
+    return output(cfg, "PreToolUse", "\n\n".join(t for t in (voice, text) if t))
