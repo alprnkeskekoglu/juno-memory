@@ -72,7 +72,8 @@ The detached card run reads the session's own ledger and transcript (typed promp
 - repo gotchas, knowledge, pitfalls and procedures whose evidence is found in the session;
 - open and closed **threads**;
 - for a ticket the session worked on, the facts of its **ticket file** (`tasks/<KEY>.md`: summary, acceptance criteria, work, tests, root cause), each line anchored in the session; nothing is written for a ticket that was only mentioned;
-- **rule candidates** (queued, never written to `rules/`) and backlog suggestions.
+- **rule candidates** (queued, never written to `rules/`) and backlog suggestions;
+- **trigger candidates** for a knowledge file the session read by hand that has no `triggers:` (proposed from its title and body, and from the words you typed, with a language preset); they sit in the same queue and reach the file only when you accept them with `juno rule accept`.
 
 Each part is validated on its own, so a bad card drops only the card. A session that ends without a card gets a stub, filled in later. At the next SessionStart the candidates are offered once as a multiple-choice question; only the ones you pick become rules or closed threads.
 

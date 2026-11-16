@@ -28,10 +28,10 @@ class TurkishSuffixTrigger(Case):
     def test_suffixed_word_matches_its_trigger_under_the_tr_preset(self) -> None:
         rule = self.token("TURKISH")
         self.write(
-            "rules/topics/mantis.md",
-            "# Rules: topic:mantis\ntriggers: zebramantis\n" + RULE.format(rule),
+            "rules/topics/tracker.md",
+            "# Rules: topic:tracker\ntriggers: zebratracker\n" + RULE.format(rule),
         )
         with open(self.sb.config, "a", encoding="utf-8") as handle:
             handle.write('\n[language]\npreset = "tr"\n')
-        run = self.go("zebramantisin durumuna bak, sadece tamam yaz", cwd=self.work)
+        run = self.go("zebratrackerin durumuna bak, sadece tamam yaz", cwd=self.work)
         self.assertIn(rule, "\n".join(self.contexts(run, "UserPromptSubmit", rule)))

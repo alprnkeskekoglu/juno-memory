@@ -29,25 +29,25 @@ class Filter(unittest.TestCase):
             self.assertNotIn("kube", bashview.bash_view(command)[0], command)
 
     def test_path_words_leave_the_text(self) -> None:
-        text, _, paths = bashview.bash_parts("python3 scripts/mantis_brief.py --fast")
-        self.assertNotIn("mantis", text)
-        self.assertEqual(paths, ("scripts/mantis_brief.py",))
+        text, _, paths = bashview.bash_parts("python3 scripts/tracker_brief.py --fast")
+        self.assertNotIn("tracker", text)
+        self.assertEqual(paths, ("scripts/tracker_brief.py",))
 
     def test_path_match_is_by_whole_segment(self) -> None:
-        views = topics.path_views(("/x/mantis_brief.py", "/x/docs/mantis/a.md", "/y/runbook.md"))
+        views = topics.path_views(("/x/tracker_brief.py", "/x/docs/tracker/a.md", "/y/runbook.md"))
         cases = (
-            ("mantis", True),  # the directory
+            ("tracker", True),  # the directory
             ("runbook", True),  # file name without its extension
             ("runbook.md", True),
             ("brief", False),
             ("x/docs", True),
             (".md", True),
-            ("mantis_brief", True),
+            ("tracker_brief", True),
             ("antis", False),
         )
         for trigger, hit in cases:
             self.assertEqual(topics.path_match(trigger, views), hit, trigger)
-        self.assertFalse(topics.path_match("mantis", topics.path_views(("/x/mantis_brief.py",))))
+        self.assertFalse(topics.path_match("tracker", topics.path_views(("/x/tracker_brief.py",))))
 
 
 class Base(HookCase):
@@ -93,13 +93,13 @@ class Precision(Base):
 
     def test_criterion_4_path_needs_a_whole_segment(self) -> None:
         self.write(
-            "rules/topics/mantis.md", "triggers: mantis\n" + RULE.format("Mantis rule text here")
+            "rules/topics/tracker.md", "triggers: tracker\n" + RULE.format("Tracker rule text here")
         )
-        self.assertEqual(self.read_file("/x/mantis_brief.py"), "")
-        self.assertEqual(self.bash("cat scripts/mantis_brief.py"), "")
-        self.assertIn("Mantis rule", self.read_file("/x/mantis/notes.md"))
+        self.assertEqual(self.read_file("/x/tracker_brief.py"), "")
+        self.assertEqual(self.bash("cat scripts/tracker_brief.py"), "")
+        self.assertIn("Tracker rule", self.read_file("/x/tracker/notes.md"))
         self.reset()
-        self.assertIn("Mantis rule", self.bash("cat scripts/mantis.py"))
+        self.assertIn("Tracker rule", self.bash("cat scripts/tracker.py"))
 
     def test_criterion_5_one_generic_word_is_not_enough(self) -> None:
         self.assertEqual(self.prompt("how do I fix the kube thing"), "")
