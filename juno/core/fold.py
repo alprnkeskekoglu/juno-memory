@@ -75,3 +75,46 @@ def has_cue(text: str, cues: Iterable[str], preset: str) -> bool:
         re.search(r"(?<![a-z0-9])" + re.escape(fold(cue, preset).replace("’", "'")), folded)
         for cue in cues
     )
+
+
+# Turkish case and plural endings after `fold` (dotless i, u-umlaut and the rest are ASCII by then).
+TR_SUFFIXES = tuple(
+    sorted(
+        (
+            "lar ler in un nin nun a e ya ye na ne i u yi yu ni nu "
+            "da de ta te nda nde dan den tan ten ndan nden"
+        ).split(),
+        key=len,
+        reverse=True,
+    )
+)
+MIN_STEM = 3
+MAX_STRIPS = 3
+WORD_RE = re.compile(r"[\w'’]+")
+
+
+def strip_suffixes(word: str, strips: int = MAX_STRIPS) -> list[str]:
+    found: list[str] = []
+    if strips <= 0:
+        return found
+    for suffix in TR_SUFFIXES:
+        if word.endswith(suffix) and len(word) - len(suffix) >= MIN_STEM:
+            stem = word[: -len(suffix)]
+            found.append(stem)
+            found += strip_suffixes(stem, strips - 1)
+    return found
+
+
+def stems(folded: str, preset: str) -> list[str]:
+    """Stems of the words of an already folded text: a light suffix strip for agglutinative
+    languages (only `tr` today); nothing for any other preset."""
+    if preset != "tr":
+        return []
+    found: dict[str, None] = {}
+    for word in WORD_RE.findall(folded):
+        base, quote, _ = word.partition("'") if "'" in word else word.partition("’")
+        if quote and len(base) >= 2:
+            found[base] = None
+        for stem in strip_suffixes(base):
+            found[stem] = None
+    return list(found)

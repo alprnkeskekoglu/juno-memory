@@ -1,10 +1,10 @@
 import hashlib
 import re
-import shlex
 from collections.abc import Callable
 from typing import Any
 
 from juno.core import fold, vaultfmt
+from juno.core.bashview import bash_parts
 from juno.core.inject import CONTEXT_LABEL, RULES_LABEL, neutralize
 from juno.core.view import VaultView
 
@@ -32,6 +32,12 @@ GENERAL_CHARS = 1200
 PITFALL_CAP = 3
 EVIDENCE_TOKEN = re.compile(r"[\w./-]+")
 EVIDENCE_TAIL = re.compile(r";\s*segment\b.*$", re.I)
+# Interpreters and tools: their name in a pitfall's evidence says nothing about the error.
+EXECUTABLE_RE = re.compile(
+    r"^(python[\d.]*|node(js)?|npm|npx|pnpm|yarn|bun|deno|bash|sh|zsh|fish|ruby|perl|php|java"
+    r"|go|cargo|uvx?|pip[\d.]*|make|sudo|env|git|gh|juno)$"
+)
+PHRASE_CHARS = (8, 80)
 # Plain words common enough that hitting them says nothing, alone or together: a pitfall
 # fires only when one of its triggers is NOT in this set. Everything else (multi-word terms, flags,
 # paths, names with _ . - or digits) counts as specific.
@@ -233,8 +239,42 @@ def pattern(trigger: str) -> re.Pattern[str]:
     return compiled
 
 
-def matched_triggers(entry: Entry, haystack: str) -> list[str]:
-    return [t for t in entry[2] if t in haystack and pattern(t).search(haystack)]
+def search_text(text: str, preset: str = "none") -> str:
+    """The folded text, plus its stems for a language with a suffix strip (one per line)."""
+    folded = fold.fold(text[:SCAN_CHARS], preset)
+    extra = fold.stems(folded, preset)
+    return folded + ("\n" + "\n".join(extra) if extra else "")
+
+
+def path_views(paths: tuple[str, ...], preset: str = "none") -> list[str]:
+    """Each path as ``/a/b/name.ext/`` and ``/a/b/name/``: a trigger matches whole segments."""
+    views: list[str] = []
+    for raw in paths:
+        segments = [s for s in fold.fold(raw, preset).split("/") if s]
+        if not segments:
+            continue
+        views.append("/" + "/".join(segments) + "/")
+        stem = segments[-1].rpartition(".")[0]
+        if stem:
+            views.append("/" + "/".join([*segments[:-1], stem]) + "/")
+    return views
+
+
+def path_match(trigger: str, views: list[str]) -> bool:
+    core = trigger.strip("/")
+    if not core or " " in core:
+        return False
+    if core.startswith(".") and "/" not in core:
+        return any(v.rstrip("/").endswith(core) for v in views)
+    return any("/" + core + "/" in v for v in views)
+
+
+def matched_triggers(entry: Entry, haystack: str, views: list[str] | None = None) -> list[str]:
+    return [
+        t
+        for t in entry[2]
+        if (t in haystack and pattern(t).search(haystack)) or path_match(t, views or [])
+    ]
 
 
 def plain_pitfalls_warning(text: str, preset: str = "none") -> str | None:
@@ -271,17 +311,28 @@ def pitfall_fires(found: list[str], execs: frozenset[str] = frozenset()) -> bool
     return sum(t not in GENERIC_TRIGGERS for t in found) >= 2
 
 
+Judge = Callable[[Entry, list[str], str], bool]
+
+
 def matches(
-    entries: list[Entry], text: str, preset: str = "none", execs: frozenset[str] = frozenset()
+    entries: list[Entry],
+    text: str,
+    preset: str = "none",
+    execs: frozenset[str] = frozenset(),
+    paths: tuple[str, ...] = (),
+    judge: Judge | None = None,
 ) -> list[Entry]:
-    if not entries or not text:
+    """Entries a call matches. `judge` has the last word on a topic rule or knowledge item
+    (entry, matched triggers, folded text); a pitfall is judged by `pitfall_fires`."""
+    if not entries or not (text or paths):
         return []
-    haystack = fold.fold(text[:SCAN_CHARS], preset)
+    haystack = search_text(text, preset)
+    views = path_views(paths, preset)
     hits: list[Entry] = []
     spots: list[int] = []
     scores: list[int] = []
     for entry in entries:
-        found = matched_triggers(entry, haystack)
+        found = matched_triggers(entry, haystack, views)
         if not found:
             continue
         if len(entry) > 3:
@@ -289,6 +340,8 @@ def matches(
                 continue
             spots.append(len(hits))
             scores.append(pitfall_score(found, execs))
+        elif judge is not None and not judge(entry, found, haystack):
+            continue
         hits.append(entry)
     ranked = sorted(range(len(spots)), key=lambda i: -scores[i])
     picked = [hits[spots[i]] for i in ranked]
@@ -297,145 +350,62 @@ def matches(
     return hits
 
 
-def evidence_tokens(evidence: str, preset: str = "none") -> list[str]:
-    folded = fold.fold(EVIDENCE_TAIL.sub("", evidence), preset)
+def error_parts(evidence: str) -> tuple[str, str]:
+    """The evidence's error: everything after the first ``: `` and the part after the last."""
+    text = EVIDENCE_TAIL.sub("", evidence)
+    _, sep, rest = text.partition(": ")
+    return (rest if sep else text), (text.rpartition(": ")[2] if sep else "")
+
+
+def evidence_tokens(evidence: str, preset: str = "none", fix: str = "") -> list[str]:
+    """Distinctive tokens of the error part of the evidence: no executable names, no token the
+    pitfall's own fix text also uses (the evidence often quotes the fix command)."""
+    own = {t.strip("./-") for t in EVIDENCE_TOKEN.findall(fold.fold(fix, preset))}
     found: list[str] = []
-    for token in EVIDENCE_TOKEN.findall(folded):
+    for token in EVIDENCE_TOKEN.findall(fold.fold(error_parts(evidence)[0], preset)):
         token = token.strip("./-")
-        if len(token) >= 6 and re.search(r"[_./\d-]", token) and token not in found:
+        if (
+            len(token) >= 6
+            and re.search(r"[_./\d-]", token)
+            and not EXECUTABLE_RE.match(token)
+            and token not in own
+            and token not in found
+        ):
             found.append(token)
     return found
 
 
 def repeats(entry: Entry, text: str, preset: str = "none") -> bool:
-    """True when the call carries a distinctive part of the pitfall's error evidence."""
+    """True when the call repeats the pitfall's error: its last error phrase or a distinctive
+    token of the error part."""
     if len(entry) < 5:
         return False
-    haystack = fold.fold(text[:SCAN_CHARS], preset)
-    return any(t in haystack and pattern(t).search(haystack) for t in evidence_tokens(entry[4]))
+    haystack = search_text(text, preset)
+    phrase = fold.fold(error_parts(entry[4])[1], preset)
+    low, high = PHRASE_CHARS
+    if low <= len(phrase) <= high and " " in phrase and phrase in " ".join(haystack.split()):
+        return True
+    return any(
+        t in haystack and pattern(t).search(haystack)
+        for t in evidence_tokens(entry[4], preset, entry[3])
+    )
 
 
-HEREDOC_RE = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_]\w*)\1")
-OPERATORS = frozenset({";", "&&", "||", "|", "&", "(", ")", "<", ">", ">>", "<<", "<<<"})
-WRAPPERS = frozenset({"sudo", "env", "time", "command", "nohup", "exec", "xargs", "builtin"})
-PROSE_FLAGS = frozenset(
-    {"--body", "--body-file", "--message", "--notes", "--notes-file", "--title", "--description"}
-)
-MESSAGE_EXES = frozenset({"git", "gh", "hg", "jj"})
-GREP_EXES = frozenset({"grep", "egrep", "fgrep", "rg", "ag", "ack", "zgrep"})
-GREP_VALUE_FLAGS = frozenset(
-    {"-A", "-B", "-C", "-m", "-f", "-g", "-t", "--include", "--exclude", "--glob", "--type"}
-)
-GREP_PATTERN_FLAGS = frozenset({"-e", "--regexp"})
-# A grep pattern that is one identifier, path or flag stays; a regex or word list is dropped.
-LITERAL_RE = re.compile(r"^[\w./:-]+$")
-
-
-def strip_heredocs(command: str) -> str:
-    lines: list[str] = []
-    ending: str | None = None
-    for line in command.splitlines():
-        if ending is not None:
-            if line.strip() == ending:
-                ending = None
-            continue
-        found = HEREDOC_RE.search(line)
-        if found:
-            ending = found.group(2)
-            line = HEREDOC_RE.sub(" ", line)
-        lines.append(line)
-    return " ; ".join(lines)
-
-
-def command_segments(command: str) -> list[list[str]]:
-    """Tokens per pipeline segment, without heredoc bodies."""
-    text = strip_heredocs(command)
-    lexer = shlex.shlex(text, posix=True, punctuation_chars=True)
-    lexer.whitespace_split = True
-    try:
-        tokens = list(lexer)
-    except ValueError:
-        tokens = text.split()
-    segments: list[list[str]] = [[]]
-    for token in tokens:
-        if token in OPERATORS:
-            segments.append([])
-        else:
-            segments[-1].append(token)
-    return [seg for seg in segments if seg]
-
-
-def segment_exe(tokens: list[str]) -> int | None:
-    for i, token in enumerate(tokens):
-        if "=" in token and not token.startswith("-") and token.split("=", 1)[0].isidentifier():
-            continue
-        if token in WRAPPERS or token.startswith("-"):
-            continue
-        return i
-    return None
-
-
-def own_tokens(tokens: list[str], exe: str) -> list[str]:
-    """Drop the text a command carries rather than runs: prose flags, messages, grep patterns."""
-    kept: list[str] = []
-    skip = False
-    pattern_seen = False
-    grep = exe in GREP_EXES
-    explicit = grep and any(t in GREP_PATTERN_FLAGS or t.startswith("--regexp=") for t in tokens)
-    for token in tokens:
-        if skip:
-            skip = False
-            continue
-        flag, eq, _ = token.partition("=")
-        if flag in PROSE_FLAGS or flag == "--grep" or (grep and flag == "--regexp"):
-            skip = not eq
-            continue
-        if exe in MESSAGE_EXES and token in ("-m", "-F"):
-            skip = True
-            continue
-        if grep:
-            if token in GREP_PATTERN_FLAGS:
-                skip = True
-                continue
-            if token in GREP_VALUE_FLAGS:
-                kept.append(token)
-                skip = True
-                continue
-            if not token.startswith("-") and not explicit and not pattern_seen:
-                pattern_seen = True
-                if not LITERAL_RE.match(token):
-                    continue
-        kept.append(token)
-    return kept
-
-
-def bash_view(command: str) -> tuple[str, frozenset[str]]:
-    """The command's own text and its executables (first word of each pipeline segment)."""
-    parts: list[str] = []
-    execs: set[str] = set()
-    for tokens in command_segments(command):
-        at = segment_exe(tokens)
-        exe = tokens[at].rsplit("/", 1)[-1].lower() if at is not None else ""
-        if exe:
-            execs.add(exe)
-        head = tokens[: (at or 0) + 1]
-        parts.append(" ".join(head + own_tokens(tokens[len(head) :], exe)))
-    return " ; ".join(parts), frozenset(execs)
-
-
-def tool_exes(tool: object, tool_in: dict[str, Any]) -> frozenset[str]:
-    if tool == "Bash" and isinstance(tool_in.get("command"), str):
-        return bash_view(tool_in["command"])[1]
-    return frozenset()
-
-
-def tool_text(tool: object, tool_in: dict[str, Any]) -> str:
+def tool_parts(
+    tool: object, tool_in: dict[str, Any]
+) -> tuple[str, frozenset[str], tuple[str, ...]]:
+    """What a tool call says (text), its executables and the paths it names."""
     parts = [str(tool or "")]
+    execs: frozenset[str] = frozenset()
+    paths: list[str] = []
     if tool == "Bash" and isinstance(tool_in.get("command"), str):
-        parts.append(bash_view(tool_in["command"])[0])
-    keys = PATH_KEYS + ((PATTERN_KEYS[str(tool)],) if tool in PATTERN_KEYS else ())
-    parts += [tool_in[k] for k in keys if isinstance(tool_in.get(k), str)]
-    return "\n".join(parts)
+        text, execs, paths_found = bash_parts(tool_in["command"])
+        parts.append(text)
+        paths += paths_found
+    paths += [tool_in[k] for k in PATH_KEYS if isinstance(tool_in.get(k), str)]
+    if tool in PATTERN_KEYS and isinstance(tool_in.get(PATTERN_KEYS[str(tool)]), str):
+        parts.append(tool_in[PATTERN_KEYS[str(tool)]])
+    return "\n".join(parts), execs, tuple(paths)
 
 
 def who(agent: object) -> str:
@@ -559,7 +529,9 @@ def render(
             block = knowledge_block(view, relpath)
         label = RULES_LABEL if is_topic else CONTEXT_LABEL
         extra = len(block) + 1 + (len(label) + 2 if not (rules if is_topic else notes) else 0)
-        if not block or used + extra > budget or not (claim(name) or name in again):
+        if not block or used + extra > budget:
+            continue
+        if not (claim(name) or (name in again and claim(name + ".again"))):
             continue
         pitfalls += len(hit) > 3
         (rules if is_topic else notes).append(block)

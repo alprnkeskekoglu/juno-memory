@@ -125,22 +125,25 @@ def for_text(
     budget: int,
     view: DiskVault | None = None,
     execs: frozenset[str] = frozenset(),
+    paths: tuple[str, ...] = (),
 ) -> str:
     preset = preset_of(cfg)
-    hits = topics.matches(index(cfg), text, preset, execs)
+    view = view or DiskVault(cfg)
+    hits = topics.matches(index(cfg), text, preset, execs, paths)
     if not hits:
         return ""
-    view = view or DiskVault(cfg)
-    again = frozenset(h[0] for h in hits if topics.repeats(h, text, preset))
+    seen = " ".join([text, *paths])
+    again = frozenset(h[0] for h in hits if topics.repeats(h, seen, preset))
     return topics.render(view, topics.ordered(hits), claimer(cfg, sid, agent), budget, 0, again)
 
 
 def for_tool(cfg: config.Config, payload: dict[str, Any], budget: int) -> str:
     tool_in = payload.get("tool_input")
-    text = topics.tool_text(payload.get("tool_name"), tool_in if isinstance(tool_in, dict) else {})
-    execs = topics.tool_exes(payload.get("tool_name"), tool_in if isinstance(tool_in, dict) else {})
+    text, execs, paths = topics.tool_parts(
+        payload.get("tool_name"), tool_in if isinstance(tool_in, dict) else {}
+    )
     return for_text(
-        cfg, payload.get("session_id"), payload.get("agent_id"), text, budget, None, execs
+        cfg, payload.get("session_id"), payload.get("agent_id"), text, budget, None, execs, paths
     )
 
 

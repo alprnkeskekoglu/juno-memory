@@ -3,7 +3,7 @@ import os
 import time
 import unittest
 
-from juno.core import topics
+from juno.core import bashview, topics
 from tests.support.hooks import HookCase
 
 RULE = '- 2026-01-01 · {} · src: user abcd1234 · "quote"\n'
@@ -388,7 +388,7 @@ class SpecificTriggers(Base):
         ]
 
         def fired(command: str) -> list[str]:
-            text, execs = topics.bash_view(command)
+            text, execs = bashview.bash_view(command)
             return [e[0] for e in topics.matches(entries, text, "none", execs)]
 
         self.assertEqual(fired("juno thread pending"), [])
@@ -404,7 +404,7 @@ class SpecificTriggers(Base):
 
     def test_command_view_drops_text_the_command_only_carries(self) -> None:
         def view(command: str) -> str:
-            return topics.bash_view(command)[0]
+            return bashview.bash_view(command)[0]
 
         self.assertNotIn("make", view("cat > f <<'EOF'\nmake it so\nEOF\nls out"))
         self.assertIn("ls out", view("cat > f <<'EOF'\nmake it so\nEOF\nls out"))
@@ -419,7 +419,7 @@ class SpecificTriggers(Base):
         self.assertIn("is_interactive", view("grep -rn is_interactive src"))
         self.assertIn("pytest", view("python -m pytest"))
         self.assertEqual(
-            topics.bash_view("FOO=1 sudo /usr/bin/Make all | tee x")[1], {"make", "tee"}
+            bashview.bash_view("FOO=1 sudo /usr/bin/Make all | tee x")[1], {"make", "tee"}
         )
 
     def test_cap_of_three_per_call(self) -> None:
