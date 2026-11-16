@@ -168,6 +168,21 @@ class Noise(WriteCase):
         self.assertEqual(code, 0, out)
         self.assertIn("3 trigger candidates queued", out)
 
+    def test_prose_words_are_not_proposed_only_the_specific_token(self) -> None:
+        words = "existing default found command reads users index links force partner"
+        self.put(
+            "knowledge/prose.md",
+            note("Notes", f"{words} {words} {words}\nThe sync-window {words} sync-window."),
+        )
+        code, out = self.juno("triggers", "propose")
+        self.assertEqual(code, 0, out)
+        (item,) = self.triggers_items()
+        self.assertEqual(item["triggers"], ["sync-window"])
+
+    def test_turkish_prose_words_are_dropped_under_the_tr_preset(self) -> None:
+        self.assertEqual(triggerprop.propose("", "sonra sonra kadar kadar", "tr"), [])
+        self.assertEqual(triggerprop.propose("", "sonra sonra kadar kadar", "none"), ["sonra"])
+
     def test_criterion_15_only_generic_words_means_nothing_to_propose(self) -> None:
         self.put(
             "knowledge/generic.md",

@@ -29,6 +29,26 @@ STOP = frozenset(
     should since some such than that their them then there these they this those through under
     until very were what when where which while will with within without would your""".split()
 )
+PROSE = frozenset(
+    """existing default found command reads users index links force partner use used using uses
+    new old file files line lines value values run runs set sets get gets add adds check show
+    shows make makes need needs when then also only other same first last each every data list
+    name names path paths type types text case cases rule rules item items change changes work
+    works read write writes user test tests call calls note notes keep real part step steps true
+    false first second next previous current later early many some any all both either few
+    several another result results error errors output input option options mode state key keys
+    code way ways thing things time times day days one two three based set unset without via
+    like still already often usually never always sure able likely enough since because""".split()
+)
+PROSE_TR = frozenset(
+    """ve ile icin bir bu su olan gibi daha cok yok var degil sonra once kadar ama veya her
+    hem ise ancak sadece zaten bile""".split()
+)
+
+
+def prose(word: str, preset: str) -> bool:
+    """Common prose words make poor triggers (proposal only; the matcher does not use this)."""
+    return word in PROSE or (preset == "tr" and word in PROSE_TR)
 
 
 @dataclass(frozen=True)
@@ -77,7 +97,7 @@ def tokens(title: str, body: str, preset: str = "none", vocab: Vocab = Vocab()) 
         for raw in WORD_RE.findall(text):
             stripped = raw.strip("./-_")
             word = fold.fold(stripped, preset)
-            if usable(word, vocab, stripped):
+            if usable(word, vocab, stripped) and not prose(word, preset):
                 found.add(word)
     return found
 
@@ -89,7 +109,7 @@ def propose(title: str, body: str, preset: str = "none", vocab: Vocab = Vocab())
         for raw in WORD_RE.findall(text):
             stripped = raw.strip("./-_")
             word = fold.fold(stripped, preset)
-            if not usable(word, vocab, stripped):
+            if not usable(word, vocab, stripped) or prose(word, preset):
                 continue
             specific = topics.is_specific(word)
             if len(word) < (MIN_SPECIFIC if specific else MIN_PLAIN):
