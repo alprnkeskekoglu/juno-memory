@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from juno import paths
+from juno.core import voicecues
 
 LAUNCH_PATH = "~/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
@@ -116,6 +117,27 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "branch_order": ["develop", "main", "master"],
         "fetch": True,
         "busy_minutes": 20,
+    },
+    "voice": {
+        "enabled": True,
+        "outward_tools": [
+            "mcp__*__*send*message*",
+            "mcp__*__*post*message*",
+            "mcp__*__*add*comment*",
+            "mcp__*__*create*comment*",
+            "mcp__*__*reply*",
+            "mcp__*__*send*mail*",
+            "mcp__*__*send*email*",
+            "Bash(*gh pr comment*)",
+            "Bash(*gh pr review*--body*)",
+            "Bash(*gh pr review*-b *)",
+            "Bash(*gh issue comment*)",
+        ],
+        "draft_cues": [],
+        "formal_cues": [],
+        "critique_cues": [],
+        "min_samples": 15,
+        "budget_chars": 2400,
     },
 }
 
@@ -287,6 +309,11 @@ class Config:
         if ("language", key) in self.explicit:
             return self.get_list("language", key)
         return list(PRESETS[self.get_str("language", "preset")][key])
+
+    def voice_list(self, key: str) -> list[str]:
+        if ("voice", key) in self.explicit:
+            return self.get_list("voice", key)
+        return list(voicecues.PRESETS[self.get_str("language", "preset")][key])
 
     @property
     def vault(self) -> str:

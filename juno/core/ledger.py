@@ -90,6 +90,10 @@ class Segment:
         self.nosave = False
         self.private = False
         self.cards: list[str] = []
+        self.since_stop: list[str] = []
+        self.voice_reg: str | None = None
+        self.voice_samples: list[Record] = []
+        self.voice_fixes: list[Record] = []
         self.rules_added = 0
         self.cap_raised = 0
         self.first_t: float | None = None
@@ -170,6 +174,7 @@ class Segment:
         if rec.get("part", 0) == 0:
             self.turns += 1
             self.since_turns += 1
+            self.since_stop.append(pid)
             self.nosave = self.nosave or bool(rec.get("nosave"))
             for key in (rec.get("tickets") or []) if self.rules.tickets.enabled else []:
                 self.tickets[key] += 1
@@ -284,8 +289,18 @@ class Segment:
         self.last_remind_turn = self.turns
 
     def on_stop(self, rec: Record) -> None:
+        self.since_stop = []
         if isinstance(rec.get("msg"), str):
             self.last_msg = rec["msg"]
+
+    def on_voice_ask(self, rec: Record) -> None:
+        self.voice_reg = str(rec.get("reg") or "voice")
+
+    def on_voice(self, rec: Record) -> None:
+        self.voice_samples.append(rec)
+
+    def on_voice_fix(self, rec: Record) -> None:
+        self.voice_fixes.append(rec)
 
     def on_cap_raise(self, rec: Record) -> None:
         by = rec.get("by")

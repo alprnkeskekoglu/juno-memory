@@ -1,7 +1,7 @@
 from typing import Any
 
 from juno import config
-from juno.adapters import ledgerio, repos, shadowio, status, topicsio
+from juno.adapters import ledgerio, repos, shadowio, status, topicsio, voiceio
 from juno.adapters.vaultview import DiskVault
 from juno.core import fold, inject, prompts
 from juno.core.ledger import Segment
@@ -72,7 +72,10 @@ def handle(payload: dict[str, Any], cfg: config.Config) -> dict[str, Any] | None
     preset = cfg.get_str("language", "preset")
     cue = CUE_LINE if fold.has_cue(typed, cfg.language_list("correction_cues"), preset) else ""
     cap = cfg.get_int("caps", "hook_output_chars")
-    budget = cap - len(cue) - 2 - (len(notice) + 2 if notice else 0)
+    voice = voiceio.on_prompt(cfg, seg, typed, nosave)
+    budget = (
+        cap - len(cue) - 2 - (len(notice) + 2 if notice else 0) - (len(voice) + 2 if voice else 0)
+    )
     view = DiskVault(cfg)
     before = set(seg.packs)
     delivered = delivery.deliver_packs(
@@ -81,5 +84,5 @@ def handle(payload: dict[str, Any], cfg: config.Config) -> dict[str, Any] | None
     topic_text = topicsio.for_text(cfg, sid, None, typed, budget - len(delivered) - 2, view)
     status.update(cfg, seg)
     shadowio.observe(cfg, seg, view, typed, own, nosave, tickets, before, delivered)
-    text = "\n\n".join(t for t in (notice, cue, delivered, topic_text) if t)
+    text = "\n\n".join(t for t in (notice, cue, voice, delivered, topic_text) if t)
     return output(cfg, "UserPromptSubmit", inject.trim(text, cap, "the vault"))

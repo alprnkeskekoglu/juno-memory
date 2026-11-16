@@ -28,7 +28,7 @@ Juno only acts in interactive sessions. Sessions run with `-p`, from scripts, or
 | `procedures/<slug>.md` | step sequences that worked |
 | `tasks/<KEY>.md` | one file per ticket, only when Jira prefixes are configured; holds its decisions and the sections `juno task log` writes |
 | `notes/` | dated situational notes |
-| `self/` | lines about you, from your own words: values, decisions, communication, tensions |
+| `self/` | lines about you, from your own words: values, decisions, communication, tensions; and `voice.md`, your measured writing voice (generated, private) |
 | `ideas/`, `backlog/` | saved ideas, and your personal work list |
 | `pitfalls.md` | recurring mistakes, each with trigger words |
 | `threads.md` | open loops, one tagged line each |
@@ -59,6 +59,7 @@ flowchart TD
 - **PostToolUse** records which repos, tickets and files the session touched. The first time the session touches a repo (by `cd`, a path or a tool call), the repo pack is injected: current decisions, gotchas, how to run, the last cards and open threads.
 - **SubagentStart** gives each subagent the RULES plus a short CONTEXT pointer to the relevant vault files. Subagents can read the vault and run the read-only verbs, but never write it.
 - **Stop** keeps the last assistant message for the card run.
+- **Writing voice**: when text goes out under your name (a chat message, a comment, a review), Juno records it with who wrote it (you, you after editing Claude's draft, or Claude as drafted) and your complaints about drafts. At session end it measures your own messages per register (`voice`, `formal`) into the private `self/voice.md`, and once a register has 15 of your samples it injects the measures, a few of your own messages and your corrections when you ask for text to send. A non-blocking check on the outward call lists what is off ("5x the median length, 3 bullets, 2 emoji"). Juno's own character never goes into text sent under your name.
 - **SessionEnd** returns within a second. When the segment did meaningful work, it starts a detached child process and exits.
 
 Each item is injected once per segment, and every hook output stays under a fixed character budget.
@@ -216,6 +217,8 @@ Settings live in `juno.toml`. Every key has a default and nothing is required. T
 | `[threads] gh_owner` | `""` | GitHub owner for pull request lookups. Empty means no `gh` call |
 | `[handoff] mode` | `end` | `end` writes the card at session end; `reminder` only reminds the assistant to write one |
 | `[caps] run_max` | `100` | vault writes allowed per session |
+| `[voice] outward_tools` | generic send, comment, reply and mail tool patterns, `gh pr comment`, `gh pr review` with a body, `gh issue comment` | which tool calls count as text sent under your name |
+| `[voice] draft_cues`, `formal_cues` | preset lists | phrases in your prompt that ask for text to send, and for the formal register |
 
 Juno never calls Jira itself and holds no token. Ticket titles come from whatever Jira tool your Claude session already has.
 
