@@ -4,9 +4,9 @@ import os
 from typing import Any
 
 from juno import config
-from juno.adapters import fs, store
+from juno.adapters import firesio, fs, store
 from juno.adapters.vaultview import DiskVault
-from juno.core import topics
+from juno.core import topicgate, topics
 from juno.core.ledger import safe_id
 
 INDEX_FILE = "triggers.json"
@@ -112,7 +112,10 @@ def active_topics(cfg: config.Config, sid: object) -> list[str]:
 def claimer(cfg: config.Config, sid: object, agent: object) -> Any:
     def attempt(name: str) -> bool:
         path = marker(cfg, sid, agent, name)
-        return path is not None and claim(path)
+        won = path is not None and claim(path)
+        if won:
+            firesio.record(cfg, name.removesuffix(".again"))
+        return won
 
     return attempt
 
@@ -129,7 +132,7 @@ def for_text(
 ) -> str:
     preset = preset_of(cfg)
     view = view or DiskVault(cfg)
-    hits = topics.matches(index(cfg), text, preset, execs, paths)
+    hits = topics.matches(index(cfg), text, preset, execs, paths, topicgate.judge(view))
     if not hits:
         return ""
     seen = " ".join([text, *paths])

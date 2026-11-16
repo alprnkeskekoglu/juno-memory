@@ -111,7 +111,8 @@ class Injection(Base):
 
     def test_prompt_trigger_and_path_triggers(self) -> None:
         out = self.hook(
-            "user_prompt_submit", self.payload("UserPromptSubmit", prompt="can I FORCE it?")
+            "user_prompt_submit",
+            self.payload("UserPromptSubmit", prompt="can I FORCE a push here?"),
         )
         self.assertIn("Never force push", self.context(out))
         self.write("rules/topics/docs.md", "triggers: runbook\n" + RULE.format("Docs rule"))
@@ -245,7 +246,7 @@ class Injection(Base):
         self.write("rules/topics/tr.md", "triggers: şeker\n" + RULE.format("Sweet rule"))
         self.assertEqual(self.context(self.bash("buy seker")), "")
         self.set_config('[language]\npreset = "tr"\n')
-        self.assertIn("Sweet rule", self.context(self.bash("buy ŞEKER")))
+        self.assertIn("Sweet rule", self.context(self.bash("buy ŞEKER sweet")))
 
 
 class Pitfalls(Base):

@@ -9,6 +9,7 @@ from juno import config
 from juno.adapters import (
     cardjob,
     decisionmoveio,
+    firesio,
     learned,
     ledgerio,
     privacyack,
@@ -27,6 +28,7 @@ from juno.core import (
     doctor_fit,
     doctor_links,
     doctor_profiles,
+    doctor_topics,
     notebody,
     retire,
     selfmodel,
@@ -174,6 +176,10 @@ def content_checks(cfg: config.Config, view: DiskVault) -> list[Check]:
         text = view.read(f"knowledge/{name}")
         knowledge[name] = (text, bool(fm_items(parse_frontmatter(text)[0], "sources")))
     out += dv.knowledge_checks(knowledge)
+    out += doctor_topics.untriggered(
+        {name: text for name, (text, _) in knowledge.items()}, cfg.get_str("language", "preset")
+    )
+    out += doctor_topics.most_fired(firesio.top(cfg))
     out += dv.pitfall_checks(view.read("pitfalls.md"), cfg.get_str("language", "preset"))
     pending_threads = len(queues.pending(cfg, queues.THREADS))
     out += dv.thread_checks(

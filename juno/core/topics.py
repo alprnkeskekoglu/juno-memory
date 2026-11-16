@@ -38,6 +38,7 @@ EXECUTABLE_RE = re.compile(
     r"|go|cargo|uvx?|pip[\d.]*|make|sudo|env|git|gh|juno)$"
 )
 PHRASE_CHARS = (8, 80)
+GLOB_MARKS = re.compile(r"[*?\[\]{}]")
 # Plain words common enough that hitting them says nothing, alone or together: a pitfall
 # fires only when one of its triggers is NOT in this set. Everything else (multi-word terms, flags,
 # paths, names with _ . - or digits) counts as specific.
@@ -323,7 +324,8 @@ def matches(
     judge: Judge | None = None,
 ) -> list[Entry]:
     """Entries a call matches. `judge` has the last word on a topic rule or knowledge item
-    (entry, matched triggers, folded text); a pitfall is judged by `pitfall_fires`."""
+    (entry, matched triggers, folded text) unless a trigger matched a whole path segment, which
+    is specific enough; a pitfall is judged by `pitfall_fires`."""
     if not entries or not (text or paths):
         return []
     haystack = search_text(text, preset)
@@ -340,7 +342,11 @@ def matches(
                 continue
             spots.append(len(hits))
             scores.append(pitfall_score(found, execs))
-        elif judge is not None and not judge(entry, found, haystack):
+        elif (
+            judge is not None
+            and not any(path_match(t, views) for t in found)
+            and not judge(entry, found, haystack)
+        ):
             continue
         hits.append(entry)
     ranked = sorted(range(len(spots)), key=lambda i: -scores[i])
@@ -403,8 +409,10 @@ def tool_parts(
         parts.append(text)
         paths += paths_found
     paths += [tool_in[k] for k in PATH_KEYS if isinstance(tool_in.get(k), str)]
-    if tool in PATTERN_KEYS and isinstance(tool_in.get(PATTERN_KEYS[str(tool)]), str):
-        parts.append(tool_in[PATTERN_KEYS[str(tool)]])
+    pattern_in = tool_in.get(PATTERN_KEYS.get(str(tool), ""))
+    if isinstance(pattern_in, str):
+        parts.append(pattern_in)
+        paths.append(GLOB_MARKS.sub("", pattern_in))
     return "\n".join(parts), execs, tuple(paths)
 
 
