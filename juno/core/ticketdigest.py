@@ -3,10 +3,48 @@ from collections.abc import Sequence
 
 HEADER = "Ticket {key} (assistant messages that name it or follow a tool call on it, newest first):"
 CALLS = ("tool", "bash")
+SEP = "\n---\n"
+HEADER_RE = re.compile(r"^Ticket (\S+) \(assistant messages that name it", re.M)
+MIN_WORDS = 12
+MIN_CHARS = 80
+CUE_RE = re.compile(
+    r"\b(approach|plan|criteri(?:a|on)|accept\w*|decid\w*|decision|cause|fix\w*|implement\w*"
+    r"|test\w*|passed|failed|blocked)\b",
+    re.I,
+)
 
 
 def mentions(text: str, key: str) -> bool:
     return re.search(rf"(?<![\w-]){re.escape(key)}(?![\w-])", text, re.I) is not None
+
+
+def carries_content(text: str, key: str) -> bool:
+    """True when an assistant message that names `key` says something about it: with the key
+    removed it still has `MIN_WORDS` words and `MIN_CHARS` characters and holds one cue word of
+    an approach, a criterion, a decision or a test result (`CUE_RE`). A short note or a long
+    reply with no such word only mentions the ticket."""
+    if not mentions(text, key):
+        return False
+    rest = re.sub(rf"(?<![\w-]){re.escape(key)}(?![\w-])", " ", text, flags=re.I)
+    return (
+        len(rest.split()) >= MIN_WORDS
+        and len(" ".join(rest.split())) >= MIN_CHARS
+        and CUE_RE.search(rest) is not None
+    )
+
+
+def blocks_of(text: str) -> dict[str, str]:
+    """The per-ticket blocks of a digest text, by key, as `block` wrote them."""
+    marks = list(HEADER_RE.finditer(text))
+    return {
+        m.group(1): text[m.end() : marks[i + 1].start() if i + 1 < len(marks) else len(text)]
+        for i, m in enumerate(marks)
+    }
+
+
+def chat_worked(key: str, block_text: str) -> bool:
+    """True when a ticket block holds a message that names `key` and carries content."""
+    return any(carries_content(m, key) for m in block_text.split(SEP))
 
 
 def merge(
@@ -48,7 +86,7 @@ def block_for(key: str, events: Sequence[tuple[str, str]], chars: int) -> str:
             break
         kept.append(text if kept else text[: max(room, 0)])
         used += len(kept[-1]) + 5
-    return head + "\n" + "\n---\n".join(kept) if kept else ""
+    return head + "\n" + SEP.join(kept) if kept else ""
 
 
 def block(keys: Sequence[str], events: Sequence[tuple[str, str]], chars: int) -> str:

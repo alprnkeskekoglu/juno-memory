@@ -1,7 +1,7 @@
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
-from juno.core import taskdigest
+from juno.core import taskdigest, ticketdigest
 from juno.core.errors import Refused
 from juno.core.ledger import Segment
 from juno.core.taskrows import Row
@@ -25,15 +25,22 @@ PATH_RE = re.compile(r"(?<![\w/.:-])(?:~/|/)[\w.@+-]+")
 BARE_RE = re.compile(r"\d+(?:\s*(?:of|/)\s*\d+)?(?:\s+[A-Za-z]{1,12}){0,2}")
 
 
-def worked(seg: Segment, pr: bool) -> list[str]:
+def worked(seg: Segment, pr: bool, blocks: Mapping[str, str] | None = None) -> list[str]:
     """The ticket keys of a segment that were worked on, not only named: a ledger ticket with an
     edit on a branch naming it, a main-session tool call in a repo on such a branch or a tracker
-    read of it, or a PR URL together with a typed prompt naming it. A typed mention alone is not
-    enough. Highest rank first, at most `MAX_TICKETS`."""
+    read of it, or a PR URL together with a typed prompt naming it; or, with the user typing the
+    key, a ticket block in `blocks` (key to block text) that holds an assistant message with
+    content (`ticketdigest.carries_content`). A typed mention alone is not enough. Highest rank
+    first, at most `MAX_TICKETS`."""
     found = [
         key
         for key in seg.tickets
-        if seg.ticket_edits[key] or seg.main_tickets[key] or (pr and seg.typed_tickets[key])
+        if seg.ticket_edits[key]
+        or seg.main_tickets[key]
+        or (
+            seg.typed_tickets[key]
+            and (pr or ticketdigest.chat_worked(key, (blocks or {}).get(key, "")))
+        )
     ]
     return sorted(found, key=seg.ticket_rank, reverse=True)[:MAX_TICKETS]
 

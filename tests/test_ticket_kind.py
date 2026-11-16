@@ -233,6 +233,41 @@ class MentionOnly(TicketCase):
         self.assertEqual(self.task(), "")
         self.assertNotIn('- "ticket"', str(self.calls[0]["prompt"]))
 
+    def plan_rows(self) -> list[str]:
+        return [
+            say(f"Plan for {KEY}. {SUMMARY}"),
+            say(f"Acceptance criteria for {KEY}: 1. {AC1} 2. {AC2}"),
+        ]
+
+    def test_chat_only_planning_fills_summary_and_criteria(self) -> None:
+        self.mention()
+        data = extract(
+            line("Summary", "summary", SUMMARY, "round once on the sum inside the money type"),
+            line("Criteria", "ac1", AC1, "sums to the original charge to the cent"),
+            line("Criteria", "ac2", AC2, "Currencies with zero decimals"),
+        )
+        row = self.go(data, self.plan_rows())
+        self.assertEqual(self.sections(row)["ticket"], "ok", row)
+        self.assertIn('- "ticket"', str(self.calls[0]["prompt"]))
+        self.assertIn(f"- [summary] {SUMMARY} · ", self.task())
+        self.assertIn(f"- [ac1] {AC1} · ", self.task())
+        self.assertIn(f"- [ac2] {AC2} · ", self.task())
+
+    def test_chat_planning_without_the_user_typing_the_key_writes_nothing(self) -> None:
+        self.prompt("let us plan the refund rounding bug")
+        for n in range(10):
+            self.prompt(f"and step {n}?")
+        self.go(self.full(), self.plan_rows())
+        self.assertEqual(self.task(), "")
+
+    def test_a_key_only_mentioned_in_a_long_reply_writes_nothing(self) -> None:
+        self.mention()
+        reply = f"{KEY} is the refund rounding item that came up in the money type module again"
+        row = self.go(self.full(), [say(reply + " and the weekly sync last month")])
+        self.assertNotEqual(self.sections(row)["ticket"], "ok")
+        self.assertEqual(self.task(), "")
+        self.assertNotIn('- "ticket"', str(self.calls[0]["prompt"]))
+
     def test_a_key_the_ledger_never_saw_is_dropped(self) -> None:
         self.session()
         row = self.go(extract(*self.full()["ticket"][0]["lines"], key="DEF-9"))
@@ -361,6 +396,20 @@ class Block(TicketCase):
         self.assertLessEqual(len(block), 1000 + 200)
         self.assertIn("message 19", block)
         self.assertNotIn("message 0 ", block)
+
+    def test_carries_content_is_a_deterministic_rule(self) -> None:
+        plan = f"{KEY}: the approach is to round once on the sum inside the money type and keep items exact."
+        self.assertTrue(ticketdigest.carries_content(plan, KEY))
+        self.assertFalse(ticketdigest.carries_content(f"{KEY} is about rounding", KEY))
+        self.assertFalse(ticketdigest.carries_content(f"{KEY} " + "word " * 30, KEY))
+        self.assertFalse(ticketdigest.carries_content(f"{KEY} approach criteria test", KEY))
+        self.assertFalse(ticketdigest.carries_content("the approach " + "word " * 30, KEY))
+
+    def test_blocks_of_reads_each_ticket_block_back(self) -> None:
+        rows = self.events(("assistant", f"{KEY} first"), ("assistant", f"{KEY} second"))
+        found = ticketdigest.blocks_of("body\n\n" + ticketdigest.block([KEY], rows, 6000))
+        self.assertEqual(list(found), [KEY])
+        self.assertIn("first", found[KEY])
 
     def test_nothing_for_no_keys_or_no_budget(self) -> None:
         rows = self.events(("assistant", f"{KEY} note"))
