@@ -8,6 +8,7 @@ to the file until the user accepts the candidate (`juno rule accept`).
 
 import json
 from collections import Counter
+from dataclasses import replace
 from typing import Any
 
 from juno import config
@@ -16,6 +17,7 @@ from juno.adapters.learnkinds.base import Ctx, vault_text
 from juno.core import candidates, prompts, topics, triggerprop, vaultfmt, writegate
 
 PER_RUN = 3
+SLUG_DIRS = ("knowledge", "procedures", "notes", "ideas", "decisions", "projects")
 
 
 def typed_prompts(cfg: config.Config, sid: str) -> list[tuple[float, str]]:
@@ -54,11 +56,15 @@ def read_files(ctx: Ctx) -> list[tuple[float, str]]:
 
 
 def vocab(cfg: config.Config) -> triggerprop.Vocab:
-    """Ticket prefixes of `[jira] prefixes` and the tokens found in more than a quarter of the
-    visible knowledge files. Both proposal paths filter with it."""
+    """Ticket prefixes of `[jira] prefixes`, the vault's top-level folders, the stems of its topic
+    files, and the tokens (with their document frequency) of the visible knowledge files; the
+    tokens found in more than a quarter of them are common. Both proposal paths filter with it."""
     preset = cfg.get_str("language", "preset")
     prefixes = tuple(cfg.get_list("jira", "prefixes"))
     view = vaultview.DiskVault(cfg)
+    folders = frozenset(vaultfmt.TOP_KINDS)
+    slugs = frozenset(n[:-3] for d in SLUG_DIRS for n in view.names(d))
+    base = triggerprop.Vocab(prefixes, folders=folders, slugs=slugs)
     counts: Counter[str] = Counter()
     total = 0
     for name in view.names("knowledge"):
@@ -68,12 +74,9 @@ def vocab(cfg: config.Config) -> triggerprop.Vocab:
             continue
         fields, body = vaultfmt.parse_frontmatter(text)
         total += 1
-        counts.update(
-            triggerprop.tokens(
-                str(fields.get("title") or ""), body, preset, triggerprop.Vocab(prefixes)
-            )
-        )
-    return triggerprop.Vocab(prefixes, triggerprop.common_tokens(counts, total))
+        counts.update(triggerprop.tokens(str(fields.get("title") or ""), body, preset, base))
+    common = triggerprop.common_tokens(counts, total)
+    return replace(base, common=common, docs=dict(counts))
 
 
 def proposals(ctx: Ctx) -> list[tuple[str, list[str]]]:
@@ -92,7 +95,13 @@ def proposals(ctx: Ctx) -> list[tuple[str, list[str]]]:
         fields, body = vaultfmt.parse_frontmatter(text)
         have = topics.field_list(fields.get("triggers"), preset)
         title = str(fields.get("title") or "")
-        new = [] if have else triggerprop.propose(title, body, preset, words)
+        new = (
+            []
+            if have
+            else triggerprop.propose(
+                title, body, preset, words, rel[len("knowledge/") : -len(".md")]
+            )
+        )
         said = said_before(typed, stamp)
         room = max(topics.MAX_TRIGGERS - len(have) - len(new), 0)
         extra = triggerprop.user_forms(said, f"{title}\n{body}", [*have, *new], preset, stopwords)

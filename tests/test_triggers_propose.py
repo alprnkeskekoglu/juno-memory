@@ -196,5 +196,90 @@ class Noise(WriteCase):
         self.assertIn("1 files with nothing to propose", out)
 
 
+class Paths(WriteCase):
+    """#36 criteria 16-19: paths, hashes, uuids, links to other files and weak plain words."""
+
+    def propose_for(self, rel: str) -> list[str]:
+        code, out = self.juno("triggers", "propose")
+        self.assertEqual(code, 0, out)
+        items = [
+            i
+            for i in queues.read(self.cfg, queues.RULES)
+            if candidates.is_triggers(i) and i["file"] == rel
+        ]
+        return list(items[0]["triggers"]) if items else []
+
+    def test_criterion_16_path_ticket_hash_and_uuid_are_dropped_with_their_parts(self) -> None:
+        uuid = "b9a0698f-285b-4c1e-9a3f-1d2e3f4a5b6c"
+        body = (
+            f"See handoffs/ABC-123456 and handoffs/ABC-123456 for commit 450435e and 450435e, "
+            f"id {uuid} and {uuid}. The ledger-rotation and ledger-rotation."
+        )
+        self.put("knowledge/ledger.md", note("Ledger rotation", body))
+        got = self.propose_for("knowledge/ledger.md")
+        self.assertIn("ledger-rotation", got)
+        banned = {"handoffs/abc-123456", "abc-123456", "450435e", uuid, "handoffs"}
+        self.assertFalse(banned & set(got), got)
+
+    def test_hash_rule_keeps_hex_looking_words(self) -> None:
+        for word in ("450435e", "d0c67e0", "b9a0698f-285b-4c1e-9a3f-1d2e3f4a5b6c"):
+            self.assertTrue(triggerprop.hash_like(word), word)
+        for word in ("added", "decade", "1234567", "face"):
+            self.assertFalse(triggerprop.hash_like(word), word)
+        self.assertTrue(triggerprop.hash_like("facade1"))
+
+    def test_criterion_17_vault_folders_and_origin_paths_are_dropped(self) -> None:
+        body = (
+            "Merge origin/develop, origin/develop, knowledge/other-topic.md, "
+            "knowledge/other-topic.md, handoffs/radar and handoffs/radar. The sync-window, "
+            "sync-window."
+        )
+        self.put("knowledge/paths.md", note("Paths", body))
+        got = self.propose_for("knowledge/paths.md")
+        self.assertEqual(got, ["sync-window"])
+
+    def test_criterion_18_the_slug_of_another_file_is_not_proposed(self) -> None:
+        self.put("knowledge/other-topic.md", note("Other topic", "Something else entirely."))
+        body = "Links other-topic and other-topic. The sync-window, sync-window."
+        self.put("knowledge/linker.md", note("Linker", body))
+        got = self.propose_for("knowledge/linker.md")
+        self.assertEqual(got, ["sync-window"])
+        self.put("knowledge/self-topic.md", note("Self topic", "self-topic self-topic."))
+        self.assertIn("self-topic", self.propose_for("knowledge/self-topic.md"))
+
+    def test_criterion_19_a_plain_word_needs_two_mentions_and_few_other_files(self) -> None:
+        for n in range(4):
+            self.put(f"knowledge/auth{n}.md", note(f"Auth {n}", "The login flow."))
+        self.put(
+            "knowledge/once.md",
+            note("Once", "The login is here. The jb-cache-key and jb-cache-key."),
+        )
+        got = self.propose_for("knowledge/once.md")
+        self.assertIn("jb-cache-key", got)
+        self.assertNotIn("login", got)
+        self.put(
+            "knowledge/twice.md",
+            note("Twice", "The login is here and login again. The jb-cache-key and jb-cache-key."),
+        )
+        self.assertNotIn("login", self.propose_for("knowledge/twice.md"))
+
+    def test_a_plain_word_twice_and_in_no_other_file_is_kept(self) -> None:
+        for n in range(4):
+            self.put(f"knowledge/solo{n}.md", note(f"Solo {n}", "Nothing alike."))
+        self.put("knowledge/rare.md", note("Rare", "The tokenizer and the tokenizer."))
+        self.assertIn("tokenizer", self.propose_for("knowledge/rare.md"))
+
+    def test_session_end_path_shares_the_filter(self) -> None:
+        vocab = triggerprop.Vocab(
+            folders=frozenset({"handoffs"}), slugs=frozenset({"other-topic"}), docs={"login": 5}
+        )
+        text = "handoffs/radar handoffs/radar other-topic other-topic login login sync-window sync-window"
+        self.assertEqual(triggerprop.propose("", text, "none", vocab), ["sync-window"])
+        self.assertEqual(
+            triggerprop.propose("", "other-topic other-topic", "none", vocab, "other-topic"),
+            ["other-topic"],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
