@@ -231,6 +231,13 @@ def worker(module: str, pattern: str, ids: list[str] | None, serial: bool) -> in
             super().addSkip(test, reason)
             outcomes[test.id()] = "SKIP"
 
+        def addSubTest(
+            self, test: unittest.TestCase, subtest: unittest.TestCase, err: object
+        ) -> None:
+            super().addSubTest(test, subtest, err)  # type: ignore[arg-type]
+            if err is not None:
+                outcomes[test.id()] = "FAIL"
+
     started = datetime.datetime.now()
     result = unittest.TextTestRunner(stream=stream, resultclass=Result, verbosity=0).run(suite)
     seconds = (datetime.datetime.now() - started).total_seconds()

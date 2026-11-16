@@ -188,6 +188,13 @@ class Execution(unittest.TestCase):
         self.assertEqual(failing["outcomes"], {"tests.probes.bad.Probe.test_fails": "FAIL"})
         self.assertEqual(run.run_worker("tests.probes.bad", "no_such", None, False)["tests"], 0)
 
+    def test_a_failed_subtest_fails_its_test(self) -> None:
+        done = run.run_worker("tests.probes.subfail", "", None, False)
+        self.assertFalse(done["ok"])
+        self.assertEqual(
+            done["outcomes"], {"tests.probes.subfail.Probe.test_one_subtest_fails": "FAIL"}
+        )
+
     def test_crashed_worker_is_a_failure(self) -> None:
         done = run.run_worker("tests.does_not_exist", "", None, False)
         self.assertFalse(done["ok"])
