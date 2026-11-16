@@ -259,3 +259,13 @@ def criterion6(verdicts: list[Verdict]) -> tuple[bool, str]:
         q for v in verdicts if "third_party" in v["teasing_targets"] for q in v["humour_quotes"]
     ]
     return not hits, f"third-party teasing: {hits}" if hits else "ok"
+
+
+def criterion11(v: Verdict) -> tuple[bool, str]:
+    """A session whose first message is a production error: calms first and does not greet."""
+    bad = [
+        n
+        for n, hit in (("no calming first", not v["calming_first"]), ("greeting", v["greeting"]))
+        if hit
+    ]
+    return not bad, ", ".join(bad) or "ok"

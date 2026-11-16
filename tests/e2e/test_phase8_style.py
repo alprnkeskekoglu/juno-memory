@@ -5,6 +5,7 @@ import re
 import subprocess
 import time
 import unittest
+from collections.abc import Callable
 from typing import Any
 
 from juno.cmd.init import STYLE_CHOICES
@@ -99,6 +100,12 @@ DECISION = (
 DECIDED = "wrap the payment call in a retry loop with 5 attempts and get the plan for that"
 
 
+SAMPLES = 5
+ROUNDS = 2
+WORKERS = 4
+Job = tuple[str, str]
+
+
 @e2e
 class Case(unittest.TestCase):
     """Issue #35: sampled replies per dose, each judged once against the fixed rubric."""
@@ -137,11 +144,14 @@ class Case(unittest.TestCase):
         self.assertTrue(run.result.strip(), "empty claude result")
         return run
 
-    def ask(self, dose: str, prompt: str) -> str:
+    def attempt(self, dose: str, prompt: str, **kw: Any) -> harness.Run:
         try:
-            return self.run_reply(dose, prompt).result
+            return self.run_reply(dose, prompt, **kw)
         except subprocess.TimeoutExpired:
-            return self.run_reply(dose, prompt).result
+            return self.run_reply(dose, prompt, **kw)
+
+    def ask(self, dose: str, prompt: str) -> str:
+        return self.attempt(dose, prompt).result
 
     def judged(
         self, criterion: str, dose: str, prompt: str, reply: str, **kw: Any
@@ -153,60 +163,85 @@ class Case(unittest.TestCase):
         )
         return verdict
 
+    def sampled(
+        self,
+        criterion: str,
+        jobs: list[Job],
+        reply: Callable[[str, str], str] | None = None,
+        workers: int = WORKERS,
+        **kw: Any,
+    ) -> list[tuple[str, judge.Verdict]]:
+        """Reply to and judge every (dose, prompt) job, in job order."""
+        make = reply or self.ask
+
+        def one(job: Job) -> tuple[str, judge.Verdict]:
+            text = make(*job)
+            return text, self.judged(criterion, job[0], job[1], text, **kw)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            return list(pool.map(one, jobs))
+
     def check(self, result: tuple[bool, str], label: str) -> None:
         judge.record({"result": label, "pass": result[0], "why": result[1]})
         self.assertTrue(result[0], f"{label}: {result[1]}")
 
 
+def per_dose(prompt: str) -> list[Job]:
+    return [(dose, prompt) for dose in STYLE_CHOICES for _ in range(SAMPLES)]
+
+
+def label(criterion: str, dose: str, index: int) -> str:
+    return f"{criterion} {STYLE_CHOICES[dose]} #{index % SAMPLES + 1}"
+
+
 @e2e
 class CharacterHoldsItsRules(Case):
-    """Criteria 1 and 3 of issue #35, judged; the emoji and emoticon checks stay."""
+    """Criteria 1 and 3 of issue #35, judged, five replies per dose; the emoji checks stay."""
 
     def test_a_production_error_has_no_joke_or_emoji_at_any_dose(self) -> None:
-        for dose in STYLE_CHOICES:
-            with self.subTest(dose=dose):
-                reply = self.ask(dose, INCIDENT)
+        jobs = per_dose(INCIDENT)
+        for i, ((dose, _), (reply, verdict)) in enumerate(
+            zip(jobs, self.sampled("1", jobs), strict=True)
+        ):
+            with self.subTest(dose=dose, sample=i % SAMPLES):
+                self.check(judge.criterion1(reply, verdict), label("1", dose, i))
                 self.assertNotRegex(reply, JOKE_MARKS)
-                verdict = self.judged("1", dose, INCIDENT, reply)
-                self.check(judge.criterion1(reply, verdict), f"1 {STYLE_CHOICES[dose]}")
 
     def test_a_drafted_outward_message_has_no_emoji_at_any_dose(self) -> None:
-        for dose in STYLE_CHOICES:
-            with self.subTest(dose=dose):
-                reply = self.ask(dose, DRAFT)
+        jobs = per_dose(DRAFT)
+        for i, ((dose, _), (reply, verdict)) in enumerate(
+            zip(jobs, self.sampled("3", jobs), strict=True)
+        ):
+            with self.subTest(dose=dose, sample=i % SAMPLES):
+                self.check(judge.criterion3(verdict), label("3", dose, i))
                 self.assertNotRegex(reply, JOKE_MARKS)
-                verdict = self.judged("3", dose, DRAFT, reply)
-                self.check(judge.criterion3(verdict), f"3 {STYLE_CHOICES[dose]}")
 
 
 @e2e
 class HumourDoseOnRoutineReplies(Case):
-    """Criteria 2 and 6: ten routine replies per dose."""
-
-    def sample(self, job: tuple[str, str]) -> judge.Verdict:
-        dose, prompt = job
-        return self.judged("2,6", dose, prompt, self.ask(dose, prompt))
+    """Criteria 2 and 6: ten routine replies per dose, two rounds; each round must pass."""
 
     def test_calm_jokes_at_most_once_playful_more_than_normal_no_third_party_teasing(
         self,
     ) -> None:
         jobs = [(dose, prompt) for dose in STYLE_CHOICES for prompt in ROUTINE]
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-            verdicts = list(pool.map(self.sample, jobs))
-        by_dose = {
-            dose: [v for (d, _), v in zip(jobs, verdicts, strict=True) if d == dose]
-            for dose in STYLE_CHOICES
-        }
-        with self.subTest(criterion=2):
-            self.check(judge.criterion2(*by_dose.values()), "2")
-        for dose, found in by_dose.items():
+        rounds = [[v for _, v in self.sampled("2,6", jobs)] for _ in range(ROUNDS)]
+        for number, verdicts in enumerate(rounds, 1):
+            by_dose = {
+                dose: [v for (d, _), v in zip(jobs, verdicts, strict=True) if d == dose]
+                for dose in STYLE_CHOICES
+            }
+            with self.subTest(criterion=2, round=number):
+                self.check(judge.criterion2(*by_dose.values()), f"2 round {number}")
+        for dose in STYLE_CHOICES:
+            found = [v for vs in rounds for (d, _), v in zip(jobs, vs, strict=True) if d == dose]
             with self.subTest(criterion=6, dose=dose):
                 self.check(judge.criterion6(found), f"6 {STYLE_CHOICES[dose]}")
 
 
 @e2e
-class SessionStartGreetsWithOneUnfinishedItem(Case):
-    """Criterion 4: the first reply names one injected unfinished item and invents none."""
+class FirstReplyCase(Case):
+    """A real SessionStart injection in a repo with a seeded profile; the first reply is judged."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -224,50 +259,84 @@ class SessionStartGreetsWithOneUnfinishedItem(Case):
         with open(os.path.join(self.sb.vault, *rel.split("/")), "w", encoding="utf-8") as handle:
             handle.write(text)
 
-    def first_reply(self, dose: str) -> tuple[str, str]:
+    def seed_card(self) -> None:
+        stamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 86400))
+        self.write("handoffs/alpha.md", CARD.format(stamp=stamp, item=UNFINISHED))
+
+    def first_reply(self, dose: str, prompt: str) -> tuple[str, str]:
         env = harness.claude_env(self.sb, True)
         env["JUNO_REPO_ROOTS"] = self.roots
         env["JUNO_CLAUDE_PROJECTS"] = os.path.join(self.sb.root, "claude-projects")
-        run = self.run_reply(dose, FIRST, env=env, cwd=self.repo)
+        run = self.attempt(dose, prompt, env=env, cwd=self.repo)
         self.assertEqual(harness.juno_hook_failures(run), [])
         contexts = harness.juno_contexts(run, "SessionStart")
         self.assertEqual(len(contexts), 1, run.raw[:2000])
         return run.result, contexts[0]
 
+    def with_card(self, dose: str, prompt: str) -> str:
+        reply, context = self.first_reply(dose, prompt)
+        self.assertIn(UNFINISHED, context)
+        return reply
+
+    def without_card(self, dose: str, prompt: str) -> str:
+        reply, context = self.first_reply(dose, prompt)
+        self.assertNotIn("Card · ", context)
+        return reply
+
+
+@e2e
+class SessionStartGreetsWithOneUnfinishedItem(FirstReplyCase):
+    """Criterion 4: the first reply names one injected unfinished item and invents none."""
+
     def test_an_injected_unfinished_item_is_named_once(self) -> None:
-        stamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 86400))
-        self.write("handoffs/alpha.md", CARD.format(stamp=stamp, item=UNFINISHED))
-        for dose in STYLE_CHOICES:
-            with self.subTest(dose=dose):
-                reply, context = self.first_reply(dose)
-                self.assertIn(UNFINISHED, context)
-                verdict = self.judged("4", dose, FIRST, reply, items=[UNFINISHED])
-                self.check(judge.criterion4(verdict, True), f"4 with {STYLE_CHOICES[dose]}")
+        self.seed_card()
+        jobs = per_dose(FIRST)
+        found = self.sampled("4", jobs, self.with_card, 1, items=[UNFINISHED])
+        for i, ((dose, _), (_, verdict)) in enumerate(zip(jobs, found, strict=True)):
+            with self.subTest(dose=dose, sample=i % SAMPLES):
+                self.check(judge.criterion4(verdict, True), label("4 with", dose, i))
 
     def test_no_unfinished_item_is_invented_when_none_is_injected(self) -> None:
-        for dose in STYLE_CHOICES:
-            with self.subTest(dose=dose):
-                reply, context = self.first_reply(dose)
-                self.assertNotIn("Card \u00b7 ", context)
-                verdict = self.judged("4", dose, FIRST, reply, items=[])
-                self.check(judge.criterion4(verdict, False), f"4 none {STYLE_CHOICES[dose]}")
+        jobs = per_dose(FIRST)
+        found = self.sampled("4", jobs, self.without_card, 1, items=[])
+        for i, ((dose, _), (_, verdict)) in enumerate(zip(jobs, found, strict=True)):
+            with self.subTest(dose=dose, sample=i % SAMPLES):
+                self.check(judge.criterion4(verdict, False), label("4 none", dose, i))
+
+
+@e2e
+class SeriousFirstMessageSkipsTheGreeting(FirstReplyCase):
+    """Criterion 11: a session that opens on a production error calms first and greets nobody."""
+
+    def test_a_production_error_as_the_first_message_calms_first_without_a_greeting(self) -> None:
+        self.seed_card()
+        jobs = per_dose(INCIDENT)
+        found = self.sampled("11", jobs, self.with_card, 1, items=[UNFINISHED])
+        for i, ((dose, _), (_, verdict)) in enumerate(zip(jobs, found, strict=True)):
+            with self.subTest(dose=dose, sample=i % SAMPLES):
+                self.check(judge.criterion11(verdict), label("11", dose, i))
 
 
 @e2e
 class DisagreeThenFollowTheDecision(Case):
     """Criterion 5: an objection with reason and alternative, then the next reply follows."""
 
+    def exchange(self, job: Job) -> tuple[judge.Verdict, judge.Verdict]:
+        dose = job[0]
+        first = self.attempt(dose, PLAN, persist=True)
+        sid = next(str(e["session_id"]) for e in first.events if e.get("session_id"))
+        objected = self.judged("5", dose, PLAN, first.result)
+        second = self.attempt(dose, DECISION, resume=sid)
+        return objected, self.judged("5", dose, DECISION, second.result, decision=DECIDED)
+
     def test_objects_then_does_what_the_user_decided(self) -> None:
-        for dose in STYLE_CHOICES:
-            with self.subTest(dose=dose):
-                label = STYLE_CHOICES[dose]
-                first = self.run_reply(dose, PLAN, persist=True)
-                sid = next(str(e["session_id"]) for e in first.events if e.get("session_id"))
-                verdict = self.judged("5", dose, PLAN, first.result)
-                self.check(judge.criterion5_objection(verdict), f"5 objection {label}")
-                second = self.run_reply(dose, DECISION, resume=sid)
-                verdict = self.judged("5", dose, DECISION, second.result, decision=DECIDED)
-                self.check(judge.criterion5_follow(verdict), f"5 follow {label}")
+        jobs = per_dose(PLAN)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=WORKERS) as pool:
+            found = list(pool.map(self.exchange, jobs))
+        for i, ((dose, _), (objected, followed)) in enumerate(zip(jobs, found, strict=True)):
+            with self.subTest(dose=dose, sample=i % SAMPLES):
+                self.check(judge.criterion5_objection(objected), label("5 objection", dose, i))
+                self.check(judge.criterion5_follow(followed), label("5 follow", dose, i))
 
 
 PLANTED_JOKE = (
