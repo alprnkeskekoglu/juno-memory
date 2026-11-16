@@ -185,12 +185,17 @@ STYLE_MARKER = "output-style-asked"
 BAND_MARKER = "status-band-asked"
 IMPORT_MARKER = "memory-import-asked"
 STYLE_CHOICES = {
-    "1": "juno:juno",
-    "2": "juno:juno-witty",
-    "3": "juno:juno-warm",
-    "4": "juno:juno-mentor",
+    "1": "juno:juno-calm",
+    "2": "juno:juno-normal",
+    "3": "juno:juno-playful",
 }
 OUTPUT_STYLES = tuple(STYLE_CHOICES.values())
+RETIRED_STYLES = {
+    "juno:juno": "juno:juno-calm",
+    "juno:juno-witty": "juno:juno-normal",
+    "juno:juno-warm": "juno:juno-normal",
+    "juno:juno-mentor": "juno:juno-normal",
+}
 
 
 def interactive() -> bool:
@@ -296,12 +301,13 @@ def offer_output_style(cfg: config.Config, settings: str) -> None:
     if current in OUTPUT_STYLES:
         say(f"output style: {current} already set")
         return
+    if current in RETIRED_STYLES:
+        say(f"output style: {current} is retired; run: juno migrate --style")
+        return
     if current is not None:
         say(f"output style: {current!r} is already set in {settings}; left as it is")
         return
-    question = (
-        "Juno style: 1) plain  2) witty  3) warm  4) mentor  5) none (Claude's default) [5]: "
-    )
+    question = "Juno style: 1) calm  2) normal  3) playful  4) none (Claude's default) [4]: "
     try:
         answer = input(question).strip()
     except EOFError:
@@ -311,6 +317,18 @@ def offer_output_style(cfg: config.Config, settings: str) -> None:
     if style is None:
         say(f'output style: left off; turn it on later with "outputStyle": "{OUTPUT_STYLES[0]}"')
         return
+    write_output_style(cfg, settings, raw, data, manifest, style)
+
+
+def write_output_style(
+    cfg: config.Config,
+    settings: str,
+    raw: bytes | None,
+    data: dict[str, Any],
+    manifest: dict[str, Any] | None,
+    style: str,
+    old: str | None = None,
+) -> None:
     new = dict(data)
     new["outputStyle"] = style
     new_bytes = settings_merge.dumps(
@@ -332,10 +350,31 @@ def offer_output_style(cfg: config.Config, settings: str) -> None:
         if info.get("post_sha256") == fs.sha256(raw or b""):
             info["post_sha256"] = fs.sha256(new_bytes)
         manifest["settings"] = info
-        manifest["record"] = {**manifest["record"], "outputStyle": style}
+        if old is None or manifest["record"].get("outputStyle") == old:
+            manifest["record"] = {**manifest["record"], "outputStyle": style}
         common.save_manifest(cfg, manifest)
     say(f"settings: outputStyle = {style} in {settings} (backup {backup})")
     say("output style: restart Claude Code for it to take effect")
+
+
+def migrate_output_style(cfg: config.Config, settings: str, dry_run: bool) -> int:
+    raw = fs.read_bytes(settings)
+    try:
+        data = settings_merge.parse(raw or b"")
+        manifest = common.load_manifest(cfg)
+    except (ValueError, settings_merge.SettingsError) as error:
+        say(f"output style: not migrated ({error})")
+        return 2
+    current = data.get("outputStyle")
+    if not isinstance(current, str) or current not in RETIRED_STYLES:
+        say("output style: nothing to migrate")
+        return 0
+    style = RETIRED_STYLES[current]
+    if dry_run:
+        say(f"output style: would change {current} to {style} in {settings}")
+        return 0
+    write_output_style(cfg, settings, raw, data, manifest, style, current)
+    return 0
 
 
 def run(args: argparse.Namespace, env: Mapping[str, str]) -> int:

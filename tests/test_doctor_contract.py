@@ -100,6 +100,14 @@ def no_manifest(case: WriteCase) -> None:
         handle.write("{}\n")
 
 
+def retired_style(case: WriteCase) -> None:
+    with open(case.sb.settings, encoding="utf-8") as handle:
+        data = json.load(handle)
+    data["outputStyle"] = "juno:juno-warm"
+    with open(case.sb.settings, "w", encoding="utf-8") as handle:
+        json.dump(data, handle)
+
+
 def old_protocol(case: WriteCase) -> None:
     case.put(f"protocol/{protocolsync.NAME}", protocolsync.old_text())
 
@@ -291,6 +299,14 @@ ROWS = (
         ("migrate", "--decisions"),
         orphaned_ack,
     ),
+    Row(
+        "retired output style",
+        "juno migrate --style",
+        "output style",
+        "is retired",
+        ("migrate", "--style"),
+        retired_style,
+    ),
     # notes, rules, pitfalls
     Row(
         "notes",
@@ -451,7 +467,11 @@ class Contract(WriteCase):
         row.setup(self)
         before = self.found(row)
         self.assertTrue(before, f"{row.key}: doctor does not raise the message")
-        args = row.argv + tuple(self.sb.install_args() if row.argv[0] in ("init", "doctor") else ())
+        args = row.argv + tuple(
+            self.sb.install_args()
+            if row.argv[0] in ("init", "doctor") or "--style" in row.argv
+            else ()
+        )
         code, out = self.juno(*args)
         self.assertEqual(code, 0, f"{row.key}: {' '.join(row.argv)} exited {code}\n{out}")
         after = self.found(row)

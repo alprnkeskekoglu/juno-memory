@@ -8,7 +8,7 @@ from typing import cast
 from juno import config
 from juno.adapters import fs, migratesteps, protocolio, store, vault
 from juno.adapters.vaultview import DiskVault
-from juno.cmd import migratedecisions, migratenotes
+from juno.cmd import common, init, migratedecisions, migratenotes
 from juno.cmd.common import say
 from juno.core import cardcopies, cardfmt, cardsettle, fold, migrate, vaultfmt
 
@@ -35,6 +35,12 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="move decisions/<x>.md into the profile or ticket file that owns it",
     )
+    parser.add_argument(
+        "--style",
+        action="store_true",
+        help="change a retired juno:* outputStyle in the user settings to its new name",
+    )
+    common.add_install_options(parser)
 
 
 def sync_protocol(cfg: config.Config, dry_run: bool) -> int:
@@ -148,6 +154,8 @@ def run(
     target = migrate.CODE_SCHEMA_VERSION if target is None else target
     cfg = config.load(env)
     steps = migratesteps.steps_for(cfg) if steps is None else steps
+    if getattr(args, "style", False):
+        return init.migrate_output_style(cfg, common.settings_path(args, cfg), args.dry_run)
     if vault.status(cfg.vault) != "juno":
         say(f"Juno: no Juno vault at {cfg.vault}; run juno init")
         return 2

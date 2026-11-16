@@ -264,6 +264,15 @@ def check_output_style(cfg: config.Config, settings: str) -> list[Check]:
         current = settings_merge.parse(fs.read_bytes(settings) or b"").get("outputStyle")
     except settings_merge.SettingsError:
         return []
+    if current in init.RETIRED_STYLES:
+        return [
+            (
+                "WARN",
+                "output style",
+                f"{current} is retired; run: juno migrate --style"
+                f" (sets {init.RETIRED_STYLES[current]})",
+            )
+        ]
     chosen = current if current in init.OUTPUT_STYLES else init.OUTPUT_STYLES[0]
     file = chosen.split(":", 1)[1] + ".md"
     if not root or not os.path.isfile(os.path.join(root, "output-styles", file)):
