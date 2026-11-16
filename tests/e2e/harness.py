@@ -3,6 +3,7 @@ import os
 import shutil
 import subprocess
 import unittest
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -11,6 +12,22 @@ from tests.support import REPO, Sandbox
 COST = 0.0
 HOOK_CAP = 9500
 JUNO_BIN = os.path.join(REPO, "bin", "juno")
+DEFAULT_MODEL = "haiku"
+BUDGET_SUBTYPE = "error_max_budget_usd"
+
+
+def default_model(env: Mapping[str, str] | None = None) -> str:
+    """Reply model for cases that name none: `JUNO_E2E_MODEL`, else haiku."""
+    value = (os.environ if env is None else env).get("JUNO_E2E_MODEL", "").strip()
+    return value or DEFAULT_MODEL
+
+
+def budget_for(model: str, env: Mapping[str, str] | None = None) -> float:
+    """Per-call cap in USD: `JUNO_E2E_BUDGET`, else 0.5 for haiku and 2.0 for any other model."""
+    raw = (os.environ if env is None else env).get("JUNO_E2E_BUDGET", "").strip()
+    if raw:
+        return float(raw)
+    return 0.5 if "haiku" in model.lower() else 2.0
 
 
 @dataclass
@@ -22,6 +39,12 @@ class Run:
     result: str = ""
     cost: float = 0.0
     hook_responses: list[dict[str, Any]] = field(default_factory=list)
+    budget: float = 0.0
+    budget_stop: bool = False
+
+
+def budget_message(budget: float) -> str:
+    return f"claude -p stopped at the budget cap ${budget:g}; set JUNO_E2E_BUDGET"
 
 
 def require_claude(case: unittest.TestCase) -> None:
@@ -45,12 +68,14 @@ def claude_env(sb: Sandbox, interactive: bool) -> dict[str, str]:
 def run_claude(
     prompt: str,
     env: dict[str, str],
-    model: str = "haiku",
+    model: str | None = None,
     timeout: int = 240,
     cwd: str | None = None,
     extra: list[str] | None = None,
 ) -> Run:
     global COST
+    model = model or default_model()
+    budget = budget_for(model)
     argv = [
         "claude",
         "-p",
@@ -64,7 +89,7 @@ def run_claude(
         "--verbose",
         "--include-hook-events",
         "--max-budget-usd",
-        "0.5",
+        f"{budget:g}",
         *(extra or []),
     ]
     done = subprocess.run(
@@ -82,15 +107,31 @@ def run_claude(
             events.append(json.loads(line))
         except ValueError:
             continue
-    run = Run(events, done.returncode, done.stderr, done.stdout)
+    run = Run(events, done.returncode, done.stderr, done.stdout, budget=budget)
     for event in events:
         if event.get("type") == "result":
             run.result = str(event.get("result", ""))
             run.cost = float(event.get("total_cost_usd", 0.0))
         if event.get("subtype") == "hook_response":
             run.hook_responses.append(event)
+    run.budget_stop = stopped_on_budget(events, budget)
+    if run.budget_stop:
+        run.stderr = f"{budget_message(budget)}\n{run.stderr}".rstrip()
     COST += run.cost
     return run
+
+
+def stopped_on_budget(events: list[dict[str, Any]], budget: float) -> bool:
+    """True when the stream's result event is the budget error (or an error at or over the cap)."""
+    for event in events:
+        if event.get("type") != "result":
+            continue
+        if event.get("subtype") == BUDGET_SUBTYPE:
+            return True
+        cost = float(event.get("total_cost_usd", 0.0) or 0.0)
+        if event.get("is_error") and cost >= budget:
+            return True
+    return False
 
 
 def context_of(response: dict[str, Any]) -> str | None:
