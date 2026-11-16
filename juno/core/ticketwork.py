@@ -39,7 +39,7 @@ def worked(seg: Segment, pr: bool, blocks: Mapping[str, str] | None = None) -> l
         or seg.main_tickets[key]
         or (
             seg.typed_tickets[key]
-            and (pr or ticketdigest.chat_worked(key, (blocks or {}).get(key, "")))
+            and (pr or ticketdigest.chat_worked(key, (blocks or {}).get(key, ""), seg.rules.preset))
         )
     ]
     return sorted(found, key=seg.ticket_rank, reverse=True)[:MAX_TICKETS]

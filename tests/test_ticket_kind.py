@@ -268,6 +268,35 @@ class MentionOnly(TicketCase):
         self.assertEqual(self.task(), "")
         self.assertNotIn('- "ticket"', str(self.calls[0]["prompt"]))
 
+    def tr_rows(self) -> list[str]:
+        return [
+            say(
+                f"{KEY} için yaklaşım: toplamı tek seferde yuvarlayıp kalemleri kuruşu kuruşuna tutmak."
+            ),
+            say(
+                f"{KEY} kabul kriterleri: 1. Üç eşit kalemin iadesi toplamda kuruşu kuruşuna tutar."
+            ),
+        ]
+
+    def tr_data(self) -> dict[str, Any]:
+        return extract(
+            line("Summary", "summary", SUMMARY, "toplamı tek seferde yuvarlayıp"),
+            line("Criteria", "ac1", AC1, "Üç eşit kalemin iadesi"),
+        )
+
+    def test_turkish_chat_only_planning_fills_the_file_with_the_tr_preset(self) -> None:
+        self.set_config('[language]\npreset = "tr"\n')
+        self.mention()
+        row = self.go(self.tr_data(), self.tr_rows())
+        self.assertEqual(self.sections(row)["ticket"], "ok", row)
+        self.assertIn(f"- [summary] {SUMMARY} · ", self.task())
+        self.assertIn(f"- [ac1] {AC1} · ", self.task())
+
+    def test_the_same_turkish_session_with_preset_none_writes_nothing(self) -> None:
+        self.mention()
+        self.go(self.tr_data(), self.tr_rows())
+        self.assertEqual(self.task(), "")
+
     def test_a_key_the_ledger_never_saw_is_dropped(self) -> None:
         self.session()
         row = self.go(extract(*self.full()["ticket"][0]["lines"], key="DEF-9"))
@@ -404,6 +433,14 @@ class Block(TicketCase):
         self.assertFalse(ticketdigest.carries_content(f"{KEY} " + "word " * 30, KEY))
         self.assertFalse(ticketdigest.carries_content(f"{KEY} approach criteria test", KEY))
         self.assertFalse(ticketdigest.carries_content("the approach " + "word " * 30, KEY))
+
+    def test_turkish_cues_are_diacritic_tolerant_and_joined_with_english(self) -> None:
+        tr = f"{KEY} icin yaklasim: toplami tek seferde yuvarlayip kalemleri kurusu kurusuna tutmak ve her para birimi icin kontrol eklemek."
+        self.assertTrue(ticketdigest.carries_content(tr, KEY, "tr"))
+        self.assertTrue(ticketdigest.carries_content(tr.replace("yaklasim", "çözüm"), KEY, "tr"))
+        self.assertFalse(ticketdigest.carries_content(tr, KEY, "none"))
+        plan = f"{KEY}: the approach is to round once on the sum inside the money type and keep items exact."
+        self.assertTrue(ticketdigest.carries_content(plan, KEY, "tr"))
 
     def test_blocks_of_reads_each_ticket_block_back(self) -> None:
         rows = self.events(("assistant", f"{KEY} first"), ("assistant", f"{KEY} second"))
