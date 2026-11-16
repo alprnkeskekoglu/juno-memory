@@ -1,6 +1,6 @@
 # End-to-end cases
 
-One row per feature. `python3 tests/run.py --e2e [-k PAT]` runs the cases serially and rewrites the last-run columns. The judged character cases (`tests/e2e/test_phase8_style.py`) have no timing assertions and may run concurrently, one `--e2e -k <Case> --outcomes <file>` process per case, with the doc written once afterwards by `tests/run.py --record <files>`. Cases are not part of the pre-commit suite (they spend model budget). Spec: `docs/spec.md` section 15.3.
+One row per feature. `python3 tests/run.py --e2e [-k PAT]` runs the cases serially and rewrites the last-run columns. The judged character cases (`tests/e2e/test_phase8_style.py`) have no timing assertions and may run concurrently, one `--e2e -k <Case> --outcomes <file>` process per case, with the doc written once afterwards by `tests/run.py --record <files>`. Cases are not part of the pre-commit suite (they spend model budget). Spec: `docs/spec.md` section 15.3. `JUNO_E2E_MODEL` sets the reply model (default `haiku`) and `JUNO_E2E_BUDGET` the per-call budget cap in USD (default 0.5 for haiku, 2.0 otherwise); a run stopped by the cap says so in its failure message.
 
 | Feature | Case | Spec | Last run | Result | Commit | Gap |
 |---|---|---|---|---|---|---|
