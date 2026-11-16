@@ -17,6 +17,7 @@ MAX_NAME_FILES = 300
 MAX_NAMES = 2000
 VAULT_LOCK = "vault.lock"
 MAX_SAMPLES = 400
+MAX_BODY_FILE = 20000
 MAX_FIXES = 100
 TEXT_BYTES = 1200
 DRAFT_BYTES = 600
@@ -114,6 +115,30 @@ def typed_since_draft(seg: Segment) -> list[str]:
     return [prompts[pid] for pid in seg.since_stop if pid in prompts]
 
 
+def text_of(
+    cfg: config.Config, payload: dict[str, Any], tool: object, tool_in: dict[str, Any]
+) -> str:
+    """The posted text; for a gh command with `--body-file`, the text of that file."""
+    text = voicecollect.post_text(tool, tool_in)
+    command = voicecollect.command_of(tool, tool_in)
+    if text or not command:
+        return text
+    path = voicecollect.body_file(command)
+    if not path:
+        return ""
+    base = payload.get("cwd")
+    full = os.path.join(base, path) if isinstance(base, str) else path
+    data = fs.read_bytes(os.path.expanduser(full))
+    return (data or b"")[:MAX_BODY_FILE].decode("utf-8", "replace").strip()
+
+
+def register(cfg: config.Config, seg: Segment, tool: object, tool_in: dict[str, Any]) -> str:
+    """A register named in the request wins; else the target decides (`[voice] formal_targets`)."""
+    if seg.voice_reg is not None and not seg.voice_auto:
+        return seg.voice_reg
+    return voicecollect.default_register(tool, tool_in, cfg.get_list("voice", "formal_targets"))
+
+
 def collect(
     cfg: config.Config, seg: Segment, payload: dict[str, Any], tool: object, tool_in: dict[str, Any]
 ) -> None:
@@ -122,13 +147,13 @@ def collect(
         return
     if not voicecollect.matches_outward(tool, tool_in, cfg.get_list("voice", "outward_tools")):
         return
-    text = redact(voicecollect.post_text(tool, tool_in))
+    text = redact(text_of(cfg, payload, tool, tool_in))
     if not text:
         return
     by = voicecollect.authorship(text, seg.last_msg, typed_since_draft(seg))
     rec: Record = {
         "ev": "voice",
-        "reg": seg.voice_reg or "voice",
+        "reg": register(cfg, seg, tool, tool_in),
         "kind": voicecollect.target_kind(tool, tool_in),
         "by": by,
         "text": voicecollect.clip(text, TEXT_BYTES),
@@ -176,13 +201,25 @@ def on_prompt(cfg: config.Config, seg: Segment, typed: str, nosave: bool) -> str
         )
     formal = fold.has_cue(typed, cfg.voice_list("formal_cues"), preset)
     own = fold.has_cue(typed, cfg.voice_list("voice_cues"), preset)
-    if not (
-        fold.has_cue(typed, cfg.voice_list("draft_cues"), preset) or (asked and (formal or own))
-    ):
+    standing = cfg.voice_list("standing_cues")
+    if voicecollect.is_standing(typed, preset, standing):
+        return ""
+    request = voicecollect.draft_request(
+        typed,
+        preset,
+        cfg.voice_list("draft_cues"),
+        cfg.voice_list("draft_verbs"),
+        cfg.voice_list("draft_targets"),
+        standing,
+    )
+    if not (request or (asked and (formal or own))):
         return ""
     reg = "formal" if formal else "voice"
     if not hold:
-        ledgerio.record(cfg, seg, {"ev": "voice_ask", "reg": reg})
+        named = formal or own
+        ledgerio.record(
+            cfg, seg, {"ev": "voice_ask", "reg": reg, **({} if named else {"auto": True})}
+        )
     return block(cfg, seg, reg)
 
 
@@ -194,11 +231,11 @@ def pre_tool(cfg: config.Config, payload: dict[str, Any], tool_in: dict[str, Any
         return ""
     if not voicecollect.matches_outward(tool, tool_in, cfg.get_list("voice", "outward_tools")):
         return ""
-    text = redact(voicecollect.post_text(tool, tool_in))
+    text = redact(text_of(cfg, payload, tool, tool_in))
     if not text:
         return ""
     seg = ledgerio.fold(cfg, sid)
-    reg = seg.voice_reg or "voice"
+    reg = register(cfg, seg, tool, tool_in)
     parts: list[str] = []
     typed = typed_since_draft(seg)
     if voicecollect.authorship(text, seg.last_msg, typed) != "user":
@@ -215,9 +252,9 @@ def pre_tool(cfg: config.Config, payload: dict[str, Any], tool_in: dict[str, Any
                 f"{', '.join(found)} against the user's own writing. Rewrite it closer to the "
                 "register, unless the user asked for it as it is."
             )
-    if seg.voice_reg is None:
+    if seg.voice_reg is None or (seg.voice_auto and seg.voice_reg != reg):
         if not quiet(seg):
-            ledgerio.record(cfg, seg, {"ev": "voice_ask", "reg": reg})
+            ledgerio.record(cfg, seg, {"ev": "voice_ask", "reg": reg, "auto": True})
         parts.append(block(cfg, seg, reg))
     return "\n\n".join(parts)
 
