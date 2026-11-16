@@ -315,6 +315,34 @@ class Inject(VoiceCase):
         self.seed_both()
         self.assertNotIn("Juno voice", self.prompt("casual"))
 
+    def test_formal_is_one_shot_and_the_next_post_is_checked_as_voice(self) -> None:
+        self.seed_both()
+        long_text = "- aaa\n- bbb\n- ccc " + "y" * 120
+        self.assertIn(
+            "Register: formal", self.prompt("write a message to him about the merge, formal")
+        )
+        first = self.hook(
+            "pre_tool_use",
+            self.payload("pre_tool_use", tool_name=TOOL, tool_input={"text": long_text}),
+        )
+        self.assertIn("register formal", self.context(first))
+        self.post(long_text)
+        second = self.hook(
+            "pre_tool_use",
+            self.payload("pre_tool_use", tool_name=TOOL, tool_input={"text": long_text}),
+        )
+        self.assertIn("register voice", self.context(second))
+        self.assertNotIn("Register:", self.context(second))
+        self.post(long_text)
+        self.assertEqual([s["reg"] for s in self.events("voice")], ["formal", "voice"])
+
+    def test_formal_cue_without_a_draft_request_switches_nothing(self) -> None:
+        self.seed_both()
+        self.assertNotIn("Juno voice", self.prompt("make it formal"))
+        self.assertEqual(self.events("voice_ask"), [])
+        self.prompt("write a message to him")
+        self.assertEqual([e["reg"] for e in self.events("voice_ask")], ["voice"])
+
     def test_explicit_voice_cues_replace_the_preset(self) -> None:
         self.set_config('[voice]\nvoice_cues = ["plainly"]\n')
         self.seed_both()

@@ -298,6 +298,8 @@ class Segment:
 
     def on_voice(self, rec: Record) -> None:
         self.voice_samples.append(rec)
+        if self.voice_reg == "formal":
+            self.voice_reg = "voice"
 
     def on_voice_fix(self, rec: Record) -> None:
         self.voice_fixes.append(rec)
