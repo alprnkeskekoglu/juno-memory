@@ -220,7 +220,7 @@ Settings live in `juno.toml`. Every key has a default and nothing is required. T
 | `[handoff] mode` | `end` | `end` writes the card at session end; `reminder` only reminds the assistant to write one |
 | `[caps] run_max` | `100` | vault writes allowed per session |
 | `[voice] outward_tools` | generic send, comment, reply and mail tool patterns, `gh pr comment`, `gh pr review` with a body, `gh issue comment`, `gh issue create`, `gh pr create`, tracker issue and description tools | which tool calls count as text sent under your name |
-| `[voice] formal_targets` | `gh issue create`, `gh pr create`, tracker issue, description and comment tools | outward calls that default to the formal register when your request names none; everything else defaults to your own voice. A register you name always wins |
+| `[voice] formal_targets` | `gh issue create`, `gh issue comment`, `gh pr create`, tracker issue, description and comment tools | outward calls that default to the formal register when your request names none; everything else defaults to your own voice. A register you name always wins |
 | `[voice] draft_cues`, `formal_cues`, `voice_cues` | preset lists | phrases in your prompt that ask for text to send (a register word alone, or "always draft casually", is not a request), for the formal register, and for your own register again |
 | `[privacy] names` | `[]` | names that never appear in a verbatim example of `self/voice.md` (any case) |
 

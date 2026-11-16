@@ -439,6 +439,30 @@ class Targets(VoiceCase):
         out = self.check("mcp__tracker__add_comment", {"body": self.LONG})
         self.assertIn("register voice", out)
 
+    def test_c19_issue_comments_default_to_formal_pr_comments_stay_voice(self) -> None:
+        path = os.path.join(self.sb.root, "c.md")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(self.LONG)
+        out = self.bash(f"gh issue comment 5 --body-file {path}")
+        self.assertIn("register formal", out)
+        self.assertIn("register voice", self.bash(f"gh pr comment 5 --body '{self.LONG}'"))
+
+    def test_c20_heredoc_prose_mentioning_an_outward_command_runs_no_check(self) -> None:
+        cmd = f"cat > /tmp/x.md <<'EOF'\n{self.LONG}\nrun gh pr comment 5 --body hi\nEOF"
+        self.assertEqual(self.bash(cmd), "")
+        self.assertEqual(self.bash(f"echo 'gh pr comment 5 {self.LONG}'"), "")
+        self.assertIn("Juno voice check", self.bash(f"gh pr comment 5 --body '{self.LONG}'"))
+
+    def test_c20_outward_match_uses_the_commands_own_tokens(self) -> None:
+        from juno import config
+
+        hit = voicecollect.matches_outward
+        patterns = config.DEFAULTS["voice"]["outward_tools"]
+        heredoc = "cat > f <<'EOF'\ngh pr comment 5\nEOF"
+        self.assertFalse(hit("Bash", {"command": heredoc}, patterns))
+        self.assertTrue(hit("Bash", {"command": "ls && gh pr comment 5 -b 'a b'"}, patterns))
+        self.assertTrue(hit("Bash", {"command": "gh pr review 4 --approve --body 'a b'"}, patterns))
+
     def test_formal_targets_config_replaces_the_default_list(self) -> None:
         self.set_config('[voice]\nformal_targets = ["mcp__*__send*message*"]\n')
         self.assertIn("register formal", self.check(TOOL, {"text": self.LONG}))
@@ -481,6 +505,32 @@ class DraftRequest(VoiceCase):
         self.set_config('[language]\npreset = "tr"\n')
         self.assertIn("Juno voice", self.prompt("şu issue'ya bir yorum yaz"))
         self.assertIn("Juno voice", self.prompt("ona bir taslak hazırla"))
+
+    def test_c16_turkish_talk_about_registers_injects_nothing(self) -> None:
+        self.set_config('[language]\npreset = "tr"\n')
+        text = (
+            "su onerin guzelmis issue aciklamasi, tracker description ve comment formal olabilir. "
+            "Ama pr comment ve chat default kendi cevap verir"
+        )
+        self.assertNotIn("Juno voice", self.prompt(text))
+        self.assertEqual(self.events("voice_ask"), [])
+
+    def test_c16_a_verb_never_counts_itself_as_its_target(self) -> None:
+        self.set_config('[language]\npreset = "tr"\n')
+        self.assertNotIn("Juno voice", self.prompt("cevap ver"))
+        self.assertNotIn("Juno voice", self.prompt("yorum yap"))
+        self.assertEqual(self.events("voice_ask"), [])
+
+    def test_c17_turkish_verb_with_a_real_target_injects(self) -> None:
+        self.set_config('[language]\npreset = "tr"\n')
+        self.assertIn("Juno voice", self.prompt("ona bir cevap ver"))
+        self.assertIn("Juno voice", self.prompt("bu issue'ya yorum yap"))
+
+    def test_c18_turkish_share_and_comment_cues_inject(self) -> None:
+        self.set_config('[language]\npreset = "tr"\n')
+        for text in ("bunu ona paylaş", "bunu ona paylas", "jira'ya bir comment at"):
+            with self.subTest(text=text):
+                self.assertIn("Juno voice", self.prompt(text))
 
     def test_standing_preference_does_not_switch_the_register(self) -> None:
         self.set_config('[language]\npreset = "tr"\n')

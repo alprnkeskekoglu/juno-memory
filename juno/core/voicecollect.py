@@ -3,7 +3,7 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
-from juno.core import fold, toolrec
+from juno.core import bashview, fold, toolrec
 
 TEXT_KEYS = (
     "text",
@@ -36,7 +36,7 @@ def command_of(tool: object, tool_in: dict[str, Any]) -> str:
 
 def matches_outward(tool: object, tool_in: dict[str, Any], patterns: Sequence[str]) -> bool:
     name = str(tool or "").casefold()
-    command = command_of(tool, tool_in).casefold()
+    command = bashview.outward_view(command_of(tool, tool_in)).casefold()
     for pattern in patterns:
         bash = BASH_PATTERN.match(pattern)
         if bash:
@@ -125,7 +125,11 @@ def draft_request(
     aims = [i for e in _entries(targets, preset) for i in _find(tokens, e, True)]
     for verb in _entries(verbs, preset):
         for i in _find(tokens, verb, False):
-            if any(i - WINDOW <= j <= i + len(verb) + WINDOW for j in aims):
+            # The target is a token of its own: it never overlaps the verb phrase.
+            if any(
+                i - WINDOW <= j <= i + len(verb) + WINDOW and not i <= j < i + len(verb)
+                for j in aims
+            ):
                 return True
     return False
 
