@@ -7,7 +7,7 @@ import time
 from collections.abc import Mapping
 
 from juno import config
-from juno.adapters import queues
+from juno.adapters import knowledgetriggers, queues
 from juno.adapters.vaultview import DiskVault
 from juno.cmd import write
 from juno.core import candidates, topics, triggerprop, vaultfmt
@@ -23,6 +23,7 @@ def proposals(cfg: config.Config) -> tuple[list[tuple[str, list[str]]], int]:
     had nothing to propose."""
     preset = cfg.get_str("language", "preset")
     view = DiskVault(cfg)
+    words = knowledgetriggers.vocab(cfg)
     found: list[tuple[str, list[str]]] = []
     empty = 0
     for name in view.names("knowledge"):
@@ -33,7 +34,7 @@ def proposals(cfg: config.Config) -> tuple[list[tuple[str, list[str]]], int]:
         fields, body = vaultfmt.parse_frontmatter(text)
         if topics.field_list(fields.get("triggers"), preset):
             continue
-        proposed = triggerprop.propose(str(fields.get("title") or ""), body, preset)
+        proposed = triggerprop.propose(str(fields.get("title") or ""), body, preset, words)
         if proposed:
             found.append((rel, proposed))
         else:

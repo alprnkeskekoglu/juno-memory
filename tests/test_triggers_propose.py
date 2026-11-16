@@ -6,8 +6,8 @@ import re
 import unittest
 from unittest import mock
 
-from juno.adapters import queues
-from juno.core import candidates
+from juno.adapters import knowledgetriggers, queues
+from juno.core import candidates, triggerprop
 from tests.support.write import WriteCase
 
 FILES = {
@@ -113,6 +113,70 @@ class Propose(WriteCase):
         self.assertNotEqual(code, 0)
         self.assertRegex(out, re.compile("agent context|not an interactive", re.I))
         self.assertEqual(self.triggers_items(), [])
+
+
+def note(title: str, body: str) -> str:
+    return f"---\ntitle: {title}\nsources: [x]\n---\n{body}\n"
+
+
+class Noise(WriteCase):
+    """#36 criteria 13-15: dates, ticket ids, vault-wide tokens and generic words are not proposed."""
+
+    def triggers_items(self) -> list[queues.Item]:
+        return [i for i in queues.read(self.cfg, queues.RULES) if candidates.is_triggers(i)]
+
+    def test_criterion_13_dates_and_ticket_ids_are_never_proposed(self) -> None:
+        self.put(
+            "knowledge/ledger.md",
+            note(
+                "Ledger rotation",
+                "On 2026-11-15 ABC-123456 changed the ledger-rotation. 2026-11-15 again, "
+                "ABC-123456 again, ledger-rotation again.",
+            ),
+        )
+        code, out = self.juno("triggers", "propose")
+        self.assertEqual(code, 0, out)
+        (item,) = self.triggers_items()
+        self.assertIn("ledger-rotation", item["triggers"])
+        for token in ("2026-11-15", "abc-123456", "ABC-123456"):
+            self.assertNotIn(token, item["triggers"])
+
+    def test_configured_jira_prefix_is_a_ticket(self) -> None:
+        self.assertFalse(triggerprop.usable("kx-12", triggerprop.Vocab(("KX",)), "kx-12"))
+        self.assertTrue(triggerprop.usable("kx-12"))
+
+    def test_criterion_14_a_token_in_most_files_is_not_proposed(self) -> None:
+        for n in range(8):
+            self.put(f"knowledge/plain{n}.md", note(f"Plain {n}", "The shared-repo layout."))
+        self.put(
+            "knowledge/cache.md",
+            note("Cache keys", "The shared-repo uses jb-cache-key; jb-cache-key rotates."),
+        )
+        code, out = self.juno("triggers", "propose")
+        self.assertEqual(code, 0, out)
+        cache = next(i for i in self.triggers_items() if i["file"] == "knowledge/cache.md")
+        self.assertIn("jb-cache-key", cache["triggers"])
+        self.assertNotIn("shared-repo", cache["triggers"])
+
+    def test_a_tiny_vault_keeps_its_tokens(self) -> None:
+        for n in range(3):
+            self.put(f"knowledge/tiny{n}.md", note(f"Tiny {n}", "The shared-repo shared-repo."))
+        self.assertEqual(knowledgetriggers.vocab(self.cfg).common, frozenset())
+        self.assertEqual(triggerprop.common_tokens({"a": 2, "b": 1}, 3), frozenset())
+        self.assertEqual(triggerprop.common_tokens({"a": 2, "b": 1}, 4), frozenset({"a"}))
+        code, out = self.juno("triggers", "propose")
+        self.assertEqual(code, 0, out)
+        self.assertIn("3 trigger candidates queued", out)
+
+    def test_criterion_15_only_generic_words_means_nothing_to_propose(self) -> None:
+        self.put(
+            "knowledge/generic.md",
+            note("Status config", "branch commit deploy install status config branch commit."),
+        )
+        code, out = self.juno("triggers", "propose")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.triggers_items(), [])
+        self.assertIn("1 files with nothing to propose", out)
 
 
 if __name__ == "__main__":
