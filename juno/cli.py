@@ -32,6 +32,7 @@ VERBS: dict[str, tuple[str, str]] = {
     "task": ("task", "write or show tasks/<KEY>.md (needs [jira])"),
     "version": ("version", "print the version"),
     "rule": ("rule", "add, list, remove, move and approve rules"),
+    "triggers": ("triggers", "queue trigger candidates for knowledge files without triggers"),
     "thread": ("thread", "open, list (--stale), close and keep threads"),
     "backlog": ("backlog", "the personal work list"),
     "ideas": ("ideas", "list ideas"),
