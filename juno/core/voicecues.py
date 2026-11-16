@@ -27,6 +27,12 @@ PRESETS: dict[str, dict[str, list[str]]] = {
             "professional",
             "polite",
         ],
+        "voice_cues": [
+            "casual",
+            "my voice",
+            "my own voice",
+            "like i talk",
+        ],
         "critique_cues": [
             "too long",
             "too short",
@@ -66,6 +72,14 @@ PRESETS: dict[str, dict[str, list[str]]] = {
             "kibar",
             "formal",
             "write it properly",
+        ],
+        "voice_cues": [
+            "rahat",
+            "samimi",
+            "kendi ağzımdan",
+            "günlük dille",
+            "casual",
+            "my voice",
         ],
         "critique_cues": [
             "çok uzun",

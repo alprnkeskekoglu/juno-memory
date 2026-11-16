@@ -219,7 +219,8 @@ Settings live in `juno.toml`. Every key has a default and nothing is required. T
 | `[handoff] mode` | `end` | `end` writes the card at session end; `reminder` only reminds the assistant to write one |
 | `[caps] run_max` | `100` | vault writes allowed per session |
 | `[voice] outward_tools` | generic send, comment, reply and mail tool patterns, `gh pr comment`, `gh pr review` with a body, `gh issue comment` | which tool calls count as text sent under your name |
-| `[voice] draft_cues`, `formal_cues` | preset lists | phrases in your prompt that ask for text to send, and for the formal register |
+| `[voice] draft_cues`, `formal_cues`, `voice_cues` | preset lists | phrases in your prompt that ask for text to send, for the formal register, and for your own register again |
+| `[privacy] names` | `[]` | names that never appear in a verbatim example of `self/voice.md` (any case) |
 
 Juno never calls Jira itself and holds no token. Ticket titles come from whatever Jira tool your Claude session already has.
 

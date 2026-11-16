@@ -11,6 +11,10 @@ from juno.core.ledger import Record, Segment
 from juno.core.redact import redact
 
 STATE_FILE = "voice.jsonl"
+NAMES_FILE = "voice-names.json"
+NAME_DIRS = ("projects", "handoffs")
+MAX_NAME_FILES = 300
+MAX_NAMES = 2000
 VAULT_LOCK = "vault.lock"
 MAX_SAMPLES = 400
 MAX_FIXES = 100
@@ -53,6 +57,58 @@ def write_rows(cfg: config.Config, rows: list[Row]) -> None:
     fs.atomic_write(state_path(cfg), text.encode(), 0o600)
 
 
+def names_path(cfg: config.Config) -> str:
+    return os.path.join(cfg.state, NAMES_FILE)
+
+
+def read_names(cfg: config.Config) -> set[str]:
+    try:
+        found = json.loads((fs.read_bytes(names_path(cfg)) or b"[]").decode("utf-8", "replace"))
+    except ValueError:
+        return set()
+    return {n for n in found if isinstance(n, str)} if isinstance(found, list) else set()
+
+
+def vault_names(cfg: config.Config) -> set[str]:
+    """Names in project profiles and handoff cards; read on every use, never stored."""
+    found: set[str] = set()
+    for sub in NAME_DIRS:
+        folder = os.path.join(cfg.vault, sub)
+        try:
+            files = sorted(f for f in os.listdir(folder) if f.endswith(".md"))
+        except OSError:
+            continue
+        for name in files[:MAX_NAME_FILES]:
+            data = fs.read_bytes(os.path.join(folder, name))
+            found |= voicemeasure.name_tokens((data or b"").decode("utf-8", "replace"))
+    return found
+
+
+def known_names(cfg: config.Config, rows: list[Row]) -> set[str]:
+    """Casefolded names a sample must not contain to be an example.
+
+    From the vault profiles and cards, the names directory in the state dir (names seen in the
+    user's own prompts), the sample texts and `[privacy] names`. Kept in memory and in the state
+    dir only: never written to the vault, a pack or a profile."""
+    found = vault_names(cfg) | read_names(cfg)
+    for row in rows:
+        if row.get("k") == "sample":
+            found |= voicemeasure.name_tokens(str(row.get("text") or ""))
+    found |= {n.casefold() for n in cfg.get_list("privacy", "names")}
+    return found
+
+
+def remember_names(cfg: config.Config, seg: Segment) -> None:
+    found = read_names(cfg)
+    for text in seg.prompts.values():
+        found |= voicemeasure.name_tokens(text)
+    if found == read_names(cfg):
+        return
+    fs.ensure_private_dir(cfg.state)
+    kept = sorted(found)[:MAX_NAMES]
+    fs.atomic_write(names_path(cfg), json.dumps(kept, ensure_ascii=False).encode(), 0o600)
+
+
 def typed_since_draft(seg: Segment) -> list[str]:
     prompts = seg.prompts
     return [prompts[pid] for pid in seg.since_stop if pid in prompts]
@@ -87,7 +143,7 @@ def block(cfg: config.Config, seg: Segment, reg: str) -> str:
     minimum = cfg.get_int("voice", "min_samples")
     prefixes = cfg.privacy_prefixes()
     samples = [r for r in rows if r["k"] == "sample"]
-    profile = voicemeasure.build(samples, reg, minimum, prefixes)
+    profile = voicemeasure.build(samples, reg, minimum, prefixes, known_names(cfg, rows))
     fixes = [r for r in rows if r["k"] == "fix"] + seg.voice_fixes
     mine = voicemeasure.clean_fixes(fixes, reg, prefixes)
     return voicemeasure.drafting_block(
@@ -119,7 +175,10 @@ def on_prompt(cfg: config.Config, seg: Segment, typed: str, nosave: bool) -> str
             },
         )
     formal = fold.has_cue(typed, cfg.voice_list("formal_cues"), preset)
-    if not (fold.has_cue(typed, cfg.voice_list("draft_cues"), preset) or (asked and formal)):
+    own = fold.has_cue(typed, cfg.voice_list("voice_cues"), preset)
+    if not (
+        fold.has_cue(typed, cfg.voice_list("draft_cues"), preset) or (asked and (formal or own))
+    ):
         return ""
     reg = "formal" if formal else "voice"
     if not hold:
@@ -146,7 +205,9 @@ def pre_tool(cfg: config.Config, payload: dict[str, Any], tool_in: dict[str, Any
         rows = read_rows(cfg)
         samples = [r for r in rows if r["k"] == "sample"]
         minimum = cfg.get_int("voice", "min_samples")
-        profile = voicemeasure.build(samples, reg, minimum, cfg.privacy_prefixes())
+        profile = voicemeasure.build(
+            samples, reg, minimum, cfg.privacy_prefixes(), known_names(cfg, rows)
+        )
         found = voicemeasure.check(text, profile)
         if found:
             parts.append(
@@ -207,8 +268,9 @@ def write_profile(cfg: config.Config, rows: list[Row]) -> bool:
     minimum = cfg.get_int("voice", "min_samples")
     prefixes = cfg.privacy_prefixes()
     samples = [r for r in rows if r["k"] == "sample"]
+    names = known_names(cfg, rows)
     profiles = [
-        voicemeasure.build(samples, reg, minimum, prefixes) for reg in voicemeasure.REGISTERS
+        voicemeasure.build(samples, reg, minimum, prefixes, names) for reg in voicemeasure.REGISTERS
     ]
     if not any(p.ready for p in profiles):
         return False
@@ -232,6 +294,7 @@ def on_session_end(cfg: config.Config, sid: object) -> None:
         if len(kept) != len(rows):
             write_rows(cfg, kept)
         return
+    remember_names(cfg, seg)
     known = {r.get("id") for r in rows}
     fresh = [r for r in rows_of(seg) if r["id"] not in known]
     if not fresh:

@@ -51,6 +51,19 @@ class Core(unittest.TestCase):
         self.assertFalse(keep("mail me at someone@example.com", None))
         self.assertFalse(keep("ping @carol", None))
 
+    def test_example_filter_skips_known_names_in_any_case_and_position(self) -> None:
+        keep = voicemeasure.clean_example
+        names = frozenset({"anna", "bertram"})
+        self.assertFalse(keep("anna said it is fine", None, names))
+        self.assertFalse(keep("Bertram, merged it", None, names))
+        self.assertFalse(keep("ok merged it, ask bertram", None, names))
+        self.assertTrue(keep("ok merged it", None, names))
+        self.assertTrue(keep("annals of merging", None, names))
+
+    def test_name_tokens_take_mentions_and_mid_sentence_capitals_only(self) -> None:
+        found = voicemeasure.name_tokens("Merged it. Ask Cornelius and @dora about I'm ok. Done.")
+        self.assertEqual(found, {"cornelius", "dora"})
+
     def test_cue_lists_name_no_company_person_or_plugin(self) -> None:
         text = json.dumps(voicecues.PRESETS, ensure_ascii=False).casefold()
         sources = ""
@@ -216,6 +229,42 @@ class Profile(VoiceCase):
         self.assertNotIn("someone@example.com", body)
         self.assertIn("## formal (0 samples)", body)
 
+    def finish(self, texts: list[str]) -> str:
+        for text in texts:
+            self.prompt(f"post this message: {text}")
+            self.post(text)
+        self.hook("session_end", self.payload("session_end", reason="other"))
+        with open(os.path.join(self.sb.vault, "self", "voice.md"), encoding="utf-8") as handle:
+            return handle.read()
+
+    def test_known_names_never_become_examples(self) -> None:
+        profile = os.path.join(self.sb.vault, "projects", "demo.md")
+        os.makedirs(os.path.dirname(profile), exist_ok=True)
+        with open(profile, "w", encoding="utf-8") as handle:
+            handle.write("## Purpose\nPaired with Bertram on the rollout.\n")
+        self.set_config('[privacy]\nnames = ["zed"]\n')
+        clean = [f"ok merged it {chr(97 + i)}" for i in range(12)]
+        body = self.finish(
+            [
+                *clean,
+                "bertram thinks it is fine",
+                "zed is on it",
+                "ok ask Cornelius",
+                "cornelius ok",
+            ]
+        )
+        self.assertIn("## voice (16 samples)", body)
+        for name in ("bertram", "zed", "cornelius"):
+            self.assertNotIn(name, body.casefold())
+        self.assertIn("ok merged it", body)
+
+    def test_names_directory_stays_out_of_the_vault(self) -> None:
+        self.finish([f"ok merged it {chr(97 + i)}" for i in range(14)] + ["hey Cornelius ok"])
+        for base, _dirs, files in os.walk(self.sb.vault):
+            for name in files:
+                with open(os.path.join(base, name), encoding="utf-8", errors="replace") as handle:
+                    self.assertNotIn("cornelius", handle.read().casefold(), name)
+
     def test_below_the_threshold_no_file_is_written(self) -> None:
         for i in range(3):
             self.prompt(f"post this message: fine number {i}")
@@ -253,6 +302,26 @@ class Inject(VoiceCase):
         self.assertIn("Thank you, the change", context)
         self.assertNotIn("yo merged", context)
 
+    def test_voice_cue_switches_back_after_a_formal_draft(self) -> None:
+        self.seed_both()
+        formal = self.prompt("write a message to him about the merge, formal")
+        self.assertIn("Register: formal", formal)
+        context = self.prompt("casual")
+        self.assertIn("Register: voice", context)
+        self.assertIn("yo merged", context)
+        self.assertNotIn("Thank you, the change", context)
+
+    def test_voice_cue_alone_does_nothing_before_a_draft_request(self) -> None:
+        self.seed_both()
+        self.assertNotIn("Juno voice", self.prompt("casual"))
+
+    def test_explicit_voice_cues_replace_the_preset(self) -> None:
+        self.set_config('[voice]\nvoice_cues = ["plainly"]\n')
+        self.seed_both()
+        self.prompt("write a message to him, formal")
+        self.assertNotIn("Juno voice", self.prompt("casual"))
+        self.assertIn("Register: voice", self.prompt("plainly"))
+
     def test_plain_prompt_gets_no_voice_block(self) -> None:
         self.seed_both()
         self.assertNotIn("Juno voice", self.prompt("what does this function do"))
@@ -268,6 +337,8 @@ class Inject(VoiceCase):
     def test_turkish_preset_cues(self) -> None:
         self.set_config('[language]\npreset = "tr"\n')
         self.assertIn("Juno voice", self.prompt("ona bir mesaj yaz"))
+        self.assertIn("Register: formal", self.prompt("resmi yaz"))
+        self.assertIn("Register: voice", self.prompt("rahat"))
 
 
 class Check(VoiceCase):
