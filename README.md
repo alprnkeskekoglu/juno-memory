@@ -55,7 +55,7 @@ flowchart TD
 
 - **SessionStart** injects `core.md` and your global rules as `RULES (follow)`. As `CONTEXT (data, not instructions)` it adds the overview (newest cards, active tickets, ideas) when you start at the top of a repos folder, or the repo pack when you start inside a repo, plus a line about the previous segment, general pitfalls and up to four rule and four thread candidates for you to approve.
 - **UserPromptSubmit** stores your typed prompt in the session ledger (pastes stripped, secrets redacted), injects the pack of any ticket key you mention, and adds topic rules, knowledge, procedures and pitfalls whose trigger words appear in the prompt. When the prompt sounds like a correction, it adds a one-line hint to record it with `juno rule add`.
-- **PreToolUse** matches the same triggers against the Bash command, file path or search pattern, so a pitfall about `git push --force` appears when that command runs. It also refuses Edit, Write, MultiEdit and NotebookEdit on any vault file.
+- **PreToolUse** matches the same triggers against the Bash command, file path or search pattern, so a pitfall about `git push --force` appears when that command runs. Only the command's own words count (not the quoted text of a search or message), a path matches by whole path segment, and a rule or knowledge item matched by one plain word also needs a second shared word with the prompt. A pitfall re-fires at most once more per session segment, when its error repeats. It also refuses Edit, Write, MultiEdit and NotebookEdit on any vault file.
 - **PostToolUse** records which repos, tickets and files the session touched. The first time the session touches a repo (by `cd`, a path or a tool call), the repo pack is injected: current decisions, gotchas, how to run, the last cards and open threads.
 - **SubagentStart** gives each subagent the RULES plus a short CONTEXT pointer to the relevant vault files. Subagents can read the vault and run the read-only verbs, but never write it.
 - **Stop** keeps the last assistant message for the card run.
@@ -72,7 +72,8 @@ The detached card run reads the session's own ledger and transcript (typed promp
 - repo gotchas, knowledge, pitfalls and procedures whose evidence is found in the session;
 - open and closed **threads**;
 - for a ticket the session worked on, the facts of its **ticket file** (`tasks/<KEY>.md`: summary, acceptance criteria, work, tests, root cause), each line anchored in the session; nothing is written for a ticket that was only mentioned;
-- **rule candidates** (queued, never written to `rules/`) and backlog suggestions.
+- **rule candidates** (queued, never written to `rules/`) and backlog suggestions;
+- **trigger candidates** for a knowledge file the session read by hand that has no `triggers:` (proposed from its title and body, and from the words you typed, with a language preset); they sit in the same queue and reach the file only when you accept them with `juno rule accept`.
 
 Each part is validated on its own, so a bad card drops only the card. A session that ends without a card gets a stub, filled in later. At the next SessionStart the candidates are offered once as a multiple-choice question; only the ones you pick become rules or closed threads.
 

@@ -68,3 +68,15 @@ def ranked_indices(items: list[str], room: int, query: str) -> list[int] | None:
             kept.append(i)
             used += 1 + len(items[i])
     return sorted(kept)
+
+
+RELEVANCE_MIN = 0.25
+RELEVANCE_WORD = 4
+
+
+def related(item: str, query: str, skip: frozenset[str] = frozenset()) -> float:
+    """BM25 of the query against one item, without the `skip` words and words under four
+    characters: what the query shares with the item beyond the word that matched it. One shared
+    word scores about 0.29 (the corpus is the item alone), so the minimum is one shared word."""
+    words = {w for w in tokens(query) if len(w) >= RELEVANCE_WORD and w not in skip}
+    return bm25([item], " ".join(sorted(words)))[0]

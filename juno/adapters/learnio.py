@@ -3,7 +3,7 @@ import time
 from typing import Any
 
 from juno import config
-from juno.adapters import cardwrite, learnkinds, store, usageio
+from juno.adapters import cardwrite, knowledgetriggers, learnkinds, store, usageio
 from juno.adapters.learnkinds.base import STATE_TAIL, Ctx
 from juno.core import extract, extract_prompt
 from juno.core.ledger import Segment
@@ -99,6 +99,10 @@ def apply(
     for kind in learnkinds.KINDS:
         if not kind.LOCKED:
             guarded(cfg, kind.KEY, sections, lambda kind=kind: kind.apply(ctx, data, sections))
+    try:
+        ctx.result["trigger_candidates"] = knowledgetriggers.propose(ctx)
+    except Exception as exc:
+        store.log_error(cfg, "card-learn.knowledge-triggers", exc)
     with contextlib.ExitStack() as stack:
         locked = [kind for kind in learnkinds.KINDS if kind.LOCKED]
         try:

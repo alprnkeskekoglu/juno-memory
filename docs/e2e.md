@@ -13,6 +13,8 @@ One row per feature. `python3 tests/run.py --e2e [-k PAT]` runs the cases serial
 | SessionStart injects RULES then CONTEXT (segment line, repo pack) for a session in a repo | tests/e2e/test_phase2_hooks.py::SessionStartRulesAndContext | 6.2, 12.2 | 2026-11-07 | PASS | 7193da8+dirty | - |
 | A repo pack arrives once, at the first PostToolUse touch of a repo from outside it | tests/e2e/test_phase2_hooks.py::RepoPackOnFirstTouch | 6.2, 12.2 | 2026-11-07 | PASS | ff81944+dirty | - |
 | A topic rule and the correction cue arrive with the prompt that matches its trigger | tests/e2e/test_phase2_hooks.py::UserPromptTopicTrigger | 6.2, 10.2, 10.5 | 2026-11-07 | PASS | d4a7ac3+dirty | - |
+| A quoted `juno search` query naming a trigger injects no topic rule, while a prompt with the rule's specific trigger does (precision, #36) | tests/e2e/test_phase10_topics.py::TopicPrecisionOnSearchQueries | 10.2 | - | - | - | not run yet (#36) |
+| Under `[language] preset = "tr"` a suffixed word in the prompt (`<trigger>in`) injects the rule of the trigger (recall, #36) | tests/e2e/test_phase10_topics.py::TurkishSuffixTrigger | 10.2 | - | - | - | not run yet (#36) |
 | SubagentStart context (global rules, header) reaches the subagent | tests/e2e/test_phase2_hooks.py::SubagentStartReachesTheSubagent | 6.2 | 2026-11-07 | PASS | d4a7ac3+dirty | - |
 | `[nosave]` in the prompt skips the card run and writes no stub or job | tests/e2e/test_phase2_hooks.py::NosaveSuppressesWrites | 6.2, 6.4 | 2026-11-07 | PASS | d4a7ac3+dirty | - |
 | `visibility: private` knowledge and rules are never injected | tests/e2e/test_phase2_hooks.py::PrivateVisibilityExcluded | 4.2, 12.7 | 2026-11-07 | PASS | d4a7ac3+dirty | - |

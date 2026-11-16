@@ -4,11 +4,11 @@ import time
 from collections.abc import Mapping
 
 from juno import config
-from juno.adapters import fs, ledgerio, queues, store
+from juno.adapters import fs, knowledgetriggers, ledgerio, queues, store
 from juno.adapters import status as status_io
 from juno.cmd import write
 from juno.cmd.write import Refused
-from juno.core import fold, nativememory, rulepolicy, topics
+from juno.core import candidates, fold, nativememory, rulepolicy, topics
 from juno.core.ledger import Segment
 from juno.core.vaultfmt import RuleEntry, rule_entries, rule_scope
 
@@ -246,6 +246,11 @@ def do_pending(cfg: config.Config, args: argparse.Namespace) -> int:
     ]
     lines = []
     for i in items:
+        if candidates.is_triggers(i):
+            lines.append(
+                f"{i['id']} · {i.get('file')} · {i.get('rule')} · src: proposed from the file"
+            )
+            continue
         topic = f" (new topic, triggers: {', '.join(i['triggers'])})" if i.get("triggers") else ""
         src = (
             f"src: {i.get('source')} (native memory, batch {nativememory.BATCH})"
@@ -322,6 +327,23 @@ def accept_one(cfg: config.Config, item: queues.Item) -> Accepted:
     return scope.name, line, present, triggers
 
 
+def accept_triggers(cfg: config.Config, item: queues.Item) -> str:
+    """Write an accepted `triggers` candidate into its knowledge file's front matter."""
+    rel = str(item.get("file") or "")
+    name = rel[len("knowledge/") :]
+    if not rel.startswith("knowledge/") or not topics.KNOWLEDGE_RE.match(name):
+        raise Refused(f"candidate {item['id']} names no knowledge file")
+    text = read(cfg, rel)
+    if not text:
+        raise Refused(f"{rel} is gone; reject candidate {item['id']}")
+    wanted = [t for t in item.get("triggers") or [] if isinstance(t, str)]
+    merged = knowledgetriggers.merged_triggers(cfg, text, wanted)
+    if merged == knowledgetriggers.merged_triggers(cfg, text, []):
+        return f"Juno: knowledge candidate {item['id']}: {rel} already has these triggers"
+    write_text(cfg, rel, knowledgetriggers.with_triggers(text, merged))
+    return f"Juno: knowledge candidate {item['id']}: triggers of {rel} are now {', '.join(merged)}"
+
+
 def select(
     args: argparse.Namespace, queue: list[queues.Item]
 ) -> tuple[list[str], list[queues.Item]]:
@@ -337,6 +359,7 @@ def do_accept(cfg: config.Config, args: argparse.Namespace) -> int:
         return settle_batch(cfg, args)
     seg = write.guard(cfg)
     done: list[tuple[queues.Item, Accepted]] = []
+    said: list[str] = []
     with queues.locked(cfg, queues.RULES):
         queue = queues.read(cfg, queues.RULES)
         _, items = select(args, queue)
@@ -350,13 +373,18 @@ def do_accept(cfg: config.Config, args: argparse.Namespace) -> int:
         try:
             with write.locked(cfg):
                 for item in items:
-                    done.append((item, accept_one(cfg, item)))
+                    if candidates.is_triggers(item):
+                        said.append(accept_triggers(cfg, item))
+                    else:
+                        done.append((item, accept_one(cfg, item)))
                     queues.mark([item], "accepted", time.time())
         finally:
-            if done:
+            if done or said:
                 queues.write(cfg, queues.RULES, queue)
     for item, result in done:
         report_accepted(cfg, seg, item, result)
+    for line in said:
+        print(line)
     return 0
 
 
