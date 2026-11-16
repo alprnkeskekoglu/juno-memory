@@ -3,6 +3,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import unittest
 from typing import Any
 from unittest import mock
@@ -154,6 +155,15 @@ class SessionStart(HookCase):
         self.call("session_start", self.interactive())
         with open(os.path.join(self.sb.state, "hook-timings.log"), encoding="utf-8") as handle:
             self.assertRegex(handle.read(), r"session_start \d+ms")
+
+    def test_session_start_logs_per_step_timings(self) -> None:
+        self.call("session_start", self.interactive())
+        with open(os.path.join(self.sb.state, "hook-timings.log"), encoding="utf-8") as handle:
+            lines = handle.read().splitlines()
+        self.assertRegex(lines[0], r"^session_start \d+ms$")
+        found = (re.match(r"session_start:(\w+) \d+ms$", line) for line in lines[1:])
+        names = {m.group(1) for m in found if m}
+        self.assertTrue({"stub_pass", "learned_rebuild", "pack", "nudges"} <= names, names)
 
 
 class OtherEvents(HookCase):

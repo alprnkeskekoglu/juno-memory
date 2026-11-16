@@ -8,7 +8,7 @@ from typing import Any
 
 from juno import config
 from juno.adapters import env as envmod
-from juno.adapters import fs, store
+from juno.adapters import fs, steps, store
 
 Handler = Callable[[dict[str, Any], config.Config], dict[str, Any] | None]
 
@@ -43,6 +43,7 @@ def started() -> float:
 def run(event: str, handler: Handler) -> int:
     global _started
     started = _started = time.monotonic()
+    steps.drain()
     cfg: config.Config | None = None
     try:
         if os.environ.get("JUNO_DISABLE") == "1":
@@ -60,5 +61,9 @@ def run(event: str, handler: Handler) -> int:
             store.log_error(cfg, event, exc)
     if cfg is not None:
         elapsed = int((time.monotonic() - started) * 1000)
-        log(cfg, "hook-timings.log", f"{event} {elapsed}ms")
+        lines = [
+            f"{event} {elapsed}ms",
+            *(f"{event}:{n} {ms}ms" for n, ms in steps.drain().items()),
+        ]
+        log(cfg, "hook-timings.log", "\n".join(lines))
     return 0

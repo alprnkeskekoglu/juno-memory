@@ -13,6 +13,7 @@ from juno.adapters import (
     selfio,
     stalerun,
     status,
+    steps,
     store,
     stubs,
     topicsio,
@@ -100,14 +101,16 @@ def extra_blocks(cfg: config.Config, source: str) -> list[str]:
     from juno.adapters import learned, queues
     from juno.core import candidates
 
-    if learned.stale(cfg):
-        learned.rebuild(cfg)
-    rules = queues.pending(cfg, queues.RULES)
-    nudges = [
-        candidates.rules_nudge(rules),
-        candidates.import_nudge([*rules, *queues.pending(cfg, queues.SELF)]),
-        candidates.threads_nudge(queues.pending(cfg, queues.THREADS)),
-    ]
+    with steps.step("learned_rebuild"):
+        if learned.stale(cfg):
+            learned.rebuild(cfg)
+    with steps.step("nudges"):
+        rules = queues.pending(cfg, queues.RULES)
+        nudges = [
+            candidates.rules_nudge(rules),
+            candidates.import_nudge([*rules, *queues.pending(cfg, queues.SELF)]),
+            candidates.threads_nudge(queues.pending(cfg, queues.THREADS)),
+        ]
     return [inject.context_block([n]) for n in nudges if n]
 
 
@@ -136,9 +139,11 @@ def session_context(
     sid = str(payload.get("session_id") or "")
     cwd = payload_cwd(payload)
     source = str(payload.get("source") or "startup")[:20]
-    prune.prune_state(cfg)
+    with steps.step("prune"):
+        prune.prune_state(cfg)
     refresh_plugin_root(cfg)
-    seg = ledgerio.fold(cfg, sid)
+    with steps.step("fold"):
+        seg = ledgerio.fold(cfg, sid)
     found = repos.repos_for(cfg, [cwd])
     start: dict[str, Any] = {
         "ev": "start",
@@ -158,7 +163,8 @@ def session_context(
     if compact:
         ledgerio.record(cfg, seg, {"ev": "packs_reset"})
         topicsio.reset(cfg, sid)
-    previous = None if compact else stubs.stub_ended_segments(cfg, sid)
+    with steps.step("stub_pass"):
+        previous = None if compact else stubs.stub_ended_segments(cfg, sid)
     lines = [segment_line(sid), f"Juno vault: {cfg.vault}."]
     if previous:
         lines.append(
@@ -167,18 +173,22 @@ def session_context(
             )
         )
     if not compact:
-        lines.append(hook_error_line(cfg))
-        lines.append(weekly_report_line(cfg))
-        lines.append(stalefix_line(cfg))
+        with steps.step("notices"):
+            lines.append(hook_error_line(cfg))
+            lines.append(weekly_report_line(cfg))
+            lines.append(stalefix_line(cfg))
     blocks = [inject.context_block(lines)]
     if not compact:
-        blocks.append(topicsio.general_block(cfg))
+        with steps.step("general"):
+            blocks.append(topicsio.general_block(cfg))
     blocks += extra_blocks(cfg, source)
     if self_injected(cfg, sid):
         blocks.append(selfio.model_block(cfg))
     left = budget - sum(len(b) + 2 for b in blocks)
-    blocks.append(start_context(cfg, view, seg, found, cwd, left))
-    status.update(cfg, seg)
+    with steps.step("pack"):
+        blocks.append(start_context(cfg, view, seg, found, cwd, left))
+    with steps.step("status"):
+        status.update(cfg, seg)
     return "\n\n".join(b for b in blocks if b)
 
 
@@ -196,7 +206,8 @@ def handle(payload: dict[str, Any], cfg: config.Config) -> dict[str, Any] | None
         return None
     view = DiskVault(cfg)
     cap = cfg.get_int("caps", "hook_output_chars")
-    rules = rules_text(cfg, view)
+    with steps.step("rules"):
+        rules = rules_text(cfg, view)
     context = session_context(payload, cfg, view, cap - len(rules) - 2)
     text = inject.fit_blocks([rules, context], cap)
     return hookcore.context_output("SessionStart", text) if text else None

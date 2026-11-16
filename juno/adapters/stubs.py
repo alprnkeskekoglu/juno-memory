@@ -3,7 +3,7 @@ import os
 import time
 
 from juno import config
-from juno.adapters import cardjob, fs, gate, ledgerio, store
+from juno.adapters import cardjob, fs, gate, ledgerio, steps, store
 from juno.core import routing, vaultfmt
 from juno.core.errors import Refused
 from juno.core.ledger import Segment
@@ -72,6 +72,8 @@ def stub_ended_segments(
     pass_started = time.time()
     newest: tuple[Segment, list[str]] | None = None
     late = 0
+    waiting: set[str] = set()
+    folded: dict[str, Segment] = {}
     quiet = cfg.get_int("thresholds", "stub_quiet_seconds")
     for sid in ledgerio.ledger_ids(cfg):
         if sid == current_sid:
@@ -81,14 +83,18 @@ def stub_ended_segments(
             continue
         if now - stamp < quiet or cardjob.job_active(cfg, sid):
             pending.add(sid)
+            waiting.add(sid)
             continue
-        seg = ledgerio.fold(cfg, sid)
+        seg = folded[sid] = ledgerio.fold(cfg, sid)
         if not cardjob.needs_stub(seg):
             continue
-        if late < LATE_RUNS_PER_PASS and cardjob.late_run(cfg, seg):
-            late += 1
-            pending.add(sid)
-            continue
+        if late < LATE_RUNS_PER_PASS:
+            with steps.step("late_runs"):
+                ran = cardjob.late_run(cfg, seg)
+            if ran:
+                late += 1
+                pending.add(sid)
+                continue
         paths = write_stub(cfg, seg, now)
         if not paths:
             pending.add(sid)
@@ -101,7 +107,10 @@ def stub_ended_segments(
         if newest is None or (seg.last_t or 0) > (newest[0].last_t or 0):
             newest = (seg, paths)
     retry = sorted(
-        p for p in pending if p != current_sid and cardjob.needs_stub(ledgerio.fold(cfg, p))
+        p
+        for p in pending
+        if p != current_sid
+        and (p in waiting or cardjob.needs_stub(folded.get(p) or ledgerio.fold(cfg, p)))
     )
     marker = {"t": pass_started, "pending": [*retry, current_sid]}
     store.state_dir(cfg)
