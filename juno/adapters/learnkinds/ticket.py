@@ -2,7 +2,7 @@ from typing import Any
 
 from juno.adapters import gate, taskio
 from juno.adapters.learnkinds.base import Ctx, status_of, today
-from juno.core import taskdigest, ticketwork, vaultfmt, writegate
+from juno.core import taskdigest, ticketdigest, ticketwork, vaultfmt, writegate
 from juno.core.digest import clip
 from juno.core.errors import Refused
 from juno.core.taskrows import Row
@@ -19,7 +19,9 @@ EVIDENCE = "engine: ticket run"
 def keys_of(ctx: Ctx) -> list[str]:
     if ctx.cfg.get_int("handoff", "ticket_chars") <= 0:
         return []
-    return ticketwork.worked(ctx.seg, ticketwork.has_pr(ctx.digest or ""))
+    return ticketwork.worked(
+        ctx.seg, ticketwork.has_pr(ctx.digest or ""), ticketdigest.blocks_of(ctx.digest or "")
+    )
 
 
 def instructions(ctx: Ctx) -> list[str]:

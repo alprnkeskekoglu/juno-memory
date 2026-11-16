@@ -273,12 +273,12 @@ def ticket_block(seg: Segment, facts: Facts, chars: int) -> str:
     """The per-ticket block, outside the `digest_chars` budget so the other sections keep theirs."""
     if chars <= 0:
         return ""
-    keys = ticketwork.worked(seg, any(b.startswith("PR ") for b in facts.boundaries))
-    return redact(
-        ticketdigest.block(
-            keys, ticketdigest.merge(facts.calls, [(e.kind, e.text) for e in facts.events]), chars
-        )
-    )
+    pr = any(b.startswith("PR ") for b in facts.boundaries)
+    events = ticketdigest.merge(facts.calls, [(e.kind, e.text) for e in facts.events])
+    typed = {
+        k: ticketdigest.block_for(k, events, chars) for k in seg.tickets if seg.typed_tickets[k]
+    }
+    return redact(ticketdigest.block(ticketwork.worked(seg, pr, typed), events, chars))
 
 
 def build_digest(
