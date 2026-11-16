@@ -1,7 +1,7 @@
 import re
 import unicodedata
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -134,10 +134,9 @@ def measure(texts: Sequence[str]) -> Measures:
     )
 
 
-def has_name(text: str) -> bool:
-    """A mention or a capitalised word inside a sentence: left out of examples, never masked."""
-    if re.search(r"@\w", text):
-        return True
+def name_words(text: str) -> list[str]:
+    """Bare words that look like a name: capitalised inside a sentence."""
+    found: list[str] = []
     for line in text.splitlines():
         parts = line.split()
         for i, word in enumerate(parts[1:], 1):
@@ -145,26 +144,45 @@ def has_name(text: str) -> bool:
             if parts[i - 1][-1:] in ".!?:" or len(bare) < 2:
                 continue
             if bare[0].isupper() and bare[1:].islower():
-                return True
-    return False
+                found.append(bare)
+    return found
 
 
-def clean_example(text: str, prefixes: Sequence[str] | None) -> bool:
+def has_name(text: str) -> bool:
+    """A mention or a capitalised word inside a sentence: left out of examples, never masked."""
+    return re.search(r"@\w", text) is not None or bool(name_words(text))
+
+
+def name_tokens(text: str) -> set[str]:
+    """Casefolded names in a text: @mention handles and mid-sentence capitalised words."""
+    found = {m.casefold() for m in re.findall(r"@(\w+)", text)}
+    found |= {w.casefold() for w in name_words(text) if w.isalpha()}
+    return {t for t in found if len(t) >= 3}
+
+
+def clean_example(
+    text: str, prefixes: Sequence[str] | None, names: Collection[str] = frozenset()
+) -> bool:
     return (
         0 < len(text) <= EXAMPLE_CHARS
         and privacy.scan(text, prefixes) is None
         and not has_name(text)
+        and not any(w in names for w in WORD_RE.findall(text.casefold()))
     )
 
 
 def build(
-    samples: Sequence[Mapping[str, Any]], reg: str, min_samples: int, prefixes: Sequence[str] | None
+    samples: Sequence[Mapping[str, Any]],
+    reg: str,
+    min_samples: int,
+    prefixes: Sequence[str] | None,
+    names: Collection[str] = frozenset(),
 ) -> Profile:
     mine = [s for s in samples if s.get("reg") == reg and s.get("by") in COUNTED]
     texts = [str(s.get("text") or "") for s in mine]
     ready = len(texts) >= min_samples
     users = [str(s.get("text") or "") for s in mine if s.get("by") == "user"]
-    picks = [t for t in reversed(users) if clean_example(t, prefixes)][:MAX_EXAMPLES]
+    picks = [t for t in reversed(users) if clean_example(t, prefixes, names)][:MAX_EXAMPLES]
     return Profile(reg, len(texts), ready, measure(texts) if ready else None, tuple(picks))
 
 

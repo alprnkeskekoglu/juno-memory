@@ -16,7 +16,7 @@ thresholds.meaningful_tool_calls thresholds.meaningful_user_turns thresholds.dir
 thresholds.dirty_tool_calls thresholds.reminder_spacing_turns thresholds.active_ticket_days
 thresholds.thread_stale_days thresholds.stale_days thresholds.profile_min_cards thresholds.stub_quiet_seconds
 thresholds.hook_error_repeat thresholds.hook_error_window_hours retention.ledger_days
-retention.backup_days retention.shadow_days retention.asks_days retention.usage_days retention.arm_segments_days retention.error_log_bytes privacy.allow_prefixes shadow.enabled shadow.budget_ms
+retention.backup_days retention.shadow_days retention.asks_days retention.usage_days retention.arm_segments_days retention.error_log_bytes privacy.allow_prefixes privacy.names shadow.enabled shadow.budget_ms
 handoff.mode handoff.model handoff.budget_usd handoff.daily_budget_usd handoff.min_run_usd
 handoff.timeout_seconds handoff.digest_chars handoff.ticket_chars handoff.extract handoff.claude_bin handoff.launch_path
 threads.scan threads.stale_days threads.gh threads.gh_owner threads.gh_calls
@@ -26,7 +26,7 @@ stale.auto_fix stale.weekday stale.start_hour stale.end_hour stale.model stale.f
 stale.run_budget_usd stale.timeout_seconds stale.max_files stale.max_changes_per_file
 stale.max_changes_per_run stale.max_lines_per_file stale.branch_order stale.fetch
 stale.busy_minutes voice.enabled voice.outward_tools voice.draft_cues voice.formal_cues
-voice.critique_cues voice.min_samples voice.budget_chars
+voice.voice_cues voice.critique_cues voice.min_samples voice.budget_chars
 """.split()
 
 

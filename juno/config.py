@@ -25,7 +25,10 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "projects": [],
         "no_ticket_branches": ["develop", "master", "main", "HEAD"],
     },
-    "privacy": {"allow_prefixes": []},
+    "privacy": {
+        "allow_prefixes": [],
+        "names": [],
+    },
     "repos": {
         "roots": ["~/projects", "~/code", "~/src"],
         "overview_roots": [],
@@ -136,6 +139,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         ],
         "draft_cues": [],
         "formal_cues": [],
+        "voice_cues": [],
         "critique_cues": [],
         "min_samples": 15,
         "budget_chars": 2400,
