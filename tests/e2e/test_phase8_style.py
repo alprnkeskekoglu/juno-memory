@@ -102,7 +102,7 @@ DECIDED = "wrap the payment call in a retry loop with 5 attempts and get the pla
 
 SAMPLES = 5
 ROUNDS = 2
-WORKERS = 4
+WORKERS = 8
 Job = tuple[str, str]
 
 
@@ -196,7 +196,11 @@ def label(criterion: str, dose: str, index: int) -> str:
 
 @e2e
 class CharacterHoldsItsRules(Case):
-    """Criteria 1 and 3 of issue #35, judged, five replies per dose; the emoji checks stay."""
+    """Criteria 1 and 3 of issue #35, judged, five replies per dose.
+
+    The emoji regex covers the whole reply for criterion 1 and only the drafted message for
+    criterion 3 (inside judge.criterion3): Juno's own lines around a draft may carry emoji.
+    """
 
     def test_a_production_error_has_no_joke_or_emoji_at_any_dose(self) -> None:
         jobs = per_dose(INCIDENT)
@@ -209,12 +213,11 @@ class CharacterHoldsItsRules(Case):
 
     def test_a_drafted_outward_message_has_no_emoji_at_any_dose(self) -> None:
         jobs = per_dose(DRAFT)
-        for i, ((dose, _), (reply, verdict)) in enumerate(
+        for i, ((dose, _), (_, verdict)) in enumerate(
             zip(jobs, self.sampled("3", jobs), strict=True)
         ):
             with self.subTest(dose=dose, sample=i % SAMPLES):
                 self.check(judge.criterion3(verdict), label("3", dose, i))
-                self.assertNotRegex(reply, JOKE_MARKS)
 
 
 @e2e
@@ -225,7 +228,8 @@ class HumourDoseOnRoutineReplies(Case):
         self,
     ) -> None:
         jobs = [(dose, prompt) for dose in STYLE_CHOICES for prompt in ROUTINE]
-        rounds = [[v for _, v in self.sampled("2,6", jobs)] for _ in range(ROUNDS)]
+        found = [v for _, v in self.sampled("2,6", jobs * ROUNDS)]
+        rounds = [found[r * len(jobs) : (r + 1) * len(jobs)] for r in range(ROUNDS)]
         for number, verdicts in enumerate(rounds, 1):
             by_dose = {
                 dose: [v for (d, _), v in zip(jobs, verdicts, strict=True) if d == dose]
@@ -241,33 +245,46 @@ class HumourDoseOnRoutineReplies(Case):
 
 @e2e
 class FirstReplyCase(Case):
-    """A real SessionStart injection in a repo with a seeded profile; the first reply is judged."""
+    """A real SessionStart injection in a repo with a seeded profile; the first reply is judged.
+
+    Every sample gets its own sandbox (vault, state, config, repo root, projects dir), so the
+    samples run concurrently and no sample sees another one's state.
+    """
 
     def setUp(self) -> None:
         super().setUp()
-        done = harness.init_with_bin(self.sb)
-        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        with open(self.sb.config, "a", encoding="utf-8") as handle:
-            handle.write('\n[handoff]\nmode = "off"\n')
-        self.roots = os.path.join(self.sb.root, "projects")
-        self.repo = os.path.join(self.roots, "alpha")
-        os.makedirs(self.repo)
-        subprocess.run(["git", "-C", self.repo, "init", "-q", "-b", "main"], check=True)
-        self.write("projects/alpha.md", PROFILE)
-
-    def write(self, rel: str, text: str) -> None:
-        with open(os.path.join(self.sb.vault, *rel.split("/")), "w", encoding="utf-8") as handle:
-            handle.write(text)
+        self.card = False
 
     def seed_card(self) -> None:
-        stamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 86400))
-        self.write("handoffs/alpha.md", CARD.format(stamp=stamp, item=UNFINISHED))
+        self.card = True
+
+    def sample_box(self) -> tuple[Sandbox, str]:
+        sb = Sandbox()
+        done = harness.init_with_bin(sb)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        with open(sb.config, "a", encoding="utf-8") as handle:
+            handle.write('\n[handoff]\nmode = "off"\n')
+        repo = os.path.join(sb.root, "projects", "alpha")
+        os.makedirs(repo)
+        subprocess.run(["git", "-C", repo, "init", "-q", "-b", "main"], check=True)
+        files = {"projects/alpha.md": PROFILE}
+        if self.card:
+            stamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 86400))
+            files["handoffs/alpha.md"] = CARD.format(stamp=stamp, item=UNFINISHED)
+        for rel, text in files.items():
+            with open(os.path.join(sb.vault, *rel.split("/")), "w", encoding="utf-8") as handle:
+                handle.write(text)
+        return sb, repo
 
     def first_reply(self, dose: str, prompt: str) -> tuple[str, str]:
-        env = harness.claude_env(self.sb, True)
-        env["JUNO_REPO_ROOTS"] = self.roots
-        env["JUNO_CLAUDE_PROJECTS"] = os.path.join(self.sb.root, "claude-projects")
-        run = self.attempt(dose, prompt, env=env, cwd=self.repo)
+        sb, repo = self.sample_box()
+        try:
+            env = harness.claude_env(sb, True)
+            env["JUNO_REPO_ROOTS"] = os.path.dirname(repo)
+            env["JUNO_CLAUDE_PROJECTS"] = os.path.join(sb.root, "claude-projects")
+            run = self.attempt(dose, prompt, env=env, cwd=repo)
+        finally:
+            sb.cleanup()
         self.assertEqual(harness.juno_hook_failures(run), [])
         contexts = harness.juno_contexts(run, "SessionStart")
         self.assertEqual(len(contexts), 1, run.raw[:2000])
@@ -291,14 +308,14 @@ class SessionStartGreetsWithOneUnfinishedItem(FirstReplyCase):
     def test_an_injected_unfinished_item_is_named_once(self) -> None:
         self.seed_card()
         jobs = per_dose(FIRST)
-        found = self.sampled("4", jobs, self.with_card, 1, items=[UNFINISHED])
+        found = self.sampled("4", jobs, self.with_card, items=[UNFINISHED])
         for i, ((dose, _), (_, verdict)) in enumerate(zip(jobs, found, strict=True)):
             with self.subTest(dose=dose, sample=i % SAMPLES):
                 self.check(judge.criterion4(verdict, True), label("4 with", dose, i))
 
     def test_no_unfinished_item_is_invented_when_none_is_injected(self) -> None:
         jobs = per_dose(FIRST)
-        found = self.sampled("4", jobs, self.without_card, 1, items=[])
+        found = self.sampled("4", jobs, self.without_card, items=[])
         for i, ((dose, _), (_, verdict)) in enumerate(zip(jobs, found, strict=True)):
             with self.subTest(dose=dose, sample=i % SAMPLES):
                 self.check(judge.criterion4(verdict, False), label("4 none", dose, i))
@@ -311,7 +328,7 @@ class SeriousFirstMessageSkipsTheGreeting(FirstReplyCase):
     def test_a_production_error_as_the_first_message_calms_first_without_a_greeting(self) -> None:
         self.seed_card()
         jobs = per_dose(INCIDENT)
-        found = self.sampled("11", jobs, self.with_card, 1, items=[UNFINISHED])
+        found = self.sampled("11", jobs, self.with_card, items=[UNFINISHED])
         for i, ((dose, _), (_, verdict)) in enumerate(zip(jobs, found, strict=True)):
             with self.subTest(dose=dose, sample=i % SAMPLES):
                 self.check(judge.criterion11(verdict), label("11", dose, i))

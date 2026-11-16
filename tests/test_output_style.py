@@ -77,9 +77,19 @@ class StyleFiles(unittest.TestCase):
             "run on claude",
             "user's own voice",
             "own format",
+            "except in the first reply of a session: it opens with the greeting",
+            "unfinished item before the answer, unless the first message is a serious moment",
+            "plan has a flaw, the reply first says plainly that the plan is wrong and why",
+            "then offers the alternative, and only after that writes any plan",
         ):
             with self.subTest(needle=needle):
                 self.assertIn(needle, text)
+
+    def test_normal_and_playful_doses_say_how_often_a_routine_reply_jokes(self) -> None:
+        dose = {name: read_style(name)[1][-1] for name in NAMES}
+        self.assertIn("usually carries one light joke or tease", dose["juno-normal"])
+        self.assertIn("at least one joke or tease and often two", dose["juno-playful"])
+        self.assertIn("You joke rarely", dose["juno-calm"])
 
     def test_text_names_no_company_person_or_plugin(self) -> None:
         for name in NAMES:
