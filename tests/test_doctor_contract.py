@@ -155,6 +155,12 @@ def ticket_rules(case: WriteCase) -> None:
     )
 
 
+def untriggered_knowledge(case: WriteCase) -> None:
+    case.put(
+        "knowledge/plain.md", "---\ntitle: Plain pipeline\nsources: [x]\n---\nThe pipeline runs.\n"
+    )
+
+
 PITFALL = "- {} · triggers: {} · evidence · 2026-11-01\n"
 
 
@@ -411,6 +417,15 @@ ROWS = (
         "juno thread pending",
         ("thread", "pending"),
         pending_thread,
+        lists=True,
+    ),
+    Row(
+        "triggers propose",
+        "juno triggers propose",
+        "knowledge",
+        "has no triggers",
+        ("triggers", "propose"),
+        untriggered_knowledge,
         lists=True,
     ),
     Row(

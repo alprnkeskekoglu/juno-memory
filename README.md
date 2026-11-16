@@ -73,7 +73,7 @@ The detached card run reads the session's own ledger and transcript (typed promp
 - open and closed **threads**;
 - for a ticket the session worked on, the facts of its **ticket file** (`tasks/<KEY>.md`: summary, acceptance criteria, work, tests, root cause), each line anchored in the session; nothing is written for a ticket that was only mentioned;
 - **rule candidates** (queued, never written to `rules/`) and backlog suggestions;
-- **trigger candidates** for a knowledge file the session read by hand that has no `triggers:` (proposed from its title and body, and from the words you typed, with a language preset); they sit in the same queue and reach the file only when you accept them with `juno rule accept`.
+- **trigger candidates** for a knowledge file the session read by hand that has no `triggers:` (proposed from its title and body, and from the words you typed, with a language preset); they sit in the same queue and reach the file only when you accept them with `juno rule accept`. `juno triggers propose` does the same once for every knowledge file without `triggers:` (own batch and limit, no model call); nothing is written until you accept.
 
 Each part is validated on its own, so a bad card drops only the card. A session that ends without a card gets a stub, filled in later. At the next SessionStart the candidates are offered once as a multiple-choice question; only the ones you pick become rules or closed threads.
 
@@ -192,7 +192,7 @@ To remove Juno, run `juno uninstall`. It reverts exactly what `init` changed in 
 
 - Start Claude Code in a project and work as usual. Juno only acts in interactive sessions; sessions run with `-p` or from scripts never read or write the vault.
 - Ask `/juno <question>` to search past work, or run `juno search <words>` in a terminal.
-- Teach it a durable preference with `juno rule add` (it requires `--quote`, a verbatim part of a prompt you typed). Other useful verbs: `juno recap`, `juno tasks`, `juno ideas`, `juno backlog`, `juno stale`. Run `juno --help` for all of them.
+- Teach it a durable preference with `juno rule add` (it requires `--quote`, a verbatim part of a prompt you typed). Other useful verbs: `juno recap`, `juno tasks`, `juno ideas`, `juno backlog`, `juno stale`, `juno triggers propose`. Run `juno --help` for all of them.
 - Put `[nosave]` as the first or last word of a message to keep that session out of the vault. Mentioned inside a sentence, in code or in pasted text it does nothing; Juno says so in that turn, and says once when the flag is set.
 - Look inside the vault. It is plain Markdown, and Obsidian opens it well.
 - Optional, off by default: the Juno output style, which makes the assistant introduce itself as Juno with one friendly, direct character (memory-aware, sources kept apart, answer first, no jokes in serious moments). `juno init` asks once in a terminal for the humour dose (calm, normal or playful), or set `"outputStyle"` to `juno:juno-calm`, `juno:juno-normal` or `juno:juno-playful` in `~/.claude/settings.json` and restart Claude Code. An old `juno:juno`, `juno:juno-witty`, `juno:juno-warm` or `juno:juno-mentor` value is retired: `juno migrate --style` renames it.

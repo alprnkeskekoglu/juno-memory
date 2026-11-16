@@ -21,8 +21,9 @@ def untriggered(files: Mapping[str, str], preset: str = "none") -> list[Check]:
                 "WARN",
                 "knowledge",
                 f"knowledge/{name} has no triggers: a matching call never injects it; the "
-                "session-end run proposes some after a session reads it, or add a `triggers:` "
-                "line to its front matter",
+                "session-end run proposes some after a session reads it, `juno triggers propose` "
+                "queues proposals (pending until you accept them) for every such file, or add a "
+                "`triggers:` line to its front matter",
             )
         )
     return out

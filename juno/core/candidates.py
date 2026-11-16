@@ -16,6 +16,8 @@ THREAD_TEXT_CHARS = 100
 DAY = 86400
 
 TRIGGERS_KIND = "triggers"
+PROPOSE_BATCH = "triggers-propose"
+PROPOSE_MAX = 200
 
 Item = dict[str, Any]
 
@@ -70,6 +72,32 @@ def add_triggers(
     return True
 
 
+def add_proposed_triggers(
+    queue: list[Item], rel: str, triggers: list[str], now: float, preset: str = "none"
+) -> str:
+    """Queue one `juno triggers propose` item (own batch and limit, not the ordinary cap):
+    "queued", "known" (the file ever had a proposal, pending or decided) or "over"."""
+    if any(is_triggers(i) and i.get("file") == rel and i.get("status") != "expired" for i in queue):
+        return "known"
+    if len([i for i in pending(queue) if in_proposal_batch(i)]) >= PROPOSE_MAX:
+        return "over"
+    queue.append(
+        {
+            "id": triggers_id(rel, triggers, preset),
+            "kind": TRIGGERS_KIND,
+            "file": rel,
+            "scope": rel,
+            "triggers": triggers,
+            "rule": f"add triggers to {rel}: {', '.join(triggers)}",
+            "source": "triggers-propose",
+            "batch": PROPOSE_BATCH,
+            "t": now,
+            "status": "pending",
+        }
+    )
+    return "queued"
+
+
 def thread_id(line: str) -> str:
     return digest_id("t", line.rstrip())
 
@@ -82,7 +110,7 @@ def prune(items: list[Item], now: float, keep_pending: bool = False) -> list[Ite
     kept: list[Item] = []
     for item in items:
         pending = item.get("status") == "pending"
-        keep = keep_pending or in_import_batch(item)  # an import batch waits for its one question
+        keep = keep_pending or in_import_batch(item) or in_proposal_batch(item)  # they wait for you
         if pending and not keep and now - number(item.get("t")) > PENDING_DAYS * DAY:
             item.update(status="expired", decided_t=now)
             pending = False
@@ -100,8 +128,12 @@ def in_import_batch(item: Item) -> bool:
     return item.get("batch") == nativememory.BATCH
 
 
+def in_proposal_batch(item: Item) -> bool:
+    return item.get("batch") == PROPOSE_BATCH
+
+
 def ordinary_pending(items: list[Item]) -> list[Item]:
-    return [i for i in pending(items) if not in_import_batch(i)]
+    return [i for i in pending(items) if not in_import_batch(i) and not in_proposal_batch(i)]
 
 
 def add_rules(
@@ -219,7 +251,7 @@ def chosen(sources: list[tuple[str, str]], cid: str, preset: str = "none") -> bo
 
 
 def rules_nudge(items: list[Item]) -> str:
-    items = [i for i in items if not in_import_batch(i)]
+    items = [i for i in items if not in_import_batch(i) and not in_proposal_batch(i)]
     if not items:
         return ""
     lines = [
