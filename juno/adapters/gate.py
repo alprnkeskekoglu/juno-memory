@@ -28,9 +28,9 @@ def scan_text(cfg: config.Config, text: str, label: str) -> str:
     return privacy.check(value, label, prefixes(cfg))
 
 
-def scan_line(cfg: config.Config, text: str, label: str) -> str:
+def scan_line(cfg: config.Config, text: str, label: str, limit: int = writegate.LINE_MAX) -> str:
     value = privacy.clean_line(text, label, prefixes(cfg))
-    writegate.check_line(value, label)
+    writegate.check_line(value, label, limit)
     return value
 
 

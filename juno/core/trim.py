@@ -57,7 +57,7 @@ def list_items(lines: list[str]) -> list[str]:
     return found
 
 
-def keep_items(items: list[str], room: int) -> list[str]:
+def keep_items(items: list[str], room: int, cut_long: bool = False) -> list[str]:
     # Lists grow by appending, so the newest items sit at the end: fill from
     # the end and return the kept items in their original display order.
     kept: list[str] = []
@@ -67,13 +67,18 @@ def keep_items(items: list[str], room: int) -> list[str]:
             if not kept and not item.startswith("- "):
                 cut = cut_words(item, room)
                 kept = [cut] if cut else []
+            elif cut_long:
+                cut = cut_words(item, room - used - 1)
+                kept += [cut] if cut else []
             break
         kept.append(item)
         used += 1 + len(item)
     return kept[::-1]
 
 
-def trim_body(body: str, limit: int, source: str, ranking: Ranking | None = None) -> str:
+def trim_body(
+    body: str, limit: int, source: str, ranking: Ranking | None = None, cut_long: bool = False
+) -> str:
     if len(body) <= limit:
         return body
     room = limit - len(TRIM_MARKER.format(len(body), source))
@@ -82,7 +87,7 @@ def trim_body(body: str, limit: int, source: str, ranking: Ranking | None = None
         kept = card_lines(lines, room)
     else:
         items = list_items(lines)
-        kept = keep_items(items, room)
+        kept = keep_items(items, room, cut_long)
         picked = rank.ranked_indices(items, room, ranking.query) if ranking else None
         if ranking and picked:
             first = len(items) - len(kept)
@@ -162,7 +167,7 @@ def drop_cut(
             break
         dropped.append(max(bad, key=lambda i: priority.index(i) if i in priority else -1))
     return [
-        f"[{title}]\n{trim_body(body, shares[i], section_source(title), ranking)}"
+        f"[{title}]\n{trim_body(body, shares[i], section_source(title), ranking, i in priority)}"
         for i, (title, body) in enumerate(sections)
         if i not in dropped
     ]

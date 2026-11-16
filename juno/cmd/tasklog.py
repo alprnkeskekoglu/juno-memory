@@ -7,7 +7,7 @@ from juno import config
 from juno.adapters import checks, gate, taskio, vault
 from juno.cmd import backlog, write
 from juno.cmd.common import say
-from juno.core import taskdigest, taskfile
+from juno.core import taskdigest, taskfile, writegate
 from juno.core.errors import Refused
 from juno.core.ledger import Segment
 
@@ -29,7 +29,7 @@ def clean_row(cfg: config.Config, section: object, key: object, line: object) ->
     taskdigest.check_section(section)
     taskdigest.check_key(key)
     taskdigest.check_text(line)
-    return Row(section, key, gate.scan_line(cfg, line, "line"))
+    return Row(section, key, gate.scan_line(cfg, line, "line", writegate.TASK_LINE_MAX))
 
 
 def parse_batch(cfg: config.Config, raw: str) -> list[Row]:

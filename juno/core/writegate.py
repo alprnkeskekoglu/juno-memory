@@ -7,6 +7,7 @@ from juno.core.errors import Refused
 RUN_MAX = 100
 LINE_MIN = 8
 LINE_MAX = 300
+TASK_LINE_MAX = 1000
 NEAR_RATIO = 0.88
 TEXT_MAX = {"note": 2000, "idea": 1500, "card": 1500, "procedure": 2000}
 FORGET_DENIED = ("rules", "protocol", "_generated", "archive", ".git")
@@ -34,9 +35,9 @@ def check_length(text: str, kind: str) -> None:
         raise Refused(f"{kind} text is longer than {TEXT_MAX[kind]} characters")
 
 
-def check_line(text: str, label: str) -> None:
-    if not LINE_MIN <= len(text) <= LINE_MAX:
-        raise Refused(f"{label} must be {LINE_MIN}-{LINE_MAX} characters")
+def check_line(text: str, label: str, limit: int = LINE_MAX) -> None:
+    if not LINE_MIN <= len(text) <= limit:
+        raise Refused(f"{label} must be {LINE_MIN}-{limit} characters")
 
 
 def duplicate(lines: list[str], text: str, preset: str) -> tuple[int, bool] | None:
