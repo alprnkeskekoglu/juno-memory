@@ -7,6 +7,7 @@ to the file until the user accepts the candidate (`juno rule accept`).
 """
 
 import json
+from collections import Counter
 from typing import Any
 
 from juno import config
@@ -52,6 +53,29 @@ def read_files(ctx: Ctx) -> list[tuple[float, str]]:
     return [(stamp, rel) for rel, stamp in first.items()]
 
 
+def vocab(cfg: config.Config) -> triggerprop.Vocab:
+    """Ticket prefixes of `[jira] prefixes` and the tokens found in more than a quarter of the
+    visible knowledge files. Both proposal paths filter with it."""
+    preset = cfg.get_str("language", "preset")
+    prefixes = tuple(cfg.get_list("jira", "prefixes"))
+    view = vaultview.DiskVault(cfg)
+    counts: Counter[str] = Counter()
+    total = 0
+    for name in view.names("knowledge"):
+        rel = f"knowledge/{name}"
+        text = view.read(rel)
+        if not topics.KNOWLEDGE_RE.match(name) or view.hidden(rel, text):
+            continue
+        fields, body = vaultfmt.parse_frontmatter(text)
+        total += 1
+        counts.update(
+            triggerprop.tokens(
+                str(fields.get("title") or ""), body, preset, triggerprop.Vocab(prefixes)
+            )
+        )
+    return triggerprop.Vocab(prefixes, triggerprop.common_tokens(counts, total))
+
+
 def proposals(ctx: Ctx) -> list[tuple[str, list[str]]]:
     cfg = ctx.cfg
     preset = cfg.get_str("language", "preset")
@@ -59,14 +83,16 @@ def proposals(ctx: Ctx) -> list[tuple[str, list[str]]]:
     retired = vaultview.read_retired(cfg.state)
     typed = typed_prompts(cfg, ctx.seg.sid)
     found: list[tuple[str, list[str]]] = []
-    for stamp, rel in read_files(ctx):
+    reads = read_files(ctx)
+    words = vocab(cfg) if reads else triggerprop.Vocab()
+    for stamp, rel in reads:
         text = vault_text(cfg, rel)
         if not text or vaultfmt.hidden_reason(rel, text, retired):
             continue
         fields, body = vaultfmt.parse_frontmatter(text)
         have = topics.field_list(fields.get("triggers"), preset)
         title = str(fields.get("title") or "")
-        new = [] if have else triggerprop.propose(title, body, preset)
+        new = [] if have else triggerprop.propose(title, body, preset, words)
         said = said_before(typed, stamp)
         room = max(topics.MAX_TRIGGERS - len(have) - len(new), 0)
         extra = triggerprop.user_forms(said, f"{title}\n{body}", [*have, *new], preset, stopwords)

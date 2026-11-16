@@ -118,6 +118,19 @@ class TriggerCandidates(ExtractCase):
         self.assertEqual(self.pending(), [])
         self.assertTrue(topics.build_entries([("knowledge/queue.md", text)]))
 
+    def test_session_end_candidate_drops_dates_and_ticket_ids(self) -> None:
+        self.write(
+            "knowledge/queue.md",
+            KNOWLEDGE + "Seen on 2026-11-15 in ABC-123456, 2026-11-15 and ABC-123456 again.\n",
+        )
+        self.start()
+        self.read_by_hand()
+        self.ext()
+        (item,) = self.pending()
+        self.assertIn("retry-queue", item["triggers"])
+        for token in ("2026-11-15", "abc-123456"):
+            self.assertNotIn(token, item["triggers"])
+
     def test_rejected_candidate_writes_nothing_and_is_not_proposed_again(self) -> None:
         self.write("knowledge/queue.md", KNOWLEDGE)
         self.start()
