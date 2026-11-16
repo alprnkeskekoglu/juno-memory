@@ -368,7 +368,7 @@ def commit_label() -> str:
     return (head[0] if head else "unknown") + ("+dirty" if dirty else "")
 
 
-def update_e2e_doc(outcomes: dict[str, str]) -> None:
+def update_e2e_doc(outcomes: dict[str, str], commit: str = "") -> None:
     path = os.path.join(ROOT, "docs", "e2e.md")
     if not os.path.exists(path):
         return
@@ -383,7 +383,7 @@ def update_e2e_doc(outcomes: dict[str, str]) -> None:
             else ("PASS" if "PASS" in (previous, status) else "SKIP")
         )
     today = datetime.date.today().isoformat()
-    commit = commit_label()
+    commit = commit or commit_label()
     lines = []
     with open(path, encoding="utf-8") as handle:
         for line in handle.read().splitlines():
@@ -397,7 +397,9 @@ def update_e2e_doc(outcomes: dict[str, str]) -> None:
         handle.write("\n".join(lines) + "\n")
 
 
-def run_e2e(pattern: str) -> int:
+def run_e2e(pattern: str, outcomes_path: str = "") -> int:
+    """Run the e2e cases; with outcomes_path, save the outcomes there instead of the doc."""
+    commit = commit_label()
     all_outcomes: dict[str, str] = {}
     cost = 0.0
     ok = True
@@ -412,8 +414,26 @@ def run_e2e(pattern: str) -> int:
             print(f"--- {module}\n{item['report']}")
     counts = {s: list(all_outcomes.values()).count(s) for s in ("PASS", "FAIL", "SKIP")}
     print(f"e2e: {counts} total cost ${cost:.4f}")
-    update_e2e_doc(all_outcomes)
+    if outcomes_path:
+        with open(outcomes_path, "w", encoding="utf-8") as handle:
+            json.dump({"commit": commit, "outcomes": all_outcomes}, handle)
+    else:
+        update_e2e_doc(all_outcomes, commit)
     return 0 if ok else 1
+
+
+def record_e2e(paths: list[str]) -> int:
+    """Rewrite docs/e2e.md once from outcome files saved by concurrent --e2e --outcomes runs."""
+    saved = []
+    for path in paths:
+        with open(path, encoding="utf-8") as handle:
+            saved.append(json.load(handle))
+    commits = {str(s["commit"]) for s in saved}
+    if len(commits) != 1:
+        print(f"e2e record: the runs are at different commits {sorted(commits)}")
+        return 1
+    update_e2e_doc({k: v for s in saved for k, v in s["outcomes"].items()}, commits.pop())
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -425,6 +445,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("-j", dest="jobs", type=int, default=min(8, os.cpu_count() or 4))
     parser.add_argument("--importtime", action="store_true")
     parser.add_argument("--e2e", action="store_true", help="run the end-to-end cases serially")
+    parser.add_argument("--outcomes", default="", help="with --e2e, save outcomes, skip the doc")
+    parser.add_argument("--record", nargs="+", help="rewrite docs/e2e.md from --outcomes files")
     parser.add_argument("--install-hooks", action="store_true")
     parser.add_argument("--worker", help=argparse.SUPPRESS)
     parser.add_argument("--ids", help=argparse.SUPPRESS)
@@ -438,8 +460,10 @@ def main(argv: list[str] | None = None) -> int:
         return done.returncode
     if args.importtime:
         return importtime()
+    if args.record:
+        return record_e2e(args.record)
     if args.e2e:
-        return run_e2e(args.pattern)
+        return run_e2e(args.pattern, args.outcomes)
     modules = test_modules()
     label = "full"
     if args.mode == "changed":

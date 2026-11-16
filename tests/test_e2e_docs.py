@@ -1,4 +1,5 @@
 import ast
+import json
 import os
 import tempfile
 import unittest
@@ -102,6 +103,39 @@ class Rewrite(unittest.TestCase):
             self.assertEqual(by_case[untouched][4], before_by_case[untouched][4])
             for old, new in zip(before, after, strict=True):
                 self.assertEqual((old[0], old[1], old[2], old[6]), (new[0], new[1], new[2], new[6]))
+
+    def test_record_writes_concurrent_outcomes_once_at_their_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            os.makedirs(os.path.join(tmp, "docs"))
+            target = os.path.join(tmp, "docs", "e2e.md")
+            with open(DOC, encoding="utf-8") as src, open(target, "w", encoding="utf-8") as dst:
+                dst.write(src.read())
+            saved = []
+            for i, (case, status) in enumerate(
+                (("CliLifecycle", "PASS"), ("ExportImport", "FAIL"))
+            ):
+                path = os.path.join(tmp, f"outcomes-{i}.json")
+                outcomes = {f"tests.e2e.test_phase1.{case}.test_x": status}
+                with open(path, "w", encoding="utf-8") as handle:
+                    json.dump({"commit": "abc1234", "outcomes": outcomes}, handle)
+                saved.append(path)
+            with (
+                mock.patch.object(run, "ROOT", tmp),
+                mock.patch.object(run, "commit_label", lambda: "fff0000+dirty"),
+            ):
+                self.assertEqual(run.main(["--record", *saved]), 0)
+            by_case = {r[1]: r for r in rows(target)[1:]}
+            for case, status in (("CliLifecycle", "PASS"), ("ExportImport", "FAIL")):
+                row = by_case[f"tests/e2e/test_phase1.py::{case}"]
+                self.assertEqual((row[4], row[5]), (status, "abc1234"))
+            with open(saved[1], "w", encoding="utf-8") as handle:
+                json.dump({"commit": "def5678", "outcomes": {}}, handle)
+            with mock.patch.object(run, "ROOT", tmp):
+                with open(target, encoding="utf-8") as handle:
+                    kept = handle.read()
+                self.assertEqual(run.main(["--record", *saved]), 1)
+                with open(target, encoding="utf-8") as handle:
+                    self.assertEqual(handle.read(), kept)
 
 
 if __name__ == "__main__":
