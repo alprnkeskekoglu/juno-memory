@@ -138,7 +138,10 @@ class Case(unittest.TestCase):
         return run
 
     def ask(self, dose: str, prompt: str) -> str:
-        return self.run_reply(dose, prompt).result
+        try:
+            return self.run_reply(dose, prompt).result
+        except subprocess.TimeoutExpired:
+            return self.run_reply(dose, prompt).result
 
     def judged(
         self, criterion: str, dose: str, prompt: str, reply: str, **kw: Any
