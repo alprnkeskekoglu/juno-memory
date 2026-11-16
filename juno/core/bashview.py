@@ -147,3 +147,14 @@ def bash_view(command: str) -> tuple[str, frozenset[str]]:
     """The command's own words (paths aside) and its executables."""
     text, execs, _ = bash_parts(command)
     return text, execs
+
+
+def outward_view(command: str) -> str:
+    """The command as its own tokens for matching outward-call patterns: heredoc bodies are
+    dropped and a quoted argument with spaces (prose) becomes `_`; flags, words and pipeline
+    order stay, so `gh pr review ... --body _` still matches a `--body` pattern."""
+    parts = [
+        " ".join("_" if any(ch.isspace() for ch in t) else t for t in tokens)
+        for tokens in command_segments(command)
+    ]
+    return " ; ".join(parts)

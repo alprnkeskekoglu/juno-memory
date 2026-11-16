@@ -148,6 +148,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "formal_targets": [
             "Bash(*gh issue create*)",
             "Bash(*gh pr create*)",
+            "Bash(*gh issue comment*)",
             "mcp__*__*create*issue*",
             "mcp__*__*update*issue*",
             "mcp__*__*edit*issue*",
