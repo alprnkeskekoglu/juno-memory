@@ -369,6 +369,125 @@ class Inject(VoiceCase):
         self.assertIn("Register: voice", self.prompt("rahat"))
 
 
+class Targets(VoiceCase):
+    LONG = "- aaa\n- bbb\n- ccc " + "y" * 120
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.seed([f"yo merged {i}" for i in range(15)], "voice")
+        self.seed([f"Thank you, the change {i} is merged." for i in range(15)], "formal")
+        self.prompt("hello there")
+
+    def check(self, tool: str, tool_in: dict[str, Any]) -> str:
+        out = self.hook(
+            "pre_tool_use", self.payload("pre_tool_use", tool_name=tool, tool_input=tool_in)
+        )
+        return self.context(out)
+
+    def bash(self, command: str) -> str:
+        return self.check("Bash", {"command": command})
+
+    def formal_calls(self) -> list[tuple[str, dict[str, Any]]]:
+        path = os.path.join(self.sb.root, "body.md")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(self.LONG)
+        return [
+            ("Bash", {"command": f"gh issue create --title t --body-file {path}"}),
+            ("Bash", {"command": f"gh pr create --title t --body '{self.LONG}'"}),
+            ("mcp__tracker__create_issue", {"description": self.LONG}),
+            ("mcp__tracker__add_comment", {"body": self.LONG}),
+        ]
+
+    def voice_calls(self) -> list[tuple[str, dict[str, Any]]]:
+        return [
+            ("Bash", {"command": f"gh pr comment 4 --body '{self.LONG}'"}),
+            ("Bash", {"command": f"gh pr review 4 --comment --body '{self.LONG}'"}),
+            (TOOL, {"text": self.LONG}),
+        ]
+
+    def test_code_host_bodies_and_tracker_writes_default_to_formal(self) -> None:
+        for tool, tool_in in self.formal_calls():
+            with self.subTest(tool=tool, tool_in=tool_in):
+                self.assertIn("register formal", self.check(tool, tool_in))
+
+    def test_formal_default_reaches_the_collected_sample(self) -> None:
+        calls = self.formal_calls()
+        for n, (tool, tool_in) in enumerate(calls):
+            self.hook(
+                "post_tool_use",
+                self.payload(
+                    "post_tool_use",
+                    tool_name=tool,
+                    tool_input=tool_in,
+                    tool_response={},
+                    tool_use_id=f"t{n}",
+                ),
+            )
+        self.assertEqual([s["reg"] for s in self.events("voice")], ["formal"] * len(calls))
+
+    def test_pr_comments_review_notes_and_chat_default_to_voice(self) -> None:
+        for tool, tool_in in self.voice_calls():
+            with self.subTest(tool=tool):
+                self.assertIn("register voice", self.check(tool, tool_in))
+
+    def test_formal_cue_in_the_request_wins_over_a_voice_target(self) -> None:
+        self.prompt("write a message to him about the merge, formal")
+        self.assertIn("register formal", self.check(TOOL, {"text": self.LONG}))
+
+    def test_voice_cue_in_the_request_wins_over_a_formal_target(self) -> None:
+        self.prompt("write a comment for this issue, in my voice")
+        out = self.check("mcp__tracker__add_comment", {"body": self.LONG})
+        self.assertIn("register voice", out)
+
+    def test_formal_targets_config_replaces_the_default_list(self) -> None:
+        self.set_config('[voice]\nformal_targets = ["mcp__*__send*message*"]\n')
+        self.assertIn("register formal", self.check(TOOL, {"text": self.LONG}))
+        self.assertIn(
+            "register voice", self.bash(f"gh issue create --title t --body '{self.LONG}'")
+        )
+
+    def test_default_formal_targets_name_no_product_and_use_outward_syntax(self) -> None:
+        from juno import config
+
+        voice = config.DEFAULTS["voice"]
+        text = json.dumps(voice["formal_targets"]).casefold()
+        for word in ("slack", "jira", "atlassian", "linear", "github", *local_banned()):
+            self.assertNotIn(word, text)
+        for pattern in voice["formal_targets"]:
+            self.assertIn(pattern, voice["outward_tools"])
+
+
+class DraftRequest(VoiceCase):
+    def test_talk_about_registers_injects_nothing(self) -> None:
+        self.seed([f"yo merged {i}" for i in range(15)])
+        text = "tracker comment can be formal, but chat should stay in my voice"
+        self.assertEqual(self.prompt(text), "")
+        self.assertEqual(self.events("voice_ask"), [])
+
+    def test_write_verb_aimed_at_a_target_injects(self) -> None:
+        self.assertIn("Juno voice", self.prompt("write a tracker comment for this"))
+        self.assertIn("Juno voice", self.prompt("send him a quick note"))
+
+    def test_turkish_standing_preference_injects_nothing(self) -> None:
+        self.set_config('[language]\npreset = "tr"\n')
+        text = (
+            "her zaman rahat bir dille taslak hazırlasın ben formal olduğunu belirtirim bir şekilde"
+        )
+        self.assertNotIn("Juno voice", self.prompt(text))
+        self.assertNotIn("Juno voice", self.prompt("taslak hazırlasın"))
+        self.assertEqual(self.events("voice_ask"), [])
+
+    def test_turkish_requests_still_inject(self) -> None:
+        self.set_config('[language]\npreset = "tr"\n')
+        self.assertIn("Juno voice", self.prompt("şu issue'ya bir yorum yaz"))
+        self.assertIn("Juno voice", self.prompt("ona bir taslak hazırla"))
+
+    def test_standing_preference_does_not_switch_the_register(self) -> None:
+        self.set_config('[language]\npreset = "tr"\n')
+        self.prompt("ona bir mesaj yaz")
+        self.assertNotIn("Juno voice", self.prompt("hep rahat yaz, formal olursa ben söylerim"))
+
+
 class Check(VoiceCase):
     def test_long_bulleted_emoji_draft_gets_a_context_line_and_is_not_blocked(self) -> None:
         self.seed(["x" * 20 for _ in range(15)])

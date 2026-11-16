@@ -92,6 +92,7 @@ class Segment:
         self.cards: list[str] = []
         self.since_stop: list[str] = []
         self.voice_reg: str | None = None
+        self.voice_auto = False
         self.voice_samples: list[Record] = []
         self.voice_fixes: list[Record] = []
         self.rules_added = 0
@@ -295,11 +296,13 @@ class Segment:
 
     def on_voice_ask(self, rec: Record) -> None:
         self.voice_reg = str(rec.get("reg") or "voice")
+        self.voice_auto = bool(rec.get("auto"))
 
     def on_voice(self, rec: Record) -> None:
         self.voice_samples.append(rec)
         if self.voice_reg == "formal":
             self.voice_reg = "voice"
+            self.voice_auto = True
 
     def on_voice_fix(self, rec: Record) -> None:
         self.voice_fixes.append(rec)
