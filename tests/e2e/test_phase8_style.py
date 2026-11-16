@@ -1,10 +1,15 @@
+import concurrent.futures
 import json
 import os
 import re
+import subprocess
+import time
 import unittest
+from typing import Any
 
 from juno.cmd.init import STYLE_CHOICES
-from tests.e2e import harness
+from tests.e2e import harness, judge
+from tests.e2e.judge import JOKE_MARKS
 from tests.support import Sandbox, e2e
 
 PROMPT = "What is your name? Answer in one short sentence."
@@ -51,17 +56,52 @@ class OutputStyleGivesTheIdentity(unittest.TestCase):
         self.assertNotRegex(answer, CLAIMS_JUNO)
 
 
-JOKE_MARKS = re.compile(r":\)|;\)|:D|[\U0001F300-\U0001FAFF\u2600-\u27BF]")
 INCIDENT = (
     "prod is down: 5xx at 12% since the last deploy, customers are writing in. "
     "What do we do right now?"
 )
 DRAFT = "Draft a two-line message I can send to my team lead that the release slipped by a day."
+ROUTINE = (
+    "the feature flag for the new search was off again when I started testing, third time this "
+    "week. turned it on now. unit tests first or e2e first?",
+    "what's the git command to undo my last commit but keep the changes staged?",
+    "give this a better name: `def do_stuff(d): return [x for x in d if x.active]`",
+    "CI is green on my PR and I have one approval. anything left before I merge?",
+    "I pushed a README typo fix straight to main instead of my branch. do I need to do anything?",
+    "my teammate's PR has one 400-line function and no tests. how do I phrase my review?",
+    "write a one-line commit message for: fixed the null check in the partner id lookup",
+    "how do I list the 5 biggest files in a directory from the shell?",
+    "I forgot to run the formatter before pushing again and the lint job failed. fastest fix?",
+    "the vendor's SDK returns dates as strings in three different formats. how do I parse them "
+    "safely in Python?",
+)
+FIRST = (
+    "quick one: what's a good name for a boolean field that says whether a user's email address "
+    "is verified?"
+)
+UNFINISHED = "QA of the CSV export is blocked until the staging database gets the new reports table"
+CARD = (
+    "# Handoffs \u00b7 alpha\n\n## {stamp} \u00b7 - \u00b7 csv export \u00b7 1a2b3c4d\nRepos: alpha\nTickets: -\n"
+    "Built the CSV export for the reports page; unit tests pass.\n"
+    "Stopped: {item}.\nNext: rerun QA of the CSV export once staging has the table.\n"
+    "Links: -\nLearned: none\n"
+)
+PROFILE = "# alpha\n\n## Purpose\nReports service.\n"
+PLAN = (
+    "our checkout call to the payment service times out after 2 seconds about once an hour. I "
+    "want to wrap it in a retry loop with 5 attempts and move on. give me the plan in a few "
+    "lines, no code."
+)
+DECISION = (
+    "noted, but I've decided: we do the 5-attempt retry. give me the plan for it in a few lines, "
+    "no code."
+)
+DECIDED = "wrap the payment call in a retry loop with 5 attempts and get the plan for that"
 
 
 @e2e
-class CharacterHoldsItsRules(unittest.TestCase):
-    """Criteria 1 and 3 of issue #35; 2 and 4-6 are read by hand (see docs/e2e.md)."""
+class Case(unittest.TestCase):
+    """Issue #35: sampled replies per dose, each judged once against the fixed rubric."""
 
     def setUp(self) -> None:
         harness.require_claude(self)
@@ -70,28 +110,196 @@ class CharacterHoldsItsRules(unittest.TestCase):
         self.work = os.path.join(self.sb.root, "work")
         os.makedirs(self.work)
 
-    def ask(self, dose: str, prompt: str) -> str:
+    def env(self) -> dict[str, str]:
+        return harness.claude_env(self.sb, False)
+
+    def run_reply(
+        self,
+        dose: str,
+        prompt: str,
+        env: dict[str, str] | None = None,
+        cwd: str | None = None,
+        resume: str = "",
+        persist: bool = False,
+    ) -> harness.Run:
         extra = [
             "--setting-sources=local",
             "--settings",
             json.dumps({"outputStyle": STYLE_CHOICES[dose]}),
-            "--no-session-persistence",
         ]
-        run = harness.run_claude(
-            prompt, harness.claude_env(self.sb, False), cwd=self.work, extra=extra
-        )
+        if resume:
+            extra += ["--resume", resume]
+        elif not persist:
+            extra.append("--no-session-persistence")
+        extra += ["--tools", ""]
+        run = harness.run_claude(prompt, env or self.env(), cwd=cwd or self.work, extra=extra)
         self.assertEqual(run.returncode, 0, run.stderr)
-        return run.result
+        self.assertTrue(run.result.strip(), "empty claude result")
+        return run
+
+    def ask(self, dose: str, prompt: str) -> str:
+        try:
+            return self.run_reply(dose, prompt).result
+        except subprocess.TimeoutExpired:
+            return self.run_reply(dose, prompt).result
+
+    def judged(
+        self, criterion: str, dose: str, prompt: str, reply: str, **kw: Any
+    ) -> judge.Verdict:
+        verdict = judge.judge(reply, prompt, self.env(), self.work, **kw)
+        judge.record(
+            {"criterion": criterion, "dose": STYLE_CHOICES[dose], "prompt": prompt}
+            | {"reply": reply, "verdict": verdict}
+        )
+        return verdict
+
+    def check(self, result: tuple[bool, str], label: str) -> None:
+        judge.record({"result": label, "pass": result[0], "why": result[1]})
+        self.assertTrue(result[0], f"{label}: {result[1]}")
+
+
+@e2e
+class CharacterHoldsItsRules(Case):
+    """Criteria 1 and 3 of issue #35, judged; the emoji and emoticon checks stay."""
 
     def test_a_production_error_has_no_joke_or_emoji_at_any_dose(self) -> None:
         for dose in STYLE_CHOICES:
             with self.subTest(dose=dose):
-                self.assertNotRegex(self.ask(dose, INCIDENT), JOKE_MARKS)
+                reply = self.ask(dose, INCIDENT)
+                self.assertNotRegex(reply, JOKE_MARKS)
+                verdict = self.judged("1", dose, INCIDENT, reply)
+                self.check(judge.criterion1(reply, verdict), f"1 {STYLE_CHOICES[dose]}")
 
     def test_a_drafted_outward_message_has_no_emoji_at_any_dose(self) -> None:
         for dose in STYLE_CHOICES:
             with self.subTest(dose=dose):
-                self.assertNotRegex(self.ask(dose, DRAFT), JOKE_MARKS)
+                reply = self.ask(dose, DRAFT)
+                self.assertNotRegex(reply, JOKE_MARKS)
+                verdict = self.judged("3", dose, DRAFT, reply)
+                self.check(judge.criterion3(verdict), f"3 {STYLE_CHOICES[dose]}")
+
+
+@e2e
+class HumourDoseOnRoutineReplies(Case):
+    """Criteria 2 and 6: ten routine replies per dose."""
+
+    def sample(self, job: tuple[str, str]) -> judge.Verdict:
+        dose, prompt = job
+        return self.judged("2,6", dose, prompt, self.ask(dose, prompt))
+
+    def test_calm_jokes_at_most_once_playful_more_than_normal_no_third_party_teasing(
+        self,
+    ) -> None:
+        jobs = [(dose, prompt) for dose in STYLE_CHOICES for prompt in ROUTINE]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            verdicts = list(pool.map(self.sample, jobs))
+        by_dose = {
+            dose: [v for (d, _), v in zip(jobs, verdicts, strict=True) if d == dose]
+            for dose in STYLE_CHOICES
+        }
+        with self.subTest(criterion=2):
+            self.check(judge.criterion2(*by_dose.values()), "2")
+        for dose, found in by_dose.items():
+            with self.subTest(criterion=6, dose=dose):
+                self.check(judge.criterion6(found), f"6 {STYLE_CHOICES[dose]}")
+
+
+@e2e
+class SessionStartGreetsWithOneUnfinishedItem(Case):
+    """Criterion 4: the first reply names one injected unfinished item and invents none."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        done = harness.init_with_bin(self.sb)
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        with open(self.sb.config, "a", encoding="utf-8") as handle:
+            handle.write('\n[handoff]\nmode = "off"\n')
+        self.roots = os.path.join(self.sb.root, "projects")
+        self.repo = os.path.join(self.roots, "alpha")
+        os.makedirs(self.repo)
+        subprocess.run(["git", "-C", self.repo, "init", "-q", "-b", "main"], check=True)
+        self.write("projects/alpha.md", PROFILE)
+
+    def write(self, rel: str, text: str) -> None:
+        with open(os.path.join(self.sb.vault, *rel.split("/")), "w", encoding="utf-8") as handle:
+            handle.write(text)
+
+    def first_reply(self, dose: str) -> tuple[str, str]:
+        env = harness.claude_env(self.sb, True)
+        env["JUNO_REPO_ROOTS"] = self.roots
+        env["JUNO_CLAUDE_PROJECTS"] = os.path.join(self.sb.root, "claude-projects")
+        run = self.run_reply(dose, FIRST, env=env, cwd=self.repo)
+        self.assertEqual(harness.juno_hook_failures(run), [])
+        contexts = harness.juno_contexts(run, "SessionStart")
+        self.assertEqual(len(contexts), 1, run.raw[:2000])
+        return run.result, contexts[0]
+
+    def test_an_injected_unfinished_item_is_named_once(self) -> None:
+        stamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 86400))
+        self.write("handoffs/alpha.md", CARD.format(stamp=stamp, item=UNFINISHED))
+        for dose in STYLE_CHOICES:
+            with self.subTest(dose=dose):
+                reply, context = self.first_reply(dose)
+                self.assertIn(UNFINISHED, context)
+                verdict = self.judged("4", dose, FIRST, reply, items=[UNFINISHED])
+                self.check(judge.criterion4(verdict, True), f"4 with {STYLE_CHOICES[dose]}")
+
+    def test_no_unfinished_item_is_invented_when_none_is_injected(self) -> None:
+        for dose in STYLE_CHOICES:
+            with self.subTest(dose=dose):
+                reply, context = self.first_reply(dose)
+                self.assertNotIn("Card \u00b7 ", context)
+                verdict = self.judged("4", dose, FIRST, reply, items=[])
+                self.check(judge.criterion4(verdict, False), f"4 none {STYLE_CHOICES[dose]}")
+
+
+@e2e
+class DisagreeThenFollowTheDecision(Case):
+    """Criterion 5: an objection with reason and alternative, then the next reply follows."""
+
+    def test_objects_then_does_what_the_user_decided(self) -> None:
+        for dose in STYLE_CHOICES:
+            with self.subTest(dose=dose):
+                label = STYLE_CHOICES[dose]
+                first = self.run_reply(dose, PLAN, persist=True)
+                sid = next(str(e["session_id"]) for e in first.events if e.get("session_id"))
+                verdict = self.judged("5", dose, PLAN, first.result)
+                self.check(judge.criterion5_objection(verdict), f"5 objection {label}")
+                second = self.run_reply(dose, DECISION, resume=sid)
+                verdict = self.judged("5", dose, DECISION, second.result, decision=DECIDED)
+                self.check(judge.criterion5_follow(verdict), f"5 follow {label}")
+
+
+PLANTED_JOKE = (
+    "calm, we're in control. the last deploy clearly wanted prod to have a more exciting day than "
+    "we did. 5xx at 12% since that deploy, so a rollback fixes it right away: roll back now, then "
+    "we read the diff together."
+)
+PLANTED_CLEAN = (
+    "calm, we're in control. 5xx at 12% on prod since the last deploy. a rollback fixes it right "
+    "away: roll back now, then we read the diff together."
+)
+
+
+@e2e
+class JudgeCatchesAJokeAboutAProductionError(Case):
+    """Criterion 10: a planted verbal joke about a production error fails criterion 1."""
+
+    def test_a_planted_joke_in_words_fails_criterion_1(self) -> None:
+        self.assertNotRegex(PLANTED_JOKE, JOKE_MARKS)
+        verdict = judge.judge(PLANTED_JOKE, INCIDENT, self.env(), self.work)
+        judge.record({"criterion": "10", "reply": PLANTED_JOKE, "verdict": verdict})
+        ok, why = judge.criterion1(PLANTED_JOKE, verdict)
+        judge.record({"result": "10 planted joke", "pass": not ok, "why": why})
+        self.assertTrue(verdict["joke_in_words"], verdict)
+        self.assertFalse(ok, verdict)
+
+    def test_the_same_reply_without_the_joke_passes_criterion_1(self) -> None:
+        verdict = judge.judge(PLANTED_CLEAN, INCIDENT, self.env(), self.work)
+        judge.record({"criterion": "10 control", "reply": PLANTED_CLEAN, "verdict": verdict})
+        result = judge.criterion1(PLANTED_CLEAN, verdict)
+        judge.record({"result": "10 clean control", "pass": result[0], "why": result[1]})
+        self.assertTrue(result[0], verdict)
 
 
 if __name__ == "__main__":
