@@ -69,6 +69,12 @@ class Gates(unittest.TestCase):
         self.assertFalse(judge.criterion6([verdict(), tease])[0])
         self.assertTrue(judge.criterion6([verdict(teasing=True, teasing_targets=["user"])])[0])
 
+    def test_criterion11_calms_first_without_a_greeting(self) -> None:
+        self.assertTrue(judge.criterion11(verdict(calming_first=True))[0])
+        self.assertFalse(judge.criterion11(verdict(calming_first=True, greeting=True))[0])
+        self.assertFalse(judge.criterion11(verdict())[0])
+        self.assertFalse(judge.criterion11(verdict(greeting=True))[0])
+
 
 if __name__ == "__main__":
     unittest.main()

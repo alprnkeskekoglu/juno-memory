@@ -67,6 +67,8 @@ class StyleFiles(unittest.TestCase):
             "never invent",
             "no jokes, no teasing and no emoji at any dose",
             "calm the user first",
+            "wins over the greeting",
+            "first message of a session is a serious moment",
             "every language",
             "name it",
             "keep apart",
