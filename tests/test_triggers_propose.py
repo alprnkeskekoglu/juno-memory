@@ -181,7 +181,9 @@ class Noise(WriteCase):
 
     def test_turkish_prose_words_are_dropped_under_the_tr_preset(self) -> None:
         self.assertEqual(triggerprop.propose("", "sonra sonra kadar kadar", "tr"), [])
-        self.assertEqual(triggerprop.propose("", "sonra sonra kadar kadar", "none"), ["sonra"])
+        self.assertEqual(
+            triggerprop.propose("", "sonra sonra kadar kadar", "none"), ["kadar", "sonra"]
+        )
 
     def test_criterion_15_only_generic_words_means_nothing_to_propose(self) -> None:
         self.put(
