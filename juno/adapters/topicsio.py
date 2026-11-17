@@ -4,7 +4,7 @@ import os
 from typing import Any
 
 from juno import config
-from juno.adapters import firesio, fs, store
+from juno.adapters import firesio, fs, ledgerio, store
 from juno.adapters.vaultview import DiskVault
 from juno.core import topicgate, topics
 from juno.core.ledger import safe_id
@@ -115,6 +115,8 @@ def claimer(cfg: config.Config, sid: object, agent: object) -> Any:
         won = path is not None and claim(path)
         if won:
             firesio.record(cfg, name.removesuffix(".again"))
+            if not agent and name.startswith("topic-") and not name.endswith(".again"):
+                ledgerio.append(cfg, sid, {"ev": "topic_fired", "slug": name[len("topic-") :]})
         return won
 
     return attempt
