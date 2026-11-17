@@ -23,6 +23,7 @@ SHIPPED: dict[str, tuple[str, ...]] = {
     "rules.md": (
         "5b70d10e0727bd2763787ae4314c9b445e9e5d3584cf0a15f2666807bff8ae47",
         "5d0b7d46a8e9e6308286b8185f65aba3fbc6a64dee508d0c0e06f2a8aa6d9c8d",
+        "f0f2cadccf9472c6cef6d3cca46c2ef134606e196613713375d9e62c9dad8432",
     ),
     "vault-files.md": (
         "02b4850bd756fe2d2b96f6f3bb91beb674a66bf4ef2832424d3415ac2873363e",

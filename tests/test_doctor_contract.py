@@ -33,6 +33,7 @@ SCANNED = (
     "juno/core/doctor_fit.py",
     "juno/core/doctor_decisions.py",
     "juno/core/doctor_links.py",
+    "juno/core/doctor_pinned.py",
     "juno/core/doctor_profiles.py",
     "juno/core/doctor_topics.py",
     "juno/core/cardcopies.py",

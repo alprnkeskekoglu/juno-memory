@@ -431,8 +431,9 @@ The shim is `juno <verb>`. Each verb with `--json` prints one JSON object. Exit 
 
 | Verb | Writes | Contract (port from) |
 |---|---|---|
-| `rule add --scope global\|repo:<r>\|topic:<slug> [--triggers "a,b"] --quote Q "<rule>"` | `rules/` | scopes, triggers, caps, ` · ` ban, secret scan, line format; `ticket:` refused [v1: Rules policy] |
-| `rule list` | - | numbered lines per file (read-only) |
+| `rule add --scope global\|repo:<r>\|topic:<slug> [--triggers "a,b"] [--pin] --quote Q "<rule>"` | `rules/` | scopes, triggers, caps, ` · ` ban, secret scan, line format; `ticket:` refused [v1: Rules policy] |
+| `rule list [--json]` | - | numbered lines per file (read-only); a pinned rule shows `[pinned]`; `--json` keeps `rules` as strings and adds a parallel `pinned` list of booleans per file |
+| `rule pin\|unpin --scope S --quote Q N` | `rules/` (through the write gate) | sets or clears the ` · pinned` mark on rule N; same quote evidence as `remove`; prints a write id, `juno undo <id>` reverts it; pinning a pinned rule (or unpinning an unpinned one) is a no-op; the user's own decision, never automatic: `rule accept` never pins; `add --pin` adds and pins in one write, and `add --pin` of a rule already present pins that rule (own write id) |
 | `rule remove --scope S --quote Q N` | `rules/` | [v1: Rules policy] Remove |
 | `rule move --from S --to S [--triggers] --quote Q N` | `rules/` | [v1: Rules policy] Move; `--from ticket:KEY` moves a rule out of a legacy `rules/KEY.md` |
 | `rule triggers --scope topic:<slug> --add "a,b" --quote Q` | `rules/` | [v1: Rules policy] Topic triggers |

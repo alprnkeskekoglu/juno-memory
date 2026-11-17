@@ -27,6 +27,7 @@ from juno.core import (
     doctor_decisions,
     doctor_fit,
     doctor_links,
+    doctor_pinned,
     doctor_profiles,
     doctor_topics,
     notebody,
@@ -99,6 +100,7 @@ def vault_checks(cfg: config.Config) -> list[Check]:
         cfg.get_int("caps", "scoped_rule_lines"),
         cfg.get_str("language", "preset"),
     )
+    out += doctor_pinned.pinned_checks(rule_files, cfg.get_int("caps", "pinned_rules_chars"))
     out += dv.budget_checks(
         view.read("core.md"),
         view.read("rules/global.md"),
