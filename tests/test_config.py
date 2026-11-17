@@ -26,7 +26,7 @@ stale.auto_fix stale.weekday stale.start_hour stale.end_hour stale.model stale.f
 stale.run_budget_usd stale.timeout_seconds stale.max_files stale.max_changes_per_file
 stale.max_changes_per_run stale.max_lines_per_file stale.branch_order stale.fetch
 stale.busy_minutes voice.enabled voice.outward_tools voice.formal_targets voice.draft_cues voice.formal_cues
-voice.voice_cues voice.critique_cues voice.min_samples voice.budget_chars
+voice.voice_cues voice.critique_cues voice.min_samples voice.budget_chars voice.import_max voice.import_max_age_days
 """.split()
 
 

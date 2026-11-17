@@ -165,6 +165,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "critique_cues": [],
         "min_samples": 15,
         "budget_chars": 2400,
+        "import_max": 300,
+        "import_max_age_days": 365,
     },
 }
 

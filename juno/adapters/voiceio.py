@@ -19,6 +19,7 @@ VAULT_LOCK = "vault.lock"
 MAX_SAMPLES = 400
 MAX_BODY_FILE = 20000
 MAX_FIXES = 100
+IMPORT_MAX = 300
 TEXT_BYTES = 1200
 DRAFT_BYTES = 600
 QUOTE_BYTES = 400
@@ -294,14 +295,20 @@ def rows_of(seg: Segment) -> list[Row]:
     return rows
 
 
-def pruned(rows: list[Row]) -> list[Row]:
-    samples = [r for r in rows if r["k"] == "sample"][-MAX_SAMPLES:]
+def pruned(rows: list[Row], import_max: int = IMPORT_MAX) -> list[Row]:
+    """Newest live samples, newest fixes and, counted apart, the newest imported samples, so an
+    import never pushes out a live sample."""
+    samples = [r for r in rows if r["k"] == "sample"]
+    live = [r for r in samples if r.get("by") != "import"][-MAX_SAMPLES:]
+    brought = sorted((r for r in samples if r.get("by") == "import"), key=voicemeasure.sent_at)
+    brought = brought[-import_max:] if import_max > 0 else []
     fixes = [r for r in rows if r["k"] == "fix"][-MAX_FIXES:]
-    keep = {id(r) for r in samples + fixes}
+    keep = {id(r) for r in live + brought + fixes}
     return [r for r in rows if id(r) in keep]
 
 
-def write_profile(cfg: config.Config, rows: list[Row]) -> bool:
+def write_profile(cfg: config.Config, rows: list[Row], held: bool = False) -> bool:
+    """Rebuild `self/voice.md`; `held` when the caller already holds the vault lock."""
     minimum = cfg.get_int("voice", "min_samples")
     prefixes = cfg.privacy_prefixes()
     samples = [r for r in rows if r["k"] == "sample"]
@@ -314,6 +321,9 @@ def write_profile(cfg: config.Config, rows: list[Row]) -> bool:
     fixes = [r for r in rows if r["k"] == "fix"]
     text = voicemeasure.file_text(profiles, fixes, prefixes)
     target = os.path.join(cfg.vault, "self", "voice.md")
+    if held:
+        fs.atomic_write(target, text.encode(), 0o600)
+        return True
     with contextlib.suppress(TimeoutError), fs.locked(os.path.join(cfg.state, VAULT_LOCK), 0.5):
         fs.atomic_write(target, text.encode(), 0o600)
         return True
@@ -336,7 +346,7 @@ def on_session_end(cfg: config.Config, sid: object) -> None:
     fresh = [r for r in rows_of(seg) if r["id"] not in known]
     if not fresh:
         return
-    merged = pruned(rows + fresh)
+    merged = pruned(rows + fresh, cfg.get_int("voice", "import_max"))
     write_rows(cfg, merged)
     if any(r["k"] == "sample" for r in fresh):
         write_profile(cfg, merged)

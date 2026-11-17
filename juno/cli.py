@@ -56,6 +56,7 @@ VERBS: dict[str, tuple[str, str]] = {
     "consolidate": ("consolidate", "list near-duplicate and stale lines of a section (read-only)"),
     "forget": ("forget", "move a wrong vault line to the archive"),
     "privacy": ("privacy", "acknowledge an id finding on a line, or list the acknowledged ones"),
+    "voice": ("voice", "import past messages into the writing voice, forget a batch, status"),
     "undo": ("undo", "revert a write by its id"),
     "cap": ("cap", "show or (user-approved) raise this session's write cap"),
     "decay": ("decay", "list vault files with no recorded use (read-only)"),
