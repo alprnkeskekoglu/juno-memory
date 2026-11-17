@@ -78,6 +78,7 @@ class Segment:
         self.repos: dict[str, str | None] = {}
         self.last_repo: str | None = None
         self.packs: dict[str, str] = {}
+        self.topics_fired: set[str] = set()
         self.full_packs = 0
         self.raw_prompts: dict[str, str] = {}
         self.synthetic: set[str] = set()
@@ -285,6 +286,10 @@ class Segment:
     def on_packs_reset(self, rec: Record) -> None:
         self.packs = {}
         self.full_packs = 0
+
+    def on_topic_fired(self, rec: Record) -> None:
+        if isinstance(rec.get("slug"), str) and rec["slug"]:
+            self.topics_fired.add(rec["slug"])
 
     def on_remind(self, rec: Record) -> None:
         self.last_remind_turn = self.turns
