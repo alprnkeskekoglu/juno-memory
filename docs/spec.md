@@ -52,6 +52,7 @@ juno/                          repo root = plugin root (${CLAUDE_PLUGIN_ROOT})
   skills/juno/SKILL.md         /juno lookup skill (v1 /saga)
   skills/backlog/SKILL.md      /backlog skill
   skills/research/SKILL.md     /juno:research skill (6.9)
+  skills/voice-import/SKILL.md /juno:voice-import skill (12.13, #38)
   agents/researcher.md         web research agent (WebSearch, WebFetch), used by the research skill
   agents/verifier.md           one-claim verifier (WebFetch only)
   output-styles/juno-*.md     the Juno character as three plugin output styles, one per humour dose (13.10)
