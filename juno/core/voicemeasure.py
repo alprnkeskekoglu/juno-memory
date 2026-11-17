@@ -8,7 +8,8 @@ from typing import Any
 from juno.core import privacy
 
 REGISTERS = ("voice", "formal")
-COUNTED = ("user", "edited")
+COUNTED = ("user", "edited", "import")
+EXAMPLE_BY = ("user", "import")
 MAX_EXAMPLES = 8
 EXAMPLE_CHARS = 600
 CORRECTION_LINES = 5
@@ -171,6 +172,11 @@ def clean_example(
     )
 
 
+def sent_at(sample: Mapping[str, Any]) -> float:
+    t = sample.get("t")
+    return float(t) if isinstance(t, int | float) else 0.0
+
+
 def build(
     samples: Sequence[Mapping[str, Any]],
     reg: str,
@@ -181,7 +187,8 @@ def build(
     mine = [s for s in samples if s.get("reg") == reg and s.get("by") in COUNTED]
     texts = [str(s.get("text") or "") for s in mine]
     ready = len(texts) >= min_samples
-    users = [str(s.get("text") or "") for s in mine if s.get("by") == "user"]
+    own = sorted((s for s in mine if s.get("by") in EXAMPLE_BY), key=sent_at)
+    users = [str(s.get("text") or "") for s in own]
     picks = [t for t in reversed(users) if clean_example(t, prefixes, names)][:MAX_EXAMPLES]
     return Profile(reg, len(texts), ready, measure(texts) if ready else None, tuple(picks))
 

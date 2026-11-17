@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from juno import config
-from juno.adapters import fs, interpreter, keysbackfill, ledgerio, store, vault
+from juno.adapters import fs, interpreter, keysbackfill, ledgerio, store, vault, voiceimport
 from juno.cmd import common, doctor_vault, init, write
 from juno.core import interp, migrate, settings_merge, shim, tomlio
 
@@ -315,6 +315,7 @@ def collect(args: argparse.Namespace, cfg: config.Config) -> list[Check]:
     if vault.status(cfg.vault) == "juno":
         out += doctor_vault.collect(cfg, run_probe=not args.json) + check_keys(cfg)
         out += check_stale(cfg)
+        out += voiceimport.doctor_line(cfg)
     return out
 
 
