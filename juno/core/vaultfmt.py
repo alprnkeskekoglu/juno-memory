@@ -30,8 +30,10 @@ NEVER_INJECTED_KINDS = frozenset({"archive", "generated", "config"})
 
 WIKILINK_RE = re.compile(r"\[\[([^\[\]]+?)\]\]")
 FM_KEY_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_-]*)[ \t]*:(?:[ \t]+(.*)|[ \t]*)$")
+PIN_MARK = " · pinned"
 RULE_LINE_RE = re.compile(
-    r'^- (\d{4}-\d{2}-\d{2}) · (.+?) · src: (?:user (\S{1,8}) · "(.*)"|unquoted|import:\S+)\s*$'
+    r'^- (\d{4}-\d{2}-\d{2}) · (.+?) · src: (?:user (\S{1,8}) · "(.*)"|unquoted|import:\S+)'
+    r"( · pinned)?\s*$"
 )
 CARD_HEAD_RE = re.compile(r"^## (\d{4}-\d{2}-\d{2} \d{2}:\d{2}) · (.+?) · (.+?) · (\S{1,8})[ \t]*$")
 THREAD_RE = re.compile(r"^- \[([^\]\n]+)\] (.+)$")
@@ -199,6 +201,7 @@ class RuleEntry:
     text: str | None
     pid: str | None
     quote: str | None
+    pinned: bool = False
 
 
 def rule_entries(text: str) -> list[RuleEntry]:
@@ -209,7 +212,15 @@ def rule_entries(text: str) -> list[RuleEntry]:
         match = RULE_LINE_RE.match(line)
         if match:
             found.append(
-                RuleEntry(number, line, match[1], match[2], match[3] or None, match[4] or None)
+                RuleEntry(
+                    number,
+                    line,
+                    match[1],
+                    match[2],
+                    match[3] or None,
+                    match[4] or None,
+                    bool(match[5]),
+                )
             )
         else:
             found.append(RuleEntry(number, line, None, None, None, None))
@@ -218,6 +229,17 @@ def rule_entries(text: str) -> list[RuleEntry]:
 
 def rule_texts(text: str) -> list[str]:
     return [e.text for e in rule_entries(text) if e.text]
+
+
+def pinned_rule_texts(text: str) -> list[str]:
+    return [e.text for e in rule_entries(text) if e.text and e.pinned]
+
+
+def set_pinned(line: str, pinned: bool) -> str:
+    """The rule line with the pin mark added or removed; other text is unchanged."""
+    bare = line.rstrip()
+    bare = bare.removesuffix(PIN_MARK)
+    return bare + PIN_MARK if pinned else bare
 
 
 def injected_rules(text: str) -> str:

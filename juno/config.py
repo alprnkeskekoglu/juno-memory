@@ -38,6 +38,7 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "hook_output_chars": 9500,
         "core_chars": 4000,
         "global_rules_chars": 5000,
+        "pinned_rules_chars": 800,
         "global_rule_lines": 80,
         "scoped_rule_lines": 25,
         "overview_chars": 3000,

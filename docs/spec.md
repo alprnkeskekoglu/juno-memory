@@ -183,6 +183,7 @@ The path is `~/.config/juno/juno.toml`. When `XDG_CONFIG_HOME` is set, the path 
 | `[caps] pack_knowledge_chars` | 300 | |
 | `[caps] subagent_chars` | 3000 | |
 | `[caps] subagent_global_rules_chars` | 2500 | |
+| `[caps] pinned_rules_chars` | 800 | Pinned rules block on every main-session prompt; taken from `hook_output_chars` first |
 | `[thresholds] meaningful_tool_calls` | 15 | |
 | `[thresholds] meaningful_user_turns` | 5 | |
 | `[thresholds] dirty_user_turns` | 10 | |
