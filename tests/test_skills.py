@@ -62,5 +62,83 @@ class SkillFiles(unittest.TestCase):
                 self.assertIn(verb, known, f"{name}: juno {verb}")
 
 
+class VoiceImportSkill(unittest.TestCase):
+    """Text-level checks; the behaviour itself (criteria 15 and 16) needs a live session."""
+
+    def setUp(self) -> None:
+        self.fields, self.body = parse_frontmatter(read("voice-import"))
+
+    def test_exists_and_is_registered(self) -> None:
+        self.assertEqual(self.fields["name"], "voice-import")
+        self.assertTrue(self.body.strip())
+        with open(os.path.join(REPO, "README.md"), encoding="utf-8") as handle:
+            readme = handle.read()
+        self.assertIn("/juno:voice-import", readme)
+        self.assertTrue(os.path.isdir(os.path.join(REPO, "skills", "voice-import")))
+
+    def test_description_restricts_invocation_to_the_user(self) -> None:
+        text = str(self.fields["description"])
+        self.assertIn("Use only when the user types /juno:voice-import", text)
+        self.assertIn("in their own words", text)
+        self.assertIn("Never on Claude's own initiative", text)
+
+    def test_no_v1_names_or_user_paths(self) -> None:
+        text = self.body.casefold() + str(self.fields["description"]).casefold()
+        for banned in BANNED:
+            self.assertNotIn(banned.casefold(), text, banned)
+
+    def test_file_and_paste_always_offered_code_review_needs_gh(self) -> None:
+        body = self.body
+        self.assertIn("- **File**: always offered", body)
+        self.assertIn("- **Paste**: always offered", body)
+        self.assertIn("only File and Paste exist", body)
+        self.assertIn("`command -v gh`", body)
+        self.assertIn("`gh auth status`", body)
+        self.assertIn("Offer it only when both succeed", body)
+        self.assertIn("ONE AskUserQuestion with a multi-select", body)
+        for source in ("Chat", "Code review", "Mail", "Tracker"):
+            self.assertIn(f"- **{source}**", body)
+
+    def test_only_the_users_own_messages_and_nothing_posted(self) -> None:
+        self.assertIn("Only the user's own messages", self.body)
+        self.assertIn("Never post", self.body)
+        self.assertIn("commenter:@me", self.body)
+        self.assertIn("gh api user -q .login", self.body)
+
+    def test_dry_run_comes_before_import(self) -> None:
+        body = self.body
+        dry = body.index("juno voice import --dry-run")
+        real = body.index("`juno voice import [--register")
+        self.assertLess(dry, real)
+        self.assertIn("Only after the user said yes", body)
+        self.assertIn("juno voice forget --batch <id>", body)
+
+    def test_message_text_is_never_printed(self) -> None:
+        self.assertIn("Never print message text in the chat", self.body)
+        self.assertIn("no message text", self.body)
+
+    def test_temp_file_is_0600_outside_the_vault_and_deleted(self) -> None:
+        body = self.body
+        self.assertIn("install -m 600 /dev/null", body)
+        self.assertIn("chmod 600", body)
+        self.assertIn("Never inside the vault or the repo", body)
+        self.assertIn("rm -f", body)
+        self.assertLess(body.index("install -m 600"), body.index("## Step 5"))
+        self.assertLess(body.index("## Step 6"), body.index("## Step 7"))
+
+    def test_uses_the_exact_cli_shape(self) -> None:
+        body = self.body
+        self.assertIn(
+            "juno voice import --dry-run [--register voice|formal]"
+            " [--target chat|mail|tracker|review|code] <file>",
+            body,
+        )
+        for flag in ("--json", "--batch"):
+            self.assertIn(flag, body)
+        tools = str(self.fields["allowed-tools"])
+        self.assertIn("Bash(juno voice *)", tools)
+        self.assertNotIn("Edit", tools.split())
+
+
 if __name__ == "__main__":
     unittest.main()
