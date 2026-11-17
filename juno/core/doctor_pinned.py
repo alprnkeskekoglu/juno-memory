@@ -1,6 +1,6 @@
 from collections.abc import Mapping
 
-from juno.core import inject
+from juno.core import pinned
 from juno.core.vaultfmt import rule_entries, rule_scope
 
 Check = tuple[str, str, str]
@@ -16,9 +16,7 @@ def pinned_checks(files: Mapping[str, str], cap: int) -> list[Check]:
         ]
     if not found:
         return []
-    block = inject.labelled(
-        "RULES (follow, pinned)", [inject.neutralize("- " + t) for _, _, t in found]
-    )
+    block = pinned.render([t for _, _, t in found])
     if len(block) <= cap:
         return [("PASS", "pinned rules", f"{len(found)} pinned, {len(block)} of {cap} chars")]
     names = ", ".join(f"{scope} #{i}" for scope, i, _ in found)

@@ -12,13 +12,19 @@ def pinned_files(repos: list[str], fired: list[str]) -> list[str]:
     return files
 
 
+def render(texts: list[str]) -> str:
+    """The pinned block before trimming: the label line, then one neutralized line per rule."""
+    if not texts:
+        return ""
+    return "\n".join([PINNED_LABEL, *("- " + inject.neutralize(t) for t in texts)])
+
+
 def pinned_block(view: VaultView, repos: list[str], fired: list[str], limit: int) -> str:
-    lines: list[str] = []
+    texts: list[str] = []
     for rel in pinned_files(repos, fired):
         text = view.read(rel)
         if not text or view.hidden(rel, text):
             continue
-        lines += ["- " + inject.neutralize(t) for t in vaultfmt.pinned_rule_texts(text)]
-    if not lines:
-        return ""
-    return inject.trim("\n".join([PINNED_LABEL, *lines]), limit, "the vault")
+        texts += vaultfmt.pinned_rule_texts(text)
+    block = render(texts)
+    return inject.trim(block, limit, "the vault") if block else ""
