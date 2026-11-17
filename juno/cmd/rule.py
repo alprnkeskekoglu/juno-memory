@@ -4,13 +4,13 @@ import time
 from collections.abc import Mapping
 
 from juno import config
-from juno.adapters import fs, knowledgetriggers, ledgerio, queues, store
+from juno.adapters import fs, gate, knowledgetriggers, ledgerio, queues, store
 from juno.adapters import status as status_io
 from juno.cmd import write
 from juno.cmd.write import Refused
 from juno.core import candidates, fold, nativememory, rulepolicy, topics
 from juno.core.ledger import Segment
-from juno.core.vaultfmt import RuleEntry, rule_entries, rule_scope
+from juno.core.vaultfmt import RuleEntry, rule_entries, rule_scope, set_pinned
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -19,6 +19,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     add.add_argument("--scope", required=True, help="global, repo:<repo> or topic:<slug>")
     add.add_argument("--quote", required=True, help="verbatim words the user typed or chose")
     add.add_argument("--triggers", help="comma separated triggers (topic scopes)")
+    add.add_argument("--pin", action="store_true", help="also pin the rule (re-sent every prompt)")
     add.add_argument("rule")
     lst = sub.add_parser("list", help="print every rule, numbered per file")
     lst.add_argument("--json", action="store_true")
@@ -26,6 +27,13 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     remove.add_argument("--scope", required=True)
     remove.add_argument("--quote", required=True)
     remove.add_argument("index", type=int)
+    for name in ("pin", "unpin"):
+        pin = sub.add_parser(
+            name, help=f"{name} rule N of a scope (pinned rules go in every prompt)"
+        )
+        pin.add_argument("--scope", required=True)
+        pin.add_argument("--quote", required=True)
+        pin.add_argument("index", type=int)
     move = sub.add_parser("move", help="move rule N between scopes")
     move.add_argument("--from", dest="source", required=True)
     move.add_argument("--to", dest="target", required=True)
@@ -99,11 +107,17 @@ def do_add(cfg: config.Config, args: argparse.Namespace) -> int:
     quote = write.clean_line(cfg, fold.nfc(args.quote), "quote")
     pid = write.match_quote(cfg, seg, quote, rule)
     line = rulepolicy.rule_line(write.today(), rule, pid, quote)
+    if args.pin:
+        line = set_pinned(line, True)
     with write.locked(cfg):
         text = read(cfg, scope.relpath)
         triggers = rulepolicy.topic_triggers(scope.name, text, args.triggers, write.preset(cfg))
         if caps_hit(cfg, scope, text, rule):
             print(f"Juno: rule already present in {scope.relpath}: {rule}")
+            if args.pin:
+                same = next(e for e in rule_entries(text) if e.text == rule)
+                if not same.pinned:
+                    return pin_entry(cfg, seg, scope, text, same, True, quote)
             return 0
         write_text(cfg, scope.relpath, rulepolicy.append_line(text, scope.name, line, triggers))
     added(cfg, seg, scope.name, rule)
@@ -139,13 +153,17 @@ def do_list(cfg: config.Config, args: argparse.Namespace) -> int:
         if triggers is not None:
             lines.append("  triggers: " + (", ".join(triggers) or "none"))
         entries = rule_entries(text)
-        lines += [f"  {i}. {e.line[2:]}" for i, e in enumerate(entries, 1)]
+        lines += [
+            f"  {i}. {'[pinned] ' if e.pinned else ''}{set_pinned(e.line, False)[2:]}"
+            for i, e in enumerate(entries, 1)
+        ]
         data.append(
             {
                 "file": relpath,
                 "scope": rule_scope(relpath),
                 "triggers": triggers,
                 "rules": [e.line[2:] for e in entries],
+                "pinned": [e.pinned for e in entries],
             }
         )
     write.emit(args, {"files": data}, "\n".join(lines) if lines else "Juno: no rules yet.")
@@ -164,6 +182,45 @@ def do_remove(cfg: config.Config, args: argparse.Namespace) -> int:
     ledgerio.record(cfg, seg, {"ev": "rule_removed", "scope": scope.name})
     print(f"Juno: rule removed from {scope.relpath}:\n{entry.line}")
     return 0
+
+
+def pin_entry(
+    cfg: config.Config,
+    seg: Segment,
+    scope: rulepolicy.Scope,
+    text: str,
+    entry: RuleEntry,
+    pin: bool,
+    quote: str,
+) -> int:
+    """Set or clear the pin mark of one rule line through the write gate (one write id)."""
+    verb = "pin" if pin else "unpin"
+    new = rulepolicy.replace_line(text, entry.number, set_pinned(entry.line, pin))
+    res = gate.commit(cfg, seg, f"rule-{verb}", scope.relpath, new, quote)
+    ledgerio.record(cfg, seg, {"ev": f"rule_{verb}ned", "scope": scope.name})
+    print(
+        f"Juno: rule {verb}ned in {scope.relpath} (write {res.id}; revert with "
+        f"`juno undo {res.id}`):\n{set_pinned(entry.line, pin)}"
+    )
+    return 0
+
+
+def do_pin(cfg: config.Config, args: argparse.Namespace) -> int:
+    pin = args.action == "pin"
+    seg = write.guard(cfg)
+    scope = rulepolicy.parse_scope(args.scope)
+    quote = write.clean_line(cfg, fold.nfc(args.quote), "quote")
+    with write.locked(cfg):
+        text = read(cfg, scope.relpath)
+        entry = rulepolicy.entry_at(text, scope.relpath, args.index)
+        if entry.text is None:
+            raise Refused(f"rule {args.index} in {scope.relpath} is not a well-formed rule line")
+        write.match_quote(cfg, seg, quote, entry.text)
+        if entry.pinned == pin:
+            state = "already pinned" if pin else "not pinned"
+            print(f"Juno: rule {args.index} in {scope.relpath} is {state}; nothing written")
+            return 0
+        return pin_entry(cfg, seg, scope, text, entry, pin, quote)
 
 
 def do_move(cfg: config.Config, args: argparse.Namespace) -> int:
@@ -415,6 +472,8 @@ ACTIONS = {
     "add": do_add,
     "list": do_list,
     "remove": do_remove,
+    "pin": do_pin,
+    "unpin": do_pin,
     "move": do_move,
     "triggers": do_triggers,
     "pending": do_pending,

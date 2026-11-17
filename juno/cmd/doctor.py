@@ -119,6 +119,16 @@ def check_paths(cfg: config.Config) -> list[Check]:
         if cap < 10000
         else ("FAIL", "hook cap", f"hook_output_chars {cap} must stay below 10000")
     )
+    pinned = cfg.get_int("caps", "pinned_rules_chars")
+    out.append(
+        ("PASS", "pinned cap", str(pinned))
+        if pinned < cap
+        else (
+            "FAIL",
+            "pinned cap",
+            f"pinned_rules_chars {pinned} must stay below hook_output_chars {cap}",
+        )
+    )
     return out
 
 

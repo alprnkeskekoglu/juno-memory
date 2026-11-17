@@ -123,6 +123,12 @@ def remove_line(text: str, number: int) -> str:
     return "\n".join(lines) + "\n"
 
 
+def replace_line(text: str, number: int, line: str) -> str:
+    lines = text.splitlines()
+    lines[number - 1] = line
+    return "\n".join(lines) + "\n"
+
+
 def entry_at(text: str, relpath: str, index: int) -> RuleEntry:
     entries = rule_entries(text)
     if not 1 <= index <= len(entries):
