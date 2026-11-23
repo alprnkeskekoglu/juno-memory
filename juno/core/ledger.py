@@ -29,8 +29,16 @@ def safe_id(sid: object) -> bool:
     return isinstance(sid, str) and SAFE_ID.match(sid) is not None
 
 
+SURROGATES = re.compile("[\ud800-\udfff]")
+
+
+def scrub(text: str) -> str:
+    """Replace lone surrogates (they cannot be encoded as UTF-8) with U+FFFD."""
+    return SURROGATES.sub("\ufffd", text)
+
+
 def encode(record: Record) -> bytes:
-    return (json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
+    return scrub(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
 
 
 def shrink(record: Record) -> tuple[Record, bytes]:

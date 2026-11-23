@@ -1,4 +1,5 @@
 import contextlib
+import errno
 import json
 import os
 import sys
@@ -9,14 +10,41 @@ from typing import Any
 from juno import config
 from juno.adapters import env as envmod
 from juno.adapters import fs, steps, store
+from juno.core import ledger
 
 Handler = Callable[[dict[str, Any], config.Config], dict[str, Any] | None]
 
 
+STATE_ERRNOS = frozenset({errno.ENOSPC, errno.EACCES, errno.EPERM, errno.EROFS})
+STATE_LINE = (
+    "Juno: could not write its state dir (disk full or no permission), so handoff tracking "
+    "is off this session."
+)
+
+
+def state_unwritable(cfg: config.Config, exc: OSError) -> bool:
+    """True for an OSError that means the state dir cannot be written, not a vault problem."""
+    if exc.errno not in STATE_ERRNOS:
+        return False
+    name = exc.filename
+    return not isinstance(name, str) or os.path.abspath(name).startswith(cfg.state)
+
+
+def scrubbed(value: Any) -> Any:
+    if isinstance(value, str):
+        return ledger.scrub(value)
+    if isinstance(value, list):
+        return [scrubbed(v) for v in value]
+    if isinstance(value, dict):
+        return {ledger.scrub(str(k)): scrubbed(v) for k, v in value.items()}
+    return value
+
+
 def read_payload() -> dict[str, Any]:
     try:
-        raw = sys.stdin.read()
-        data = json.loads(raw) if raw.strip() else {}
+        stream = getattr(sys.stdin, "buffer", None)
+        raw = stream.read().decode("utf-8", "replace") if stream else sys.stdin.read()
+        data = scrubbed(json.loads(raw)) if raw.strip() else {}
     except OSError, ValueError:
         return {}
     return data if isinstance(data, dict) else {}
@@ -24,6 +52,16 @@ def read_payload() -> dict[str, Any]:
 
 def context_output(event: str, text: str) -> dict[str, Any]:
     return {"hookSpecificOutput": {"hookEventName": event, "additionalContext": text}}
+
+
+def emit(out: dict[str, Any]) -> None:
+    text = ledger.scrub(json.dumps(out, ensure_ascii=False))
+    try:
+        sys.stdout.write(text)
+    except UnicodeEncodeError:
+        sys.stdout.flush()
+        sys.stdout.buffer.write(text.encode("utf-8", "replace"))
+    sys.stdout.flush()
 
 
 def log(cfg: config.Config, name: str, line: str) -> None:
@@ -54,8 +92,7 @@ def run(event: str, handler: Handler) -> int:
             return 0
         out = handler(payload, cfg)
         if out:
-            sys.stdout.write(json.dumps(out, ensure_ascii=False))
-            sys.stdout.flush()
+            emit(out)
     except BaseException as exc:
         if cfg is not None:
             store.log_error(cfg, event, exc)

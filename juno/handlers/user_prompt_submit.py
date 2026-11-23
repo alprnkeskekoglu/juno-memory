@@ -1,7 +1,7 @@
 from typing import Any
 
-from juno import config
-from juno.adapters import ledgerio, repos, shadowio, status, topicsio, voiceio
+from juno import config, hookcore
+from juno.adapters import ledgerio, repos, shadowio, status, store, topicsio, voiceio
 from juno.adapters.vaultview import DiskVault
 from juno.core import fold, inject, pinned, prompts
 from juno.core.ledger import Segment
@@ -55,6 +55,28 @@ def nosave_notice(seg: Segment, own: str, nosave: bool) -> str:
 def handle(payload: dict[str, Any], cfg: config.Config) -> dict[str, Any] | None:
     if not main_session(payload):
         return None
+    try:
+        return handle_prompt(payload, cfg)
+    except OSError as exc:
+        if not hookcore.state_unwritable(cfg, exc):
+            raise
+        ledgerio.mark_unrecorded(cfg, payload.get("session_id"))
+        store.log_error(cfg, "user_prompt_submit", exc)
+        seg = ledgerio.fold(cfg, payload.get("session_id"))
+        text = "\n\n".join(t for t in (pins_for(cfg, seg), hookcore.STATE_LINE) if t)
+        return output(cfg, "UserPromptSubmit", text)
+
+
+def pins_for(cfg: config.Config, seg: Segment) -> str:
+    return pinned.pinned_block(
+        DiskVault(cfg),
+        list(seg.repos),
+        list(seg.topics_fired),
+        min(cfg.get_int("caps", "pinned_rules_chars"), cfg.get_int("caps", "hook_output_chars")),
+    )
+
+
+def handle_prompt(payload: dict[str, Any], cfg: config.Config) -> dict[str, Any] | None:
     sid = payload.get("session_id")
     prompt = payload.get("prompt")
     prompt = fold.nfc(prompt) if isinstance(prompt, str) else ""
@@ -62,12 +84,7 @@ def handle(payload: dict[str, Any], cfg: config.Config) -> dict[str, Any] | None
     capture_title(cfg, seg, payload)
     view = DiskVault(cfg)
     cap = cfg.get_int("caps", "hook_output_chars")
-    pins = pinned.pinned_block(
-        view,
-        list(seg.repos),
-        list(seg.topics_fired),
-        min(cfg.get_int("caps", "pinned_rules_chars"), cap),
-    )
+    pins = pins_for(cfg, seg)
     if prompts.is_synthetic(prompt):
         status.update(cfg, seg)
         return output(cfg, "UserPromptSubmit", pins) if pins else None
