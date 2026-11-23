@@ -767,7 +767,7 @@ A POSIX sh script written by init. It is refused when a non-Juno file already ex
   - handoff files over 20 cards;
   - stale learned;
   - index readability;
-  - broken wikilinks;
+  - links: wikilinks and local Markdown links `[text](path.md)` (resolved from the source file's directory; a leading `/` means the vault root; URLs, images, non-`.md` paths and anything in code spans or fenced blocks are ignored); a missing file is a WARN with a ghost-target summary; a `#heading` that is missing from an existing target is a separate WARN (Obsidian match: case-insensitive, whitespace-normalised; Markdown links also accept the GitHub slug; `#^block` is not checked; a bare `#anchor` is checked against the same file); links from visible notes into `visibility: private` or `status: archived` targets are one INFO count (never listed, and their headings are not checked); one INFO count of notes (decisions, knowledge, procedures, projects, notes, ideas; not tasks, handoffs, rules, protocol, self, backlog, archive, `_generated`, core, inbox or hidden notes) that no other file links to. PASS reads "N wikilinks and M markdown links in F files resolve";
   - `decisions`: WARN for each `decisions/<x>.md` whose owner file exists (names `juno migrate --decisions`), INFO for files that stay with a reason;
   - privacy patterns;
   - duplicate segment cards;

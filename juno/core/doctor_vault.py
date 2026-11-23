@@ -5,10 +5,9 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from juno.core import cardcopies, pitfalldup, privacy, threadscan, topics
+from juno.core import cardcopies, linkcheck, pitfalldup, privacy, threadscan, topics
 from juno.core.vaultfmt import (
     CARD_HEAD_RE,
-    WIKILINK_RE,
     card_field,
     injected_rules,
     rule_entries,
@@ -21,12 +20,9 @@ NOTE_LINES, NOTE_CHARS = 60, 4000
 KNOWLEDGE_CHARS = 8000
 THREAD_LINES, THREAD_LINE_CHARS = 30, 200
 PRIVACY_SHOWN = 5
-LINK_SHOWN = 20
 STALE_SHOWN = 5
 FAST_PATH_MS = 50.0
 TICKET_FILE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*-[0-9]+$")
-FENCE_RE = re.compile(r"```.*?```|~~~.*?~~~", re.S)
-CODE_RE = re.compile(r"`[^`\n]*`")
 
 
 def card_checks(cards: Sequence[Mapping[str, Any]], profiles: Sequence[str] = ()) -> list[Check]:
@@ -418,62 +414,8 @@ def stale_cache_checks(stale: Sequence[str] | None, checked: str | None) -> list
     ]
 
 
-def link_targets(text: str) -> list[tuple[int, str]]:
-    cleaned = CODE_RE.sub(
-        lambda m: " " * len(m.group(0)),
-        FENCE_RE.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), text),
-    )
-    found: list[tuple[int, str]] = []
-    for number, line in enumerate(cleaned.splitlines(), 1):
-        for raw in WIKILINK_RE.findall(line):
-            target = raw.split("|", 1)[0].split("#", 1)[0].strip()
-            if target and "<" not in target and "..." not in target:
-                found.append((number, target))
-    return found
-
-
-def resolve_link(target: str, rels: set[str], names: set[str]) -> bool:
-    low = target.casefold().removesuffix(".md")
-    if "/" in low:
-        return low in rels
-    return low in names
-
-
-SHARED_LINKS = "%d bare links name a stem with more than one file (a path link is exact)"
-
-
 def link_checks(files: Mapping[str, str]) -> list[Check]:
-    rels = {r[:-3].casefold() for r in files}
-    names = {r.rsplit("/", 1)[-1] for r in rels}
-    stems = Counter(r.rsplit("/", 1)[-1] for r in rels)
-    broken: list[tuple[str, int, str]] = []
-    total = 0
-    shared = 0
-    for rel, text in sorted(files.items()):
-        for number, target in link_targets(text):
-            total += 1
-            if not resolve_link(target, rels, names):
-                broken.append((rel, number, target))
-            elif "/" not in target and stems[target.casefold().removesuffix(".md")] > 1:
-                shared += 1
-    info: list[Check] = [("INFO", "links", SHARED_LINKS % shared)] if shared else []
-    if not broken:
-        return [("PASS", "links", f"{total} wikilinks in {len(files)} files resolve"), *info]
-    out: list[Check] = [
-        ("WARN", "links", f"broken link {r}:{n} -> [[{t}]]") for r, n, t in broken[:LINK_SHOWN]
-    ]
-    if len(broken) > LINK_SHOWN:
-        out.append(("WARN", "links", f"{len(broken) - LINK_SHOWN} more broken links not shown"))
-    ghosts = Counter(t for _, _, t in broken)
-    ranked = sorted(ghosts.items(), key=lambda item: (-item[1], item[0]))[:LINK_SHOWN]
-    out.append(
-        (
-            "WARN",
-            "links",
-            f"{len(ghosts)} ghost link targets: " + ", ".join(f"{t} ({n})" for t, n in ranked),
-        )
-    )
-    return out + info
+    return linkcheck.link_checks(files)
 
 
 def percentile(values: Sequence[float], q: float) -> float:
