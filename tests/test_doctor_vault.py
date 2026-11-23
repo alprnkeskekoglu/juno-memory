@@ -217,7 +217,7 @@ class Pure(unittest.TestCase):
     def test_links_counts_bare_links_with_several_candidates(self) -> None:
         files = {
             "projects/alpha.md": "",
-            "handoffs/alpha.md": "[[alpha]] [[handoffs/alpha]]",
+            "handoffs/alpha.md": "[[alpha]] [[handoffs/alpha]] [[beta]]",
             "projects/beta.md": "[[alpha]] [[beta]]",
         }
         out = dv.link_checks(files)

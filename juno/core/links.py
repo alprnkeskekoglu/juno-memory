@@ -1,10 +1,13 @@
+import posixpath
 import re
 import unicodedata
 from collections import Counter
 from collections.abc import Collection, Mapping
-from typing import Any
+from typing import Any, NamedTuple
+from urllib.parse import unquote
 
 from juno.core import vaultfmt
+from juno.core.vaultfmt import WIKILINK_RE
 
 CACHE_VERSION = 1
 MAX_TITLE = 80
@@ -245,3 +248,116 @@ def link_report(files: Files) -> list[tuple[str, str]]:
     more = f" and {len(ranked) - LINK_REPORT_LINES} more" if len(ranked) > LINK_REPORT_LINES else ""
     report.append(("warn", f"{len(ranked)} ghost link targets: {shown}{more}"))
     return report
+
+
+BLOCK_RE = re.compile(r"```.*?```|~~~.*?~~~", re.S)
+SPAN_RE = re.compile(r"`[^`\n]*`")
+ATX_RE = re.compile(r"^ {0,3}#{1,6}[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$")
+SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
+MD_LINK_RE = re.compile(
+    r"(?<![!\\])\[(?:[^\[\]\n]|\[[^\[\]\n]*\])*\]"
+    r"\(\s*(<[^<>\n]*>|(?:[^()\s]|\([^()\s]*\))*)(?:\s+(?:\"[^\"\n]*\"|'[^'\n]*'))?\s*\)"
+)
+MD_INLINE_RE = re.compile(r"\[([^\[\]]*)\]\([^()]*\)|[*`]|~~")
+OBSIDIAN_STRIP_RE = re.compile(r"[#|^:\[\]\\]")
+
+
+class Ref(NamedTuple):
+    """One link found in a file. kind is "wiki" or "md"; path is the wikilink target as written
+    or, for a Markdown link, the vault-relative path it resolves to from the source file ("" for
+    a wikilink with no target; the source file itself for a same-file anchor); frag is the heading
+    part ("" when none); shown is the destination as written, for reports."""
+
+    line: int
+    kind: str
+    path: str
+    frag: str
+    shown: str
+
+
+def blank(text: str, spans: bool = True) -> str:
+    """The text with fenced blocks (and code spans when `spans`) blanked, line numbers kept."""
+    text = BLOCK_RE.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), text)
+    return SPAN_RE.sub(lambda m: " " * len(m.group(0)), text) if spans else text
+
+
+def md_dest(source: str, dest: str) -> tuple[str, str] | None:
+    """(vault-relative path, heading) for a local Markdown link, or None when it is not one to
+    check: a URL (scheme: or //), a non-.md path, or an empty or `#top` anchor. A path is relative
+    to the source file's directory; a leading `/` is relative to the vault root."""
+    dest = dest.strip()
+    if dest.startswith("<") and dest.endswith(">"):
+        dest = dest[1:-1].strip()
+    if not dest or SCHEME_RE.match(dest) or dest.startswith("//"):
+        return None
+    path, _, frag = dest.partition("#")
+    path, frag = unquote(path.partition("?")[0]), unquote(frag)
+    if not path:
+        return (source, frag) if frag and frag != "top" else None
+    if not path.lower().endswith(".md"):
+        return None
+    base = (
+        path.lstrip("/")
+        if path.startswith("/")
+        else posixpath.join(posixpath.dirname(source), path)
+    )
+    return posixpath.normpath(base), frag
+
+
+def refs(source: str, text: str) -> list[Ref]:
+    found: list[Ref] = []
+    for number, line in enumerate(blank(text).splitlines(), 1):
+        for raw in WIKILINK_RE.findall(line):
+            target, _, frag = raw.split("|", 1)[0].partition("#")
+            target, frag = target.strip(), frag.rsplit("#", 1)[-1].strip()
+            if "<" in target or "..." in target or not (target or frag):
+                continue
+            found.append(Ref(number, "wiki", target, frag, target + ("#" + frag if frag else "")))
+        for match in MD_LINK_RE.finditer(line):
+            parsed = md_dest(source, match.group(1))
+            if parsed:
+                found.append(Ref(number, "md", *parsed, match.group(1).strip("<> ")))
+    return found
+
+
+def norm_heading(text: str) -> str:
+    text = OBSIDIAN_STRIP_RE.sub(" ", unicodedata.normalize("NFC", text))
+    return " ".join(text.split()).casefold()
+
+
+def slugify(text: str) -> str:
+    """GitHub-style heading anchor: lowercase, punctuation dropped, spaces to hyphens."""
+    return re.sub(r"[^\w\- ]", "", text.casefold()).replace(" ", "-")
+
+
+class Headings(NamedTuple):
+    names: frozenset[str]
+    slugs: frozenset[str]
+
+
+def headings(text: str) -> Headings:
+    """Normalised ATX heading texts (as written and without inline marks) and GitHub slugs
+    (with -1, -2 for repeats) of a file body; frontmatter and fenced blocks are skipped."""
+    lines = blank(text, spans=False).split("\n")
+    names: set[str] = set()
+    slugs: set[str] = set()
+    seen: Counter[str] = Counter()
+    for line in lines[body_start(lines) :]:
+        match = ATX_RE.match(line)
+        if not match:
+            continue
+        raw = match.group(1)
+        plain = MD_INLINE_RE.sub(lambda m: m.group(1) or "", raw)
+        names.update((norm_heading(raw), norm_heading(plain)))
+        slug = slugify(" ".join(plain.split()))
+        slugs.add(slug if not seen[slug] else f"{slug}-{seen[slug]}")
+        seen[slug] += 1
+    return Headings(frozenset(names), frozenset(slugs))
+
+
+def has_heading(frag: str, found: Headings, github: bool) -> bool:
+    """Obsidian match (case-insensitive, whitespace-normalised); block refs (^id) always pass.
+    Markdown links (`github`) also accept the GitHub slug."""
+    if frag.startswith("^") or norm_heading(frag) in found.names:
+        return True
+    return github and (frag in found.slugs or slugify(frag) in found.slugs)
