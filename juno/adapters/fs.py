@@ -57,6 +57,44 @@ def atomic_write(path: str, data: bytes, mode: int | None = None) -> None:
         raise
 
 
+def stamp(path: str) -> tuple[int, int, int] | None:
+    try:
+        st = os.stat(path)
+    except FileNotFoundError:
+        return None
+    return (st.st_ino, st.st_mtime_ns, st.st_size)
+
+
+def write_settings(
+    path: str,
+    data: bytes,
+    mode: int | None = None,
+    expect: tuple[int, int, int] | None = None,
+    check: bool = False,
+) -> None:
+    """Opt-in settings writer: follows symlinks, keeps hardlinks, refuses a changed file.
+
+    Unlike atomic_write this resolves the path first, so only use it for the user's
+    settings file. With check=True the file must still match `expect` (a stamp() taken
+    when it was read; None means it did not exist).
+    """
+    real = os.path.realpath(path)
+    if check and stamp(real) != expect:
+        raise ValueError(f"{path} changed while Juno was working on it; nothing written, rerun")
+    try:
+        links = os.stat(real).st_nlink
+    except FileNotFoundError:
+        links = 1
+    if links > 1:
+        with open(real, "r+b") as handle:
+            handle.truncate()
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        return
+    atomic_write(real, data, mode)
+
+
 @contextlib.contextmanager
 def locked(path: str, timeout: float = 2.0) -> Iterator[None]:
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)

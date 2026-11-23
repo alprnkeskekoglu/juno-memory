@@ -127,5 +127,71 @@ class PrivateDir(unittest.TestCase):
                 fs.ensure_private_dir(path)
 
 
+class WriteSettings(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = self.tmp.name
+
+    def test_plain_file(self) -> None:
+        path = os.path.join(self.dir, "s.json")
+        with open(path, "wb") as handle:
+            handle.write(b"old")
+        os.chmod(path, 0o640)
+        fs.write_settings(path, b"new")
+        with open(path, "rb") as handle:
+            self.assertEqual(handle.read(), b"new")
+        self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o640)
+        self.assertEqual(os.listdir(self.dir), ["s.json"])
+
+    def test_symlink_stays_symlink(self) -> None:
+        os.mkdir(os.path.join(self.dir, "dots"))
+        target = os.path.join(self.dir, "dots", "settings.json")
+        link = os.path.join(self.dir, "link.json")
+        with open(target, "wb") as handle:
+            handle.write(b"old")
+        os.symlink(target, link)
+        fs.write_settings(link, b"new")
+        self.assertTrue(os.path.islink(link))
+        with open(target, "rb") as handle:
+            self.assertEqual(handle.read(), b"new")
+        self.assertEqual(os.listdir(os.path.join(self.dir, "dots")), ["settings.json"])
+
+    def test_hardlink_keeps_inode(self) -> None:
+        a = os.path.join(self.dir, "a.json")
+        b = os.path.join(self.dir, "b.json")
+        with open(a, "wb") as handle:
+            handle.write(b"old")
+        os.link(a, b)
+        fs.write_settings(a, b"new")
+        self.assertEqual(os.stat(a).st_ino, os.stat(b).st_ino)
+        self.assertEqual(os.stat(a).st_nlink, 2)
+        with open(b, "rb") as handle:
+            self.assertEqual(handle.read(), b"new")
+
+    def test_stamp_mismatch_refuses(self) -> None:
+        path = os.path.join(self.dir, "s.json")
+        with open(path, "wb") as handle:
+            handle.write(b"old")
+        stamp = fs.stamp(path)
+        with open(path, "wb") as handle:
+            handle.write(b"edited by someone")
+        with self.assertRaises(ValueError):
+            fs.write_settings(path, b"new", expect=stamp, check=True)
+        with open(path, "rb") as handle:
+            self.assertEqual(handle.read(), b"edited by someone")
+
+    def test_atomic_write_still_replaces_symlink(self) -> None:
+        target = os.path.join(self.dir, "t")
+        link = os.path.join(self.dir, "l")
+        with open(target, "wb") as handle:
+            handle.write(b"old")
+        os.symlink(target, link)
+        fs.atomic_write(link, b"new")
+        self.assertFalse(os.path.islink(link))
+        with open(target, "rb") as handle:
+            self.assertEqual(handle.read(), b"old")
+
+
 if __name__ == "__main__":
     unittest.main()

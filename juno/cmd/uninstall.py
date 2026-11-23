@@ -18,6 +18,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def restore_settings(path: str, info: dict[str, Any], record: dict[str, Any], dry: bool) -> None:
+    seen = fs.stamp(path)
     raw = fs.read_bytes(path)
     if raw is None:
         say(f"settings: {path} is gone; nothing to restore")
@@ -29,7 +30,7 @@ def restore_settings(path: str, info: dict[str, Any], record: dict[str, Any], dr
                 verb = "would restore" if dry else "restored"
                 say(f"settings: {verb} the original bytes of {path}")
                 if not dry:
-                    fs.atomic_write(path, original)
+                    fs.write_settings(path, original, None, seen, True)
             else:
                 say(f"settings: {'would remove' if dry else 'removed'} {path} (Juno created it)")
                 if not dry:
@@ -44,7 +45,7 @@ def restore_settings(path: str, info: dict[str, Any], record: dict[str, Any], dr
     new_bytes = settings_merge.dumps(new, indent, raw.endswith(b"\n"))
     say(f"settings: {'would remove' if dry else 'removed'} the recorded entries from {path}")
     if not dry:
-        fs.atomic_write(path, new_bytes)
+        fs.write_settings(path, new_bytes, None, seen, True)
 
 
 def remove_shim(info: dict[str, Any], dry: bool) -> None:
@@ -76,7 +77,7 @@ def run(args: argparse.Namespace, env: Mapping[str, str]) -> int:
         path = common.settings_path(args, cfg) if chosen else manifest["settings"]["path"]
         try:
             restore_settings(path, manifest["settings"], manifest.get("record", {}), dry)
-        except settings_merge.SettingsError as error:
+        except (settings_merge.SettingsError, ValueError) as error:
             say(f"Juno: {error}")
             return 2
     if "shim" in manifest:
