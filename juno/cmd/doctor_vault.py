@@ -38,6 +38,7 @@ from juno.core import (
     selfmodel,
     topics,
 )
+from juno.core import doctor_summary as ds
 from juno.core import doctor_vault as dv
 from juno.core import privacyack as ack_core
 from juno.core.doctor_vault import Check
@@ -128,10 +129,10 @@ def snapshot_checks(cfg: config.Config) -> list[Check]:
         code, out, _ = snapshot.vault_git(cfg, vault, "log", "-1", "--format=%ct %H")
         remotes = snapshot.vault_git(cfg, vault, "remote")[1].split()
     except snapshot.Failed:
-        return dv.snapshot_checks(False, None, [], time.time())
+        return ds.snapshot_checks(False, None, [], time.time())
     stamp, _, sha = out.strip().partition(" ")
     last = (int(stamp), sha) if code == 0 and stamp.isdigit() else None
-    return dv.snapshot_checks(True, last, remotes, time.time())
+    return ds.snapshot_checks(True, last, remotes, time.time())
 
 
 def vault_checks(cfg: config.Config) -> list[Check]:
@@ -156,7 +157,7 @@ def vault_checks(cfg: config.Config) -> list[Check]:
         cfg.get_int("caps", "global_rules_chars"),
     )
     core, glob, block = opening_rules(view)
-    out += dv.rules_size_checks(
+    out += ds.rules_size_checks(
         len(core.strip()),
         len(glob),
         len(block),
@@ -183,7 +184,7 @@ def vault_checks(cfg: config.Config) -> list[Check]:
     out += content_checks(cfg, view, unreadable)
     moves = decisionmoveio.plan_for(cfg)
     out += doctor_decisions.decision_checks(moves, decisionmoveio.acks_to_move(cfg, moves))
-    out += dv.unreadable_checks(sorted({*unreadable, *view.unreadable}))
+    out += ds.unreadable_checks(sorted({*unreadable, *view.unreadable}))
     return out
 
 

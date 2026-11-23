@@ -10,7 +10,7 @@ from typing import Any
 from juno import config, paths
 from juno.adapters import fs, interpreter, keysbackfill, ledgerio, store, vault, voiceimport
 from juno.cmd import common, doctor_vault, init, write
-from juno.core import doctor_vault as dv
+from juno.core import doctor_summary as ds
 from juno.core import interp, migrate, settings_merge, shim, tomlio
 
 Check = tuple[str, str, str]
@@ -284,7 +284,14 @@ def check_settings_paths(cfg: config.Config, settings: str) -> list[Check]:
         if isinstance(entries, list)
     }
     current = settings_merge.build_block(cfg.vault, paths.home(cfg.env))
-    return dv.stale_path_checks(recorded, current, cfg.vault)
+    old = {
+        key: [e for e in entries if e not in current.get(key, ())]
+        for key, entries in recorded.items()
+    }
+    missing = [
+        e for key, entries in current.items() for e in entries if e not in (perms.get(key) or [])
+    ]
+    return ds.stale_path_checks(old, missing, cfg.vault)
 
 
 def check_output_style(cfg: config.Config, settings: str) -> list[Check]:

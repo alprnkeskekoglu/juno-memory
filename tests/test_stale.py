@@ -253,7 +253,16 @@ class CacheAndVault(Base):
         report = self.stale()
         self.assertEqual(
             set(report),
-            {"days", "today", "entries", "stale", "budget_exhausted", "git_seconds", "cache"},
+            {
+                "days",
+                "today",
+                "entries",
+                "stale",
+                "budget_exhausted",
+                "git_seconds",
+                "unreadable",
+                "cache",
+            },
         )
         self.assertEqual(report["days"], 60)
         self.assertEqual(

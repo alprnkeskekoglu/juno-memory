@@ -6,7 +6,7 @@ from unittest import mock
 
 from juno.adapters import store
 from juno.cmd import common
-from juno.core import doctor_vault as dv
+from juno.core import doctor_summary as dv
 from juno.core import unreadable
 from tests.support.write import WriteCase
 
@@ -97,22 +97,23 @@ class Unreadable(unittest.TestCase):
 
 
 class SettingsPaths(unittest.TestCase):
-    CURRENT: ClassVar[dict[str, list[str]]] = {
-        "additionalDirectories": ["/new/vault"],
-        "allow": ["Read(/new/vault/**)"],
-        "deny": [],
+    OLD: ClassVar[dict[str, list[str]]] = {
+        "additionalDirectories": ["/old/vault"],
+        "allow": ["Read(/old/vault/**)"],
     }
 
-    def test_current_entries_are_fine(self) -> None:
-        self.assertEqual(dv.stale_path_checks(self.CURRENT, self.CURRENT, "/new/vault"), [])
+    def test_nothing_recorded_for_another_vault_is_fine(self) -> None:
+        self.assertEqual(dv.stale_path_checks({}, ["/new/vault"], "/new/vault"), [])
 
-    def test_old_vault_entries_warn_with_the_fix(self) -> None:
-        recorded = {"additionalDirectories": ["/old/vault"], "allow": ["Read(/old/vault/**)"]}
-        out = dv.stale_path_checks(recorded, self.CURRENT, "/new/vault")
+    def test_old_entries_with_the_new_ones_present_are_fine(self) -> None:
+        self.assertEqual(dv.stale_path_checks(self.OLD, [], "/new/vault"), [])
+
+    def test_old_entries_without_the_new_ones_warn_with_the_fix(self) -> None:
+        out = dv.stale_path_checks(self.OLD, ["/new/vault", "Read(/new/vault/**)"], "/new/vault")
         self.assertEqual([(s, n) for s, n, _ in out], [("WARN", "settings paths")])
         self.assertIn("/old/vault", out[0][2])
-        self.assertIn("/new/vault", out[0][2])
-        self.assertIn("juno init", out[0][2])
+        self.assertIn("lacks 2 for /new/vault", out[0][2])
+        self.assertTrue(out[0][2].endswith("run juno init"))
 
 
 class Collected(WriteCase):
