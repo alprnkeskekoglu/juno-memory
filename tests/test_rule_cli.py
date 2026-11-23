@@ -98,6 +98,11 @@ class Add(WriteCase):
         code, out = self.add("--scope", "global")
         self.assertEqual((code, out), (2, "Juno: refused: [nosave] is set in this segment\n"))
 
+    def test_ticket_shaped_topic_slug_is_refused(self) -> None:
+        code, out = self.add("--scope", "topic:abc-123", "--triggers", "abcdoc")
+        self.assertEqual(code, 2)
+        self.assertIn("topic slug abc-123 is ticket-shaped; ticket rules are retired", out)
+
     def test_caps_and_shape(self) -> None:
         self.assertEqual(self.add("--scope", "global", rule="x " * 200 + "formatter")[0], 2)
         self.assertEqual(self.add("--scope", "global", rule="Run · formatter")[0], 2)

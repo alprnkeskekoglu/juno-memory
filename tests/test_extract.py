@@ -3,7 +3,7 @@ import os
 import time
 from typing import Any, ClassVar
 
-from juno.adapters import queues
+from juno.adapters import learnio, queues
 from juno.core import candidates, extract
 from tests.support.cardcase import CardCase, card, with_extract
 from tests.support.hooks import SID
@@ -68,6 +68,47 @@ class RuleCandidates(ExtractCase):
         ctx = extract.RuleContext(sources=[], repos=["topic-tool"])
         self.assertEqual(extract.check_scope(ctx, "repo:topic-tool", []), ("repo:topic-tool", []))
         self.assertIsNone(extract.check_scope(ctx, "repo:global", []))
+
+    def test_ticket_shaped_topic_slug_is_invalid(self) -> None:
+        ctx = extract.RuleContext(sources=[], repos=[])
+        self.assertIsNone(extract.check_scope(ctx, "topic:abc-123", ["abcdoc"]))
+        self.assertIsNone(extract.check_scope(ctx, "topic:ab12-9", ["abcdoc"]))
+        self.assertEqual(
+            extract.check_scope(ctx, "topic:ci-check", ["abcdoc"]), ("topic:ci-check", ["abcdoc"])
+        )
+
+    def test_generic_triggers_are_dropped_for_a_new_topic(self) -> None:
+        ctx = extract.RuleContext(sources=[], repos=[])
+        got = extract.check_scope(ctx, "topic:ci-tools", ["abc-123", "branch", "ci-check"])
+        self.assertEqual(got, ("topic:ci-tools", ["abc-123", "ci-check"]))
+        self.assertIsNone(extract.check_scope(ctx, "topic:ci-tools", ["branch", "git"]))
+
+    def test_rule_text_with_a_ticket_key_is_invalid(self) -> None:
+        ctx = extract.RuleContext(sources=[("p1", QUOTE)], repos=[], tickets=["proj-77"])
+        item = {"rule": "Run make lint before committing", "scope": "global", "quote": QUOTE}
+        self.assertEqual(extract.check_rule(ctx, item)[0], "ok")
+        for text in (
+            "Use branch feature/ABC-123 in every repo",
+            "Always close tickets like XYZ-9 first",
+            "Always close PROJ-77 first",
+            "Always close proj-77. first",
+        ):
+            self.assertEqual(extract.check_rule(ctx, {**item, "rule": text})[0], "invalid", text)
+        for text in (
+            "Always use UTF-8 for files",
+            "Hash with SHA-256 for digests",
+            "Write dates in ISO-8601 format",
+            "Prefer Python-3 over scripts",
+            "Cite CVE-2024 ids in notes",
+            "Ask about GPT-4 pricing first",
+        ):
+            self.assertEqual(extract.check_rule(ctx, {**item, "rule": text})[0], "ok", text)
+
+    def test_instructions_exclude_decisions_for_the_current_ticket(self) -> None:
+        text = "\n".join(learnio.instructions(self.cfg(), self.seg()))
+        self.assertIn("decision for the current ticket or task", text)
+        self.assertIn("branch names, step order, one-off workarounds", text)
+        self.assertIn("decision records", text)
 
     def test_unverified_invalid_and_secret_candidates_are_dropped(self) -> None:
         self.start()

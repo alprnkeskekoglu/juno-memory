@@ -3,10 +3,10 @@ from dataclasses import dataclass
 
 from juno.core import topics, vaultfmt
 from juno.core.errors import Refused
+from juno.core.redact import TICKET_SHAPE_RE as TICKET_SHAPE_RE
 from juno.core.vaultfmt import RuleEntry, injected_rules, rule_entries
 
 REPO_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,79}")
-TICKET_SHAPE_RE = re.compile(r"[A-Za-z][A-Za-z0-9]*-[0-9]+")
 
 
 @dataclass(frozen=True)
@@ -26,6 +26,8 @@ def parse_scope(scope: str) -> Scope:
         raise Refused(f"repo name {name} is ticket-shaped; ticket rules are retired")
     if kind == "repo" and REPO_NAME_RE.fullmatch(name):
         return Scope(scope, f"rules/{topics.REPO_DIR}/{name}.md", "scoped_rule_lines")
+    if kind == "topic" and TICKET_SHAPE_RE.fullmatch(name):
+        raise Refused(f"topic slug {name} is ticket-shaped; ticket rules are retired")
     if kind == "topic" and topics.SLUG_RE.match(name):
         return Scope(scope, topics.topic_relpath(name), "scoped_rule_lines")
     if kind == "topic":

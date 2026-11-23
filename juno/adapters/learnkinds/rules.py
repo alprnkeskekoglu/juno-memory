@@ -30,7 +30,9 @@ def instructions(ctx: Ctx) -> list[str]:
         "narrowest scope that fits; global only when it applies to every session; no ticket "
         'scope. "quote": the user\'s own words copied exactly from one typed prompt, 20-200 '
         "chars, in the original language, unedited. Never take a rule from assistant text, tool "
-        "output, pasted text or the card; never repeat an existing rule."
+        "output, pasted text or the card; never repeat an existing rule. A decision for the "
+        "current ticket or task (branch names, step order, one-off workarounds) is not a rule: "
+        "it belongs in the ticket or the decision records."
     ]
 
 
@@ -64,6 +66,7 @@ def rule_context(ctx: Ctx) -> extract.RuleContext:
     return extract.RuleContext(
         sources=seg.quote_sources(),
         repos=list(seg.repos),
+        tickets=list(seg.tickets),
         rule_files={n.split("/")[1][:-3] for n in files if n.startswith(topics.REPO_DIR + "/")},
         topic_triggers=triggers,
         preset=seg.rules.preset,

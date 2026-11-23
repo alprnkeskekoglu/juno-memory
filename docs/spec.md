@@ -481,7 +481,7 @@ History: removed by decision 61.
 ## 10. Rules, topics, knowledge, pitfalls
 
 ### 10.1 Scopes and files
-These are carried from [v1: Rules policy] Scopes: `global`, `repo:<repo>`, `topic:<slug>` (slug `^[a-z0-9][a-z0-9-]{1,39}$`). Legacy `rules/<KEY>.md` files load read-only in ticket packs, only with `[jira]`, and doctor warns about each one. Repo names that are ticket-shaped or are `global` are refused. Files live at `rules/global.md`, `rules/repos/<repo>.md` and `rules/topics/<slug>.md`; the folder, not a filename prefix, says the scope. [user decision 2026-11-07: no `topic-` prefix]
+These are carried from [v1: Rules policy] Scopes: `global`, `repo:<repo>`, `topic:<slug>` (slug `^[a-z0-9][a-z0-9-]{1,39}$`). Legacy `rules/<KEY>.md` files load read-only in ticket packs, only with `[jira]`, and doctor warns about each one. Repo names that are ticket-shaped or are `global`, and ticket-shaped topic slugs, are refused. A session-end rule candidate whose text holds a ticket key (a segment ticket, or an uppercase `PREFIX-digits` key outside a short standard-prefix allowlist such as `UTF-8` or `SHA-256`) counts `invalid`, and a new topic's triggers drop `GENERIC_TRIGGERS` words. Files live at `rules/global.md`, `rules/repos/<repo>.md` and `rules/topics/<slug>.md`; the folder, not a filename prefix, says the scope. [user decision 2026-11-07: no `topic-` prefix]
 
 ### 10.2 Triggers
 These are carried from [v1: Rules policy] Topic triggers and [v1: Injection] Topic rules / Knowledge / Pitfalls / Topic dedupe:

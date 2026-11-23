@@ -30,6 +30,8 @@ THREAD_CLOSES = 2
 THREAD_CHARS = (10, 160)
 THREAD_LINES = 30
 THREAD_TAG_LINES = 5
+RULE_KEY_RE = re.compile(r"\b[A-Z][A-Z0-9]{1,9}-[0-9]+\b")
+STANDARD_PREFIXES = frozenset("UTF SHA ISO GPT RFC MD ES PEP HTTP CVE AES IEEE".split())
 RULE_COUNTS = ("proposed", "queued", "unverified", "duplicate", "invalid", "capped")
 
 
@@ -37,6 +39,7 @@ RULE_COUNTS = ("proposed", "queued", "unverified", "duplicate", "invalid", "capp
 class RuleContext:
     sources: list[tuple[str, str]]
     repos: list[str]
+    tickets: list[str] = field(default_factory=list)
     rule_files: set[str] = field(default_factory=set)
     topic_triggers: dict[str, list[str]] = field(default_factory=dict)
     preset: str = "none"
@@ -91,12 +94,21 @@ def check_scope(ctx: RuleContext, scope: str, triggers: object) -> tuple[str, li
         if bad or not REPO_NAME_RE.match(name):
             return None
         return f"repo:{name}", []
-    if kind != "topic" or not topics.SLUG_RE.match(name):
+    if kind != "topic" or not topics.SLUG_RE.match(name) or TICKET_SHAPE_RE.fullmatch(name):
         return None
     if ctx.topic_triggers.get(name):
         return f"topic:{name}", []
-    picked = clean_triggers(triggers, ctx.preset)
+    picked = [t for t in clean_triggers(triggers, ctx.preset) if t not in topics.GENERIC_TRIGGERS]
     return (f"topic:{name}", picked) if picked else None
+
+
+def has_ticket_key(ctx: RuleContext, rule: str) -> bool:
+    for key in ctx.tickets:
+        if re.search(r"(?<![A-Za-z0-9])" + re.escape(key) + r"(?![A-Za-z0-9])", rule, re.I):
+            return True
+    return any(
+        m.group(0).partition("-")[0] not in STANDARD_PREFIXES for m in RULE_KEY_RE.finditer(rule)
+    )
 
 
 def verified_pid(ctx: RuleContext, quote: str) -> str | None:
@@ -112,6 +124,8 @@ def check_rule(ctx: RuleContext, item: object) -> tuple[str, dict[str, Any] | No
         return "invalid", None
     rule, quote = text_field(item.get("rule")), text_field(item.get("quote"))
     if not 10 <= len(rule) <= ctx.rule_max or "·" in rule or privacy.scan(rule):
+        return "invalid", None
+    if has_ticket_key(ctx, rule):
         return "invalid", None
     if not ctx.quote_min <= len(quote) <= QUOTE_MAX or "·" in quote or privacy.scan(quote):
         return "invalid", None
