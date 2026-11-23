@@ -286,6 +286,7 @@ Constants that name nothing user-specific stay in code: caps inside extraction, 
 | `eval/` | labelling sets, frozen sidecars, `last-gate.json` | kept |
 | `hook-errors.log`, `hook-timings.log`, `debug.log` | errors and timings | rotated at `error_log_bytes` |
 | `counters.json`, `vault.lock` | counters, the write lock | - |
+| `.juno-tmp-*` (state root, `ledgers`, `backups`, `status`, `topics`, `cards`) | temp files left by an atomic write killed at a hook timeout | swept by the prune after 1 day |
 | `install-manifest.json`, `install-backups/` | settings merge record | until uninstall |
 | `dashboard/` | page, `usage.json`, caches | rebuilt |
 
@@ -318,7 +319,9 @@ Every event does the following:
 - Checks `JUNO_DISABLE=1` first, then whether the session is interactive [v1: Sessions and segments].
 - Applies the synthetic-prompt filter [v1: Sessions and segments].
 - Writes JSON to stdout only when it has context to add.
-- Logs errors to `hook-errors.log` and timings to `hook-timings.log`.
+- Logs errors to `hook-errors.log` and timings to `hook-timings.log`; an OSError line ends with `errno=N`.
+- Reads stdin as UTF-8 with `errors="replace"` and replaces lone surrogates in payload strings, ledger records and its output with U+FFFD.
+- When a state-dir write fails with ENOSPC, EACCES, EPERM or EROFS, SessionStart and UserPromptSubmit still inject the vault-derived context (rules, pins) plus one line saying Juno could not write its state dir; Stop stays silent. Other OSErrors are not caught. Writes fail closed: UserPromptSubmit drops a `juno-unrecorded-<uid>-<hash>` flag in `$TMPDIR` (else `/tmp`) and `ledgerio.fold` then treats the segment as `[nosave]`, so write verbs refuse.
 - Always exits 0.
 
 Non-interactive sessions get nothing and write nothing.
@@ -734,6 +737,7 @@ A POSIX sh script written by init. It is refused when a non-Juno file already ex
 ### 13.4 Settings merge
 - Carried from v1 `install.py` and [v1: Decisions] Installer: adds only, never removes or reorders; refuses non-strict JSON; backs up the original to `install-backups/`; records every added entry in `install-manifest.json`; verifies after writing.
 - Target: `~/.claude/settings.json`.
+- Settings writes go through `fs.write_settings`: a symlinked file stays a symlink (the resolved target is written), a hardlinked file is rewritten in place, and init and uninstall stamp the file (inode, mtime_ns, size) when they read it and write nothing if it changed before the write. Settings JSON is read with a UTF-8 BOM allowed. `fs.atomic_write`, used for vault and state, still does not follow symlinks.
 
 | Key | Added |
 |---|---|
@@ -865,7 +869,7 @@ Evidence kinds: `--evidence` is a verbatim part (at least `quote_min_chars`) of 
 
 ### 14.2 Every write
 
-1. Scan: secrets (`redact.find_secrets`), then email, phone and 6+ digit ids (`privacy.scan`, 8.3). One-line fields also refuse the `·` separator and keep 8-300 characters (task digest lines, `task log` and the `ticket` kind, 8-1000; 14.1).
+1. Scan: secrets (`redact.find_secrets`, after Unicode format characters (Cf) are removed; it covers `NAME=value` with `private_key` among the names and subscript forms such as `os.environ["X_TOKEN"] = ...`, `setx NAME value` and fish `set -x NAME value` where NAME ends in a secret word, and HTTP `Basic <base64>` when it decodes to `user:pass`), then email, phone and 6+ digit ids (`privacy.scan`, 8.3). One-line fields also refuse the `·` separator and keep 8-300 characters (task digest lines, `task log` and the `ticket` kind, 8-1000; 14.1).
 2. Anchor the evidence (14.1).
 3. Dedupe on the folded first part of the line (before ` · ` and a trailing parenthesis): an exact match writes nothing and prints "already recorded"; a match with similarity at least 0.88 replaces that line (update instead of add).
 4. Caps: 100 live writes per session (`[caps] run_max`); notes 2,000, ideas 1,500, cards 1,500 and procedures 2,000 characters. There is no per-file line cap (decision 64).
