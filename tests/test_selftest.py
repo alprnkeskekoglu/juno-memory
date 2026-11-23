@@ -103,6 +103,14 @@ class PathValidation(SelftestCase):
         self.refused("q", "--expect", "notes/alpha.txt")
         self.refused("q", "--expect", "")
 
+    def test_secrets_and_personal_data_are_refused(self) -> None:
+        self.refused("the PRIVATE_KEY=abcdefghij12345678 setting", "--control")
+        self.refused("mail me at someone@example.com", "--expect", "notes/alpha.md")
+        self.refused("zebra", "--expect", "notes/alpha.md", "--sentence", "ask someone@example.com")
+        self.refused(
+            "zebra", "--expect", "notes/alpha.md", "--sentence", "PRIVATE_KEY=abcdefghij12345678"
+        )
+
     def test_symlinks_are_refused(self) -> None:
         os.symlink(os.path.join(self.sb.vault, "notes", "alpha.md"), self.vp("notes/link.md"))
         self.assertIn("symlink", self.refused("q", "--expect", "notes/link.md"))

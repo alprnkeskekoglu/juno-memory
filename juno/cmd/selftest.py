@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from juno import config
-from juno.adapters import agentcalls, ledgerio, selftestio
+from juno.adapters import agentcalls, gate, ledgerio, selftestio
 from juno.adapters import env as envmod
 from juno.cmd import write
 from juno.core import selftest as core
@@ -80,6 +80,9 @@ def add(cfg: config.Config, args: argparse.Namespace) -> int:
             selftestio.vault_file(cfg, expect)
     except core.Invalid as error:
         raise Refused(str(error)) from None
+    question = gate.scan_text(cfg, question, "question")
+    if sentence:
+        sentence = gate.scan_text(cfg, sentence, "--sentence")
     try:
         with selftestio.locked(cfg):
             state = selftestio.load(cfg)
