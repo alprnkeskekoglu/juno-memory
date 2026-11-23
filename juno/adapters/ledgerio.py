@@ -1,3 +1,5 @@
+import contextlib
+import hashlib
 import os
 import time
 
@@ -32,6 +34,22 @@ def ledger_path(cfg: config.Config, sid: object) -> str | None:
     return os.path.join(ledger_dir(cfg), f"{sid}.jsonl")
 
 
+def unrecorded_marker(cfg: config.Config, sid: object) -> str | None:
+    """A flag outside the state dir: set when a prompt could not be recorded there."""
+    if not ledger.safe_id(sid):
+        return None
+    key = hashlib.sha1(f"{cfg.state}\0{sid}".encode(), usedforsecurity=False).hexdigest()[:20]
+    return os.path.join(cfg.env.get("TMPDIR") or "/tmp", f"juno-unrecorded-{os.getuid()}-{key}")
+
+
+def mark_unrecorded(cfg: config.Config, sid: object) -> None:
+    """The prompt may have carried [nosave]; fold() treats the segment as nosave from now on."""
+    path = unrecorded_marker(cfg, sid)
+    if path:
+        with contextlib.suppress(OSError):
+            os.close(os.open(path, os.O_WRONLY | os.O_CREAT, 0o600))
+
+
 def append(cfg: config.Config, sid: object, record: Record) -> Record | None:
     path = ledger_path(cfg, sid)
     if path is None:
@@ -55,7 +73,10 @@ def fold(cfg: config.Config, sid: object) -> Segment:
     if path is None:
         return Segment(str(sid), rules_from(cfg))
     data = fs.read_bytes(path)
-    return ledger.fold_lines(str(sid), (data or b"").splitlines(), rules_from(cfg))
+    seg = ledger.fold_lines(str(sid), (data or b"").splitlines(), rules_from(cfg))
+    marker = unrecorded_marker(cfg, sid)
+    seg.nosave = seg.nosave or (marker is not None and os.path.exists(marker))
+    return seg
 
 
 def record(cfg: config.Config, seg: Segment, rec: Record) -> Record | None:

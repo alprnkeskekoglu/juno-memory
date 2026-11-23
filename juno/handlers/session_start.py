@@ -208,6 +208,12 @@ def handle(payload: dict[str, Any], cfg: config.Config) -> dict[str, Any] | None
     cap = cfg.get_int("caps", "hook_output_chars")
     with steps.step("rules"):
         rules = rules_text(cfg, view)
-    context = session_context(payload, cfg, view, cap - len(rules) - 2)
+    try:
+        context = session_context(payload, cfg, view, cap - len(rules) - 2)
+    except OSError as exc:
+        if not hookcore.state_unwritable(cfg, exc):
+            raise
+        store.log_error(cfg, "session_start", exc)
+        context = hookcore.STATE_LINE
     text = inject.fit_blocks([rules, context], cap)
     return hookcore.context_output("SessionStart", text) if text else None

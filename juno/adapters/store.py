@@ -179,6 +179,8 @@ def log_error(cfg: config.Config, event: str, exc: BaseException) -> None:
         stamp = time.strftime("%Y-%m-%dT%H:%M:%S")
         message = " ".join(str(exc).split())[:200]
         line = f"{stamp} {event or '-'} {type(exc).__name__} {where} {message!r}"
+        if isinstance(exc, OSError) and exc.errno:
+            line += f" errno={exc.errno}"
         fs.append_log(
             os.path.join(cfg.state, "hook-errors.log"),
             line,
