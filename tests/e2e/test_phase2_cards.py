@@ -36,6 +36,17 @@ extract = {{
 data["result"] = head + "\\n---JUNO-EXTRACT---\\n" + json.dumps(extract)
 print(json.dumps(data))
 """
+LOGGING_WRAPPER = """#!{python}
+import os, subprocess, sys
+prompt = sys.stdin.read()
+done = subprocess.run(
+    [os.environ["WRAP_CLAUDE"], *sys.argv[1:]],
+    input=prompt, capture_output=True, text=True, env=os.environ,
+)
+with open(os.environ["WRAP_LOG"], "a", encoding="utf-8") as handle:
+    handle.write(done.stdout + "\\n")
+sys.stdout.write(done.stdout)
+"""
 RULE_WRAPPER = """#!{python}
 import json, os, subprocess, sys
 prompt = sys.stdin.read()
@@ -305,6 +316,59 @@ class SessionEndExtraction(CardE2E):
         self.assertEqual(item["sid"], self.session_id())
         rules = self.read_vault("rules/global.md")
         self.assertNotIn("linter", rules)
+
+
+@e2e
+class TicketDecisionsQueueNoRule(CardE2E):
+    """Issue #39: decisions for the current ticket must not become rule candidates (model's own choice)."""
+
+    def test_ticket_scoped_decisions_queue_no_rule(self) -> None:
+        self.configure('[jira]\nprefixes = ["ABC"]\n')
+        log = os.path.join(self.sb.root, "raw-extract.log")
+        self.extra_env.update(
+            JUNO_CARD_CLAUDE=self.script("log-claude", LOGGING_WRAPPER),
+            WRAP_CLAUDE=shutil.which("claude") or "claude",
+            WRAP_LOG=log,
+        )
+        repo = self.repo()
+        subprocess.run(
+            ["git", "-C", repo, "symbolic-ref", "HEAD", "refs/heads/feature/ABC-123"], check=True
+        )
+        self.go(
+            "We are working on ticket ABC-123. Use the same branch name in all repos, "
+            "feature/ABC-123. Remove the old CI check first in every repo. "
+            f"Now use the Write tool to write the text hello into {repo}/out.txt, "
+            "then reply with the single word: done",
+            cwd=repo,
+        )
+        (row,) = self.wait_runs(1)
+        self.assertEqual(row["status"], "ok", row)
+        counts = row.get("rules") or {}
+        path = os.path.join(self.sb.state, "cards", "candidates.json")
+        pending: list[dict[str, Any]] = []
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as handle:
+                pending = json.load(handle)["items"]
+        report = os.environ.get("JUNO_E2E_REPORT")
+        if report:
+            raw = ""
+            if os.path.exists(log):
+                with open(log, encoding="utf-8") as handle:
+                    raw = handle.read()
+            with open(report, "a", encoding="utf-8") as handle:
+                handle.write(
+                    json.dumps(
+                        {
+                            "rules": counts,
+                            "sections": row["sections"],
+                            "candidates": pending,
+                            "raw": raw,
+                        }
+                    )
+                    + "\n"
+                )
+        self.assertEqual(counts.get("queued", 0), 0, (counts, pending))
+        self.assertEqual(pending, [])
 
 
 @e2e
