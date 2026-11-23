@@ -10,7 +10,6 @@ SINCE_RE = re.compile(r"· since (\d{4}-\d{2}-\d{2})\s*$")
 LIST_RE = re.compile(r"^\[(.*)\]$")
 TERMINAL = ("MERGED", "CLOSED")
 TASK_REPOS = 3
-CLOSED_TASK = ("done", "dropped", "archived")
 
 Lookup = Callable[[str, str], dict[str, str] | None]
 Ref = tuple[tuple[list[str], str | None], str]
@@ -88,7 +87,7 @@ def ticket_signals(
     for tag in tags:
         if is_ticket(tag):
             status = status_of(tag).strip().casefold()
-            if status in CLOSED_TASK:
+            if vaultfmt.is_finished(status):
                 found.append(f"ticket {tag.upper()} is {status}")
     return found
 

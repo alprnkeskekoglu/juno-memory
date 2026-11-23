@@ -1,6 +1,6 @@
 ---
 name: juno
-description: Search Juno, the personal memory vault, for past work: earlier decisions, handoff cards, ticket history, repo gotchas, and recaps. Use when the user asks what was done or decided before, refers to a previous session or ticket, or runs /juno <query>.
+description: "Search Juno, the personal memory vault, for past work: earlier decisions, handoff cards, ticket history, repo gotchas, and recaps. Use when the user asks what was done or decided before, refers to a previous session or ticket, or runs /juno <query>."
 when_to_use: Triggers include "where were we", "last time", "we decided earlier", "what happened on <ticket>", "gotchas for <repo>", "search memory", "recap this week", "open tasks", "/juno <query>". Not for questions about the current code; read the code for those.
 argument-hint: "<query>"
 allowed-tools: Bash(juno search *) Bash(juno recap *) Bash(juno tasks *) Bash(juno task show *) Bash(juno ideas *) Bash(juno stale *) Read Grep Glob

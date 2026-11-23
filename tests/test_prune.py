@@ -49,3 +49,20 @@ class PruneCards(WriteCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PruneTempFiles(WriteCase):
+    def test_old_juno_tmp_files_in_state_dirs_go_and_fresh_ones_stay(self) -> None:
+        found = {}
+        for sub in ("", "ledgers", "status", "cards"):
+            for tag, age in (("old", 2 * 86400), ("new", 60)):
+                path = os.path.join(self.sb.state, sub, f".juno-tmp-{tag}")
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write("x")
+                stamp = time.time() - age
+                os.utime(path, (stamp, stamp))
+                found[sub, tag] = path
+        prune.prune_state(self.cfg)
+        for (sub, tag), path in found.items():
+            self.assertEqual(os.path.exists(path), tag == "new", (sub, tag))

@@ -2,6 +2,8 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
+from juno.core import fold
+
 TOP_KINDS = {
     "protocol": "protocol",
     "rules": "rule",
@@ -37,7 +39,21 @@ RULE_LINE_RE = re.compile(
 )
 CARD_HEAD_RE = re.compile(r"^## (\d{4}-\d{2}-\d{2} \d{2}:\d{2}) · (.+?) · (.+?) · (\S{1,8})[ \t]*$")
 THREAD_RE = re.compile(r"^- \[([^\]\n]+)\] (.+)$")
-FINISHED_STATUSES = ("done", "dropped", "archived")
+FINISHED_STATUSES = (
+    "done",
+    "dropped",
+    "archived",
+    "closed",
+    "resolved",
+    "cancelled",
+    "canceled",
+    "completed",
+    "bitti",
+    "kapandi",
+    "tamamlandi",
+    "cozuldu",
+    "iptal",
+)
 
 Fields = dict[str, str | list[str]]
 
@@ -166,6 +182,11 @@ def field_items(fields: Fields, name: str) -> list[str]:
 
 def is_private(fields: Fields) -> bool:
     return field_str(fields, "visibility") == "private"
+
+
+def is_finished(status: str) -> bool:
+    """True for a closed ticket or task status, in any case and with or without Turkish marks."""
+    return fold.ascii_fold(status, "tr").strip() in FINISHED_STATUSES
 
 
 def is_archived(fields: Fields) -> bool:

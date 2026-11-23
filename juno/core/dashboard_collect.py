@@ -489,7 +489,7 @@ def experiments_tasks(src: Sources) -> Block:
     for name in md_files(directory):
         fields, _ = vaultfmt.parse_frontmatter(read_text(os.path.join(directory, name), FILE_LIMIT))
         status = backlog.as_text(fields.get("status")).strip().casefold()
-        if status not in vaultfmt.FINISHED_STATUSES:
+        if not vaultfmt.is_finished(status):
             rows.append(
                 {
                     "key": name[:-3],

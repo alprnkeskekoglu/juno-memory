@@ -380,9 +380,7 @@ def active_tickets(view: VaultView, caps: Caps, now: float) -> list[str]:
             continue
         text = view.read(rel)
         fields, _ = vaultfmt.parse_frontmatter(text)
-        if vaultfmt.field_str(fields, "status") in vaultfmt.FINISHED_STATUSES or view.hidden(
-            rel, text
-        ):
+        if vaultfmt.is_finished(vaultfmt.field_str(fields, "status")) or view.hidden(rel, text):
             continue
         title = fields.get("title") or "-"
         repos = fields.get("repos") or "-"

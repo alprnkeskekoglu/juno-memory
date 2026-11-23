@@ -62,6 +62,46 @@ class SkillFiles(unittest.TestCase):
                 self.assertIn(verb, known, f"{name}: juno {verb}")
 
 
+def frontmatter_files() -> list[str]:
+    found = []
+    for folder, name in (("skills", "SKILL.md"), ("agents", None), ("output-styles", None)):
+        base = os.path.join(REPO, folder)
+        for entry in sorted(os.listdir(base)):
+            path = os.path.join(base, entry, name) if name else os.path.join(base, entry)
+            if os.path.isfile(path) and path.endswith(".md"):
+                found.append(path)
+    return found
+
+
+class FrontmatterIsStrictYaml(unittest.TestCase):
+    """A plain YAML scalar may not hold ": " or " #", nor start with an indicator; a quoted one
+    must close. Strict readers truncate or reject the file otherwise."""
+
+    INDICATORS = "[]{},&*!|>%@`#?-:"
+
+    def test_every_value_is_valid_as_written(self) -> None:
+        paths = frontmatter_files()
+        self.assertTrue(paths)
+        for path in paths:
+            with open(path, encoding="utf-8") as handle:
+                lines = handle.read().split("\n")
+            end = lines.index("---", 1)
+            for line in lines[1:end]:
+                match = re.match(r"^([A-Za-z_][\w-]*):[ \t]+(.*?)\s*$", line)
+                if not match:
+                    continue
+                key, value = match.groups()
+                where = f"{os.path.relpath(path, REPO)}: {key}"
+                if value[:1] in "\"'":
+                    self.assertTrue(
+                        len(value) >= 2 and value[-1] == value[0], f"{where}: unclosed quote"
+                    )
+                    continue
+                self.assertNotIn(": ", value, where)
+                self.assertNotIn(" #", value, where)
+                self.assertNotIn(value[:1], self.INDICATORS, f"{where}: starts with indicator")
+
+
 class VoiceImportSkill(unittest.TestCase):
     """Text-level checks; the behaviour itself (criteria 15 and 16) needs a live session."""
 

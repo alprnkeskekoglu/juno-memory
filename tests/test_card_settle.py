@@ -1,6 +1,6 @@
 import time
 
-from juno.adapters import cardjob, writelog
+from juno.adapters import cardjob, ledgerio, writelog
 from tests.support.write import WriteCase
 
 QUOTE = "this is the first typed prompt"
@@ -80,6 +80,17 @@ class Settle(WriteCase):
         self.ok("undo", self.wid(out))
         self.assertIn("auto: true", self.get("handoffs/app.md"))
         self.assertIn("auto: true", self.get("handoffs/misc.md"))
+
+    def test_segment_card_is_refused_for_a_nosave_or_private_segment(self) -> None:
+        for flag in ("nosave", "private"):
+            with self.subTest(flag):
+                self.put("handoffs/app.md", "# Handoffs · app\n\n" + stub())
+                if flag == "nosave":
+                    self.prompt("[nosave] keep this out", "pidold02", OLD, nosave=True)
+                else:
+                    ledgerio.append(self.cfg, OLD, {"ev": "private"})
+                self.assertIn(flag, self.refused(*self.replace_args()))
+                self.assertIn("auto: true", self.get("handoffs/app.md"))
 
     def test_segment_card_is_refused_without_a_stub_or_with_a_real_card(self) -> None:
         self.refused(*self.replace_args())

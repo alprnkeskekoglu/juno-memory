@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from juno import config
 from juno.adapters import repos, taskio
 from juno.cmd.common import say
+from juno.core import fold
 
 
 def add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -24,12 +25,12 @@ def run(args: argparse.Namespace, env: Mapping[str, str]) -> int:
     if not repos.tickets_from(cfg).enabled:
         say("jira not configured")
         return 0
-    wanted_status = (args.status or "").strip().casefold().replace(" ", "-")
+    wanted_status = fold.ascii_fold((args.status or "").strip(), "tr").replace(" ", "-")
     wanted_repo = (args.repo or "").casefold()
     rows = [
         r
         for r in taskio.rows(cfg)
-        if (not wanted_status or r["status"] == wanted_status)
+        if (not wanted_status or fold.ascii_fold(str(r["status"]), "tr") == wanted_status)
         and (
             not wanted_repo
             or (isinstance(r["repos"], list) and wanted_repo in (x.casefold() for x in r["repos"]))

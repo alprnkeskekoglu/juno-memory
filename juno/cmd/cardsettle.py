@@ -47,6 +47,13 @@ def check_segment(cfg: config.Config, seg: Segment, seg8: str) -> None:
         raise Refused(f"segment {seg8} still has a card job or a late run pending; retry later")
 
 
+def refuse_unsaved(cfg: config.Config, seg8: str) -> None:
+    for sid in (s for s in ledgerio.ledger_ids(cfg) if s.startswith(seg8)):
+        old = ledgerio.fold(cfg, sid)
+        if old.private or old.nosave:
+            raise Refused(f"segment {seg8} is {'private' if old.private else 'nosave'}: no card")
+
+
 def stubs_only(cfg: config.Config, seg: Segment, seg8: str) -> tuple[Found, dict[str, str]]:
     check_segment(cfg, seg, seg8)
     found, texts = handoffs(cfg, seg8)
@@ -97,6 +104,7 @@ def replace(cfg: config.Config, args: argparse.Namespace, build: Build) -> gate.
     seg8 = args.segment
     with write.locked(cfg):
         found, texts = stubs_only(cfg, seg, seg8)
+        refuse_unsaved(cfg, seg8)
         edits: dict[str, str] = {}
         for rel, hits in found.items():
             lead = hits[0]
