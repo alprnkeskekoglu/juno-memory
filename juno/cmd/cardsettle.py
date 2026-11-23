@@ -96,28 +96,43 @@ def commit_all(
     return first
 
 
-def replace(cfg: config.Config, args: argparse.Namespace, build: Build) -> gate.Result:
+def plan_replace(
+    cfg: config.Config, seg: Segment, args: argparse.Namespace, build: Build
+) -> dict[str, tuple[str, str]]:
+    """Per handoff file: the new card and the whole new text. Reads only; the caller locks."""
+    seg8 = args.segment
+    found, texts = stubs_only(cfg, seg, seg8)
+    refuse_unsaved(cfg, seg8)
+    plan: dict[str, tuple[str, str]] = {}
+    for rel, hits in found.items():
+        lead = hits[0]
+        block = texts[rel][lead.start : lead.end]
+        target: dict[str, object] = {
+            "key": lead.key,
+            "repos": vaultfmt.items(vaultfmt.card_field(block, "Repos")),
+            "tickets": vaultfmt.items(vaultfmt.card_field(block, "Tickets")),
+        }
+        card = build(cfg, args, target, seg8)
+        placed = cardfmt.place_card(texts[rel], seg8, card, rel.rsplit("/", 1)[-1][:-3])
+        plan[rel] = (card, cardsettle.cut(placed, cardsettle.spans(placed, seg8)[1:]))
+    return plan
+
+
+def replace(
+    cfg: config.Config, args: argparse.Namespace, build: Build, dry_run: bool = False
+) -> gate.Result | dict[str, tuple[str, str]]:
+    """With dry_run: the plan, after the same checks, with no lock and no write."""
     seg = write.guard(cfg)
     evidence = gate.anchor(cfg, seg, args.evidence, user_only=True)
     if args.tickets or args.repos:
         raise Refused("--tickets and --repos come from the stub when --segment is given")
-    seg8 = args.segment
+    if dry_run:
+        return plan_replace(cfg, seg, args, build)
     with write.locked(cfg):
-        found, texts = stubs_only(cfg, seg, seg8)
-        refuse_unsaved(cfg, seg8)
-        edits: dict[str, str] = {}
-        for rel, hits in found.items():
-            lead = hits[0]
-            block = texts[rel][lead.start : lead.end]
-            target: dict[str, object] = {
-                "key": lead.key,
-                "repos": vaultfmt.items(vaultfmt.card_field(block, "Repos")),
-                "tickets": vaultfmt.items(vaultfmt.card_field(block, "Tickets")),
-            }
-            card = build(cfg, args, target, seg8)
-            placed = cardfmt.place_card(texts[rel], seg8, card, rel.rsplit("/", 1)[-1][:-3])
-            edits[rel] = cardsettle.cut(placed, cardsettle.spans(placed, seg8)[1:])
-        return commit_all(cfg, seg, "card", edits, None, evidence)
+        plan = plan_replace(cfg, seg, args, build)
+        return commit_all(
+            cfg, seg, "card", {rel: new for rel, (_, new) in plan.items()}, None, evidence
+        )
 
 
 def dismiss(cfg: config.Config, args: argparse.Namespace) -> gate.Result:
