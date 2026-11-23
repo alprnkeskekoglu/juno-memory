@@ -37,7 +37,9 @@ def run(args: argparse.Namespace, env: Mapping[str, str]) -> int:
         label = isoweek.last_week(now) if args.week == "last" else args.week
         isoweek.bounds(label)
         with reportio.locked(cfg):
-            raw = reportio.collect(cfg, label, now, described_arms(cfg), decay.scan(cfg))
+            skipped: list[str] = []
+            files = decay.scan(cfg, skipped)
+            raw = reportio.collect(cfg, label, now, described_arms(cfg), files, skipped)
             data = report.build(raw)
             rel = reportio.write(cfg, label, reportfmt.render(data))
     except Refused as error:

@@ -7,9 +7,10 @@ import tomllib
 from collections.abc import Mapping
 from typing import Any
 
-from juno import config
+from juno import config, paths
 from juno.adapters import fs, interpreter, keysbackfill, ledgerio, store, vault, voiceimport
 from juno.cmd import common, doctor_vault, init, write
+from juno.core import doctor_vault as dv
 from juno.core import interp, migrate, settings_merge, shim, tomlio
 
 Check = tuple[str, str, str]
@@ -268,6 +269,24 @@ def check_settings(cfg: config.Config, settings: str) -> list[Check]:
     return out
 
 
+def check_settings_paths(cfg: config.Config, settings: str) -> list[Check]:
+    try:
+        data = settings_merge.parse(fs.read_bytes(settings) or b"")
+        manifest = common.load_manifest(cfg)
+    except settings_merge.SettingsError, ValueError:
+        return []
+    perms = data.get("permissions")
+    perms = perms if isinstance(perms, dict) else {}
+    added = ((manifest or {}).get("record") or {}).get("added") or {}
+    recorded = {
+        key: [e for e in entries if e in (perms.get(key) or [])]
+        for key, entries in added.items()
+        if isinstance(entries, list)
+    }
+    current = settings_merge.build_block(cfg.vault, paths.home(cfg.env))
+    return dv.stale_path_checks(recorded, current, cfg.vault)
+
+
 def check_output_style(cfg: config.Config, settings: str) -> list[Check]:
     root = cfg.get_str("runtime", "plugin_root")
     try:
@@ -310,6 +329,7 @@ def collect(args: argparse.Namespace, cfg: config.Config) -> list[Check]:
         + check_plugin_cache(cfg, settings)
         + check_shim(args, cfg)
         + check_settings(cfg, settings)
+        + check_settings_paths(cfg, settings)
         + check_output_style(cfg, settings)
     )
     if vault.status(cfg.vault) == "juno":

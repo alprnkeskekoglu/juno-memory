@@ -30,7 +30,9 @@ def read_retired(state: str) -> set[str] | None:
         return set()
 
 
-def scan_metas(vault: str) -> dict[str, retire.FileMeta]:
+def scan_metas(vault: str, unreadable: list[str] | None = None) -> dict[str, retire.FileMeta]:
+    """Metas of the vault's markdown files; with `unreadable`, a file that cannot be read is
+    listed there instead of raising."""
     metas: dict[str, retire.FileMeta] = {}
     for base, dirs, files in os.walk(vault):
         dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not d.startswith("."))
@@ -43,7 +45,12 @@ def scan_metas(vault: str) -> dict[str, retire.FileMeta]:
             rel = os.path.relpath(path, vault).replace(os.sep, "/")
             if vaultfmt.kind_of(rel) in vaultfmt.NEVER_INJECTED_KINDS:
                 continue
-            metas[rel] = retire.meta_of(store.read_text(path))
+            try:
+                metas[rel] = retire.meta_of(store.read_text(path))
+            except OSError, UnicodeDecodeError:
+                if unreadable is None:
+                    raise
+                unreadable.append(rel)
     return metas
 
 

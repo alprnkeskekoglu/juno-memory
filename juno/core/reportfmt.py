@@ -1,6 +1,8 @@
 from collections.abc import Mapping
 from typing import Any
 
+from juno.core import unreadable
+
 NO_DATA = "no data"
 SHOWN = 5
 
@@ -161,6 +163,8 @@ def memory_lines(m: Mapping[str, Any]) -> list[str]:
     )
     out.append(line("cross-file duplicate groups", len(dups) if dups is not None else NO_DATA))
     out += [f"  - {', '.join(g['files'])}: {g['text']}" for g in (dups or [])[:SHOWN]]
+    if m.get("unreadable"):
+        out.append(f"- {unreadable.describe(m['unreadable'])}; the duplicate scan skipped them")
     return out
 
 

@@ -3,7 +3,7 @@ import re
 from collections.abc import Callable
 from typing import Any
 
-from juno.core import vaultfmt
+from juno.core import unreadable, vaultfmt
 
 SCAN_DIRS = (("knowledge", "knowledge"), ("projects", "profile"))
 GIT_BUDGET_SECONDS = 10.0
@@ -123,7 +123,12 @@ def finish_entry(entry: Entry) -> Entry:
 
 
 def report_of(
-    days: int, today: datetime.date, entries: list[Entry], exhausted: bool, seconds: float
+    days: int,
+    today: datetime.date,
+    entries: list[Entry],
+    exhausted: bool,
+    seconds: float,
+    unread: list[str] | None = None,
 ) -> dict[str, Any]:
     return {
         "days": days,
@@ -132,6 +137,7 @@ def report_of(
         "stale": sum(1 for e in entries if e["stale"]),
         "budget_exhausted": exhausted,
         "git_seconds": round(seconds, 2),
+        "unreadable": unread or [],
     }
 
 
@@ -186,6 +192,8 @@ def render(report: dict[str, Any]) -> str:
         f"(older than {report['days']} days or code changed since the baseline); "
         "set `verified: YYYY-MM-DD` after re-checking one."
     )
+    if report.get("unreadable"):
+        lines.append(unreadable.describe(report["unreadable"]) + "; they are not in the count.")
     if report["budget_exhausted"]:
         lines.append(
             f"git budget of {GIT_BUDGET_SECONDS:.0f} s used up; some paths were not checked."

@@ -131,18 +131,21 @@ def arm_view(
     return view
 
 
-def vault_lines(cfg: config.Config) -> dict[str, str]:
+def vault_lines(cfg: config.Config) -> tuple[dict[str, str], list[str]]:
     files: dict[str, str] = {}
+    unread: list[str] = []
     for top in report.DUP_FILE_KINDS:
         for base, dirs, names in os.walk(os.path.join(cfg.vault, top)):
             dirs[:] = sorted(d for d in dirs if not d.startswith("."))
             for name in sorted(names):
                 full = os.path.join(base, name)
                 if name.endswith(".md") and not os.path.islink(full):
-                    files[os.path.relpath(full, cfg.vault).replace(os.sep, "/")] = store.read_text(
-                        full
-                    )
-    return files
+                    rel = os.path.relpath(full, cfg.vault).replace(os.sep, "/")
+                    try:
+                        files[rel] = store.read_text(full)
+                    except OSError, UnicodeDecodeError:
+                        unread.append(rel)
+    return files, sorted(unread)
 
 
 def keys_status(cfg: config.Config) -> dict[str, Any] | None:
@@ -158,6 +161,7 @@ def collect(
     now: float,
     arm_rows: Sequence[Mapping[str, Any]],
     decay_files: Mapping[str, float],
+    decay_unread: Sequence[str] = (),
 ) -> dict[str, Any]:
     start, end = isoweek.bounds(label)
     before, _ = isoweek.bounds(isoweek.previous(label))
@@ -171,7 +175,7 @@ def collect(
         return sum(fold.has_cue(str(e["prompt"]), cues, preset) for e in items)
 
     recall, paired = retrieval(cfg, week)
-    files = vault_lines(cfg)
+    files, unread = vault_lines(cfg)
     return {
         "label": label,
         "generated": time.strftime("%Y-%m-%d %H:%M", time.localtime(now)),
@@ -193,6 +197,7 @@ def collect(
         ),
         "inbox": report.inbox_age(store.read_text(os.path.join(cfg.vault, "inbox.md")), now),
         "duplicates": report.duplicate_groups(files, preset) if files else None,
+        "unreadable": sorted({*unread, *decay_unread}),
         "core_sections": report.open_sections(store.read_text(os.path.join(cfg.vault, "core.md"))),
     }
 

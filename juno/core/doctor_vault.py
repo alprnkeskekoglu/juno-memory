@@ -5,7 +5,7 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from juno.core import cardcopies, pitfalldup, privacy, threadscan, topics
+from juno.core import cardcopies, pitfalldup, privacy, threadscan, topics, unreadable
 from juno.core.vaultfmt import (
     CARD_HEAD_RE,
     WIKILINK_RE,
@@ -16,6 +16,8 @@ from juno.core.vaultfmt import (
 
 Check = tuple[str, str, str]
 BUDGET_WARN_RATIO = 0.9
+OPENING_LEFT_MIN = 1500
+DAY_SECONDS = 86400
 HANDOFF_CARDS = 20
 NOTE_LINES, NOTE_CHARS = 60, 4000
 KNOWLEDGE_CHARS = 8000
@@ -148,6 +150,77 @@ def budget_checks(core_text: str, global_text: str, core_cap: int, global_cap: i
     if not out:
         out.append(("PASS", "budget", f"core.md {core_size} chars, global rules {size} chars"))
     return out
+
+
+def rules_size_checks(
+    core_size: int,
+    global_size: int,
+    opening_size: int,
+    core_cap: int,
+    global_cap: int,
+    hook_cap: int,
+) -> list[Check]:
+    """core.md, global rules and the whole rules block against their caps.
+
+    A file near its own cap is `budget_checks`' warning; this line warns when the rules
+    block leaves under OPENING_LEFT_MIN chars of the hook cap for packs and the newest card.
+    """
+    left = max(hook_cap - opening_size, 0)
+    detail = (
+        f"core {core_size}/{core_cap}, global {global_size}/{global_cap}, "
+        f"opening {opening_size}/{hook_cap} ({left} left for packs and the newest card)"
+    )
+    if left < OPENING_LEFT_MIN:
+        return [("WARN", "rules size", f"{detail}; under {OPENING_LEFT_MIN} left")]
+    return [("PASS", "rules size", detail)]
+
+
+def snapshot_checks(
+    repo: bool, last: tuple[int, str] | None, remotes: Sequence[str], now: float
+) -> list[Check]:
+    if not repo:
+        return [
+            (
+                "INFO",
+                "snapshot",
+                "the vault is not a git repository (or git cannot run); juno snapshot cannot run",
+            )
+        ]
+    if last is None:
+        return [("INFO", "snapshot", "no snapshot commit yet; run juno snapshot")]
+    stamp, sha = last
+    days = max(int(now - stamp), 0) // DAY_SECONDS
+    age = "today" if days == 0 else f"{days} day{'s' if days != 1 else ''} ago"
+    where = (
+        f"remote {', '.join(remotes)} is configured, which does not prove the backup is current"
+        if remotes
+        else "no remote configured"
+    )
+    return [("INFO", "snapshot", f"last snapshot commit {age} ({sha[:7]}); {where}")]
+
+
+def unreadable_checks(paths: Sequence[str]) -> list[Check]:
+    if not paths:
+        return []
+    return [("WARN", "unreadable", f"{unreadable.describe(paths)}; their checks above ignore them")]
+
+
+def stale_path_checks(
+    recorded: Mapping[str, Sequence[str]], current: Mapping[str, Sequence[str]], vault: str
+) -> list[Check]:
+    """Juno-written settings entries that no longer match the vault Juno is configured for."""
+    old = [e for key, entries in recorded.items() for e in entries if e not in current.get(key, ())]
+    if not old:
+        return []
+    shown = ", ".join(old[:3]) + (f" (and {len(old) - 3} more)" if len(old) > 3 else "")
+    return [
+        (
+            "WARN",
+            "settings paths",
+            f"settings.json holds {len(old)} Juno-written entries for another vault: {shown}; "
+            f"the vault is {vault}; run juno init, then drop the old entries",
+        )
+    ]
 
 
 def handoff_size_checks(counts: Mapping[str, int]) -> list[Check]:

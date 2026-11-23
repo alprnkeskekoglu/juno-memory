@@ -29,7 +29,7 @@ def created_of(fields: vaultfmt.Fields, path: str) -> float:
     return os.path.getmtime(path)
 
 
-def scan(cfg: config.Config) -> dict[str, float]:
+def scan(cfg: config.Config, unreadable: list[str] | None = None) -> dict[str, float]:
     retired = vaultview.read_retired(cfg.state)
     found: dict[str, float] = {}
     for sub in SUBDIRS:
@@ -40,7 +40,13 @@ def scan(cfg: config.Config) -> dict[str, float]:
                 if not name.endswith(".md") or name.startswith(".") or os.path.islink(path):
                     continue
                 rel = os.path.relpath(path, cfg.vault).replace(os.sep, "/")
-                text = store.read_text(path)
+                try:
+                    text = store.read_text(path)
+                except OSError, UnicodeDecodeError:
+                    if unreadable is None:
+                        raise
+                    unreadable.append(rel)
+                    continue
                 if vaultfmt.hidden_reason(rel, text, retired) is None:
                     found[rel] = created_of(vaultfmt.parse_frontmatter(text)[0], path)
     return found
