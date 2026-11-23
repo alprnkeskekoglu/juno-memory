@@ -63,6 +63,7 @@ def init_vault(cfg: config.Config, dry: bool) -> str | None:
 def init_settings(
     cfg: config.Config, settings: str, manifest: dict[str, Any] | None, dry: bool
 ) -> dict[str, Any]:
+    seen = fs.stamp(settings)
     raw = fs.read_bytes(settings)
     data = settings_merge.parse(raw or b"")
     if manifest and manifest.get("settings", {}).get("path") != settings:
@@ -107,7 +108,7 @@ def init_settings(
             "backup": backup,
         }
     mode = None if raw is not None else 0o600
-    fs.atomic_write(settings, new_bytes, mode)
+    fs.write_settings(settings, new_bytes, mode, seen, True)
     check = settings_merge.parse(fs.read_bytes(settings) or b"")
     if check != new:
         raise ValueError("settings verification failed after writing")
@@ -340,7 +341,7 @@ def write_output_style(
     backup = os.path.join(backups, f"settings-{stamp}-{fs.sha256(raw or b'')[:8]}.json")
     fs.atomic_write(backup, raw or b"", 0o600)
     mode = None if raw is not None else 0o600
-    fs.atomic_write(settings, new_bytes, mode)
+    fs.write_settings(settings, new_bytes, mode)
     if settings_merge.parse(fs.read_bytes(settings) or b"") != new:
         say("output style: verification failed after writing; restore from " + backup)
         return

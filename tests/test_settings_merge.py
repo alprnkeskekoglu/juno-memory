@@ -23,6 +23,23 @@ class Block(unittest.TestCase):
         self.assertEqual(sm.permission_path("/hx/v", "/h"), "//hx/v")
 
 
+class Bom(unittest.TestCase):
+    def test_parse_accepts_bom(self) -> None:
+        self.assertEqual(sm.parse(b'\xef\xbb\xbf{"a": 1}'), {"a": 1})
+
+    def test_read_json_dict_accepts_bom(self) -> None:
+        import os
+        import tempfile
+
+        from juno.adapters import store
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "x.json")
+            with open(path, "wb") as handle:
+                handle.write(b'\xef\xbb\xbf{"a": 1}')
+            self.assertEqual(store.read_json_dict(path), {"a": 1})
+
+
 class Merge(unittest.TestCase):
     block = sm.build_block("/data/vault", "/h")
 

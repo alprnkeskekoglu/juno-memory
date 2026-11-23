@@ -1,7 +1,9 @@
 import json
 import os
 import unittest
+from unittest import mock
 
+from juno.cmd import uninstall
 from tests.support import SandboxCase, settings_variants
 from tests.test_init import tree
 
@@ -110,6 +112,41 @@ class AfterUserEdits(SandboxCase):
         code, out = self.sb.cli("uninstall")
         self.assertEqual(code, 0)
         self.assertIn("nothing to uninstall", out)
+
+    def test_symlinked_settings_stay_symlink(self) -> None:
+        self.sb.write_settings(settings_variants()["indent2"])
+        self.sb.cli("init", *self.sb.install_args())
+        real = os.path.join(self.sb.home, "dotfiles", "settings.json")
+        os.makedirs(os.path.dirname(real))
+        data = json.loads(self.sb.read_settings() or b"")
+        data["model"] = "haiku"
+        with open(real, "wb") as handle:
+            handle.write(json.dumps(data, indent=2).encode() + b"\n")
+        os.unlink(self.sb.settings)
+        os.symlink(real, self.sb.settings)
+        code, out = self.sb.cli("uninstall", *self.sb.install_args())
+        self.assertEqual(code, 0, out)
+        self.assertTrue(os.path.islink(self.sb.settings))
+        with open(real, "rb") as handle:
+            self.assertNotIn(b"/rules/**", handle.read())
+
+    def test_settings_edited_after_read_aborts(self) -> None:
+        self.sb.write_settings(settings_variants()["indent2"])
+        self.sb.cli("init", *self.sb.install_args())
+        data = json.loads(self.sb.read_settings() or b"")
+        data["model"] = "haiku"
+        self.sb.write_settings(json.dumps(data, indent=2).encode() + b"\n")
+        real_unmerge = uninstall.settings_merge.unmerge
+
+        def racing(d: dict, r: dict):  # type: ignore[no-untyped-def]
+            self.sb.write_settings(b'{"model": "edited-meanwhile"}\n')
+            return real_unmerge(d, r)
+
+        with mock.patch.object(uninstall.settings_merge, "unmerge", racing):
+            code, out = self.sb.cli("uninstall", *self.sb.install_args())
+        self.assertEqual(code, 2, out)
+        self.assertIn("changed while", out)
+        self.assertEqual(self.sb.read_settings(), b'{"model": "edited-meanwhile"}\n')
 
 
 if __name__ == "__main__":

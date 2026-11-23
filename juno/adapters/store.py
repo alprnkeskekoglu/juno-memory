@@ -24,7 +24,7 @@ def write_text(path: str, text: str) -> None:
 
 def read_json_dict(path: str) -> dict[str, object]:
     try:
-        with open(path, encoding="utf-8") as handle:
+        with open(path, encoding="utf-8-sig") as handle:
             data = json.load(handle)
     except OSError, ValueError:
         return {}

@@ -25,6 +25,34 @@ class Init(SandboxCase):
     def init(self, *extra: str) -> tuple[int, str]:
         return self.sb.cli("init", *self.sb.install_args(), *extra)
 
+    def test_symlinked_settings_stay_symlink(self) -> None:
+        raw = json.dumps(realistic_settings(), indent=2).encode() + b"\n"
+        real = os.path.join(self.sb.home, "dotfiles", "settings.json")
+        os.makedirs(os.path.dirname(real))
+        with open(real, "wb") as handle:
+            handle.write(raw)
+        os.makedirs(os.path.dirname(self.sb.settings), exist_ok=True)
+        os.symlink(real, self.sb.settings)
+        code, out = self.init()
+        self.assertEqual(code, 0, out)
+        self.assertTrue(os.path.islink(self.sb.settings))
+        with open(real, "rb") as handle:
+            self.assertIn(b"additionalDirectories", handle.read())
+
+    def test_settings_edited_after_read_aborts(self) -> None:
+        self.sb.write_settings(json.dumps(realistic_settings(), indent=2).encode() + b"\n")
+        real_merge = init.settings_merge.merge
+
+        def racing(data: dict, block: dict):  # type: ignore[no-untyped-def]
+            self.sb.write_settings(b'{"model": "edited-meanwhile"}\n')
+            return real_merge(data, block)
+
+        with mock.patch.object(init.settings_merge, "merge", racing):
+            code, out = self.init()
+        self.assertEqual(code, 2, out)
+        self.assertIn("changed while", out)
+        self.assertEqual(self.sb.read_settings(), b'{"model": "edited-meanwhile"}\n')
+
     def test_creates_everything(self) -> None:
         self.sb.write_settings(json.dumps(realistic_settings(), indent=2).encode() + b"\n")
         code, out = self.init()

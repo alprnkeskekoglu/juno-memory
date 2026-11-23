@@ -35,7 +35,7 @@ def parse(raw: bytes) -> dict[str, Any]:
     if not raw.strip():
         return {}
     try:
-        data = json.loads(raw.decode("utf-8"))
+        data = json.loads(raw.decode("utf-8-sig"))
     except (ValueError, UnicodeDecodeError) as error:
         raise SettingsError(
             f"settings file is not strict JSON ({error}); refusing to rewrite it"
