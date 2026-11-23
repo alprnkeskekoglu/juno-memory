@@ -7,9 +7,10 @@ from juno.adapters import agentcalls, armsio, asklog, cardjob, queues, shadowio,
 
 DAY = 86400
 JOB_DAYS = 8
+TMP_PREFIX = ".juno-tmp-"
 
 
-def remove_older(directory: str, cutoff: float) -> None:
+def remove_older(directory: str, cutoff: float, prefix: str = "") -> None:
     import shutil
 
     try:
@@ -17,6 +18,8 @@ def remove_older(directory: str, cutoff: float) -> None:
     except OSError:
         return
     for name in names:
+        if not name.startswith(prefix):
+            continue
         path = os.path.join(directory, name)
         try:
             if os.path.getmtime(path) >= cutoff:
@@ -39,6 +42,8 @@ def prune_state(cfg: config.Config, now: float | None = None) -> None:
     )
     remove_older(os.path.join(state, "status"), now - DAY)
     remove_older(os.path.join(state, "topics"), now - ledger_days * DAY)
+    for directory in ("", "ledgers", "backups", "status", "topics", "cards"):
+        remove_older(os.path.join(state, directory), now - DAY, TMP_PREFIX)
     agentcalls.reap(cfg, now)
     with contextlib.suppress(OSError):
         shadowio.prune(state, cfg.get_int("retention", "shadow_days"), now)
