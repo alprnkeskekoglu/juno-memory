@@ -6,7 +6,7 @@ import unicodedata
 from collections import Counter
 from typing import Any
 
-from juno.core import vaultfmt
+from juno.core import trstem, vaultfmt
 
 STRIDE = 10000
 PASSAGE_TARGET = 900
@@ -18,6 +18,8 @@ MAX_TOKEN_LEN = 64
 CORRECT_MIN_LEN = 4
 CORRECT_CUTOFF = 0.75
 CORRECT_MAX = 3
+STEM_TOKEN_MIN = 4
+STEM_MAX = 4
 TICKET_SCORE = 100.0
 STUB_LIKE = "%· stub ·%"
 KEYS_WEIGHT = 2.0
@@ -287,6 +289,7 @@ def pick(
     cap: int,
     shown: list[str],
     preset: str,
+    raws: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     used = Counter(kind_of(h["relpath"]) for h in out)
     chosen: list[Candidate] = []
@@ -300,6 +303,8 @@ def pick(
             rest.append(cand)
     chosen += rest[: limit - len(out) - len(chosen)]
     chosen.sort(key=lambda c: -c[4])
+    if raws is not None:
+        raws += [c[2] for c in chosen]
     out += [
         hit(rel, head, raw, shown, score, preset, meta) for rel, head, raw, _, score, meta in chosen
     ]
@@ -326,16 +331,23 @@ def close_words(word: str, terms: list[str]) -> list[str]:
     return [w for w in close if one_edit(word, w)]
 
 
-def any_of(words: list[str]) -> str:
-    quoted = " OR ".join(f'"{w}"' for w in words)
-    return f"({quoted})" if len(words) > 1 else quoted
+def any_of(terms: list[str]) -> str:
+    return f"({' OR '.join(terms)})" if len(terms) > 1 else terms[0]
 
 
-def match_modes(tokens: list[str], fixes: dict[str, list[str]]) -> list[str]:
-    groups = [[t, *fixes.get(t, [])] for t in tokens]
+def match_modes(
+    tokens: list[str],
+    fixes: dict[str, list[str]],
+    stems: dict[str, list[str]] | None = None,
+) -> list[str]:
+    groups = [
+        [f'"{w}"' for w in (t, *fixes.get(t, []))]
+        + [trstem.stem_term(w) for w in (stems or {}).get(t, [])]
+        for t in tokens
+    ]
     modes = [" AND ".join(any_of(g) for g in groups)]
     if len(groups) > 1:
-        modes.append(" OR ".join(f'"{w}"' for g in groups for w in g))
+        modes.append(" OR ".join(w for g in groups for w in g))
     return modes
 
 

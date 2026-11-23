@@ -21,8 +21,16 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--json", action="store_true")
 
 
-def render(hits: list[dict[str, Any]], corrections: dict[str, list[str]]) -> str:
+def render(
+    hits: list[dict[str, Any]],
+    corrections: dict[str, list[str]],
+    stems: dict[str, list[str]] | None = None,
+    unmatched: list[str] | None = None,
+) -> str:
     lines = []
+    for tok, words in (stems or {}).items():
+        quoted = ", ".join(f'"{w}"' for w in words)
+        lines.append(f'(searched stems {quoted} for "{tok}")')
     for tok, words in corrections.items():
         quoted = ", ".join(f'"{w}"' for w in words)
         lines.append(f'(searched {quoted} for "{tok}")')
@@ -32,6 +40,8 @@ def render(hits: list[dict[str, Any]], corrections: dict[str, list[str]]) -> str
         )
         lines.append(f"{item['relpath']}{flag} · {item['heading'] or '-'} · {item['day']}")
         lines.append("  " + item["snippet"])
+    if unmatched and hits:
+        lines.append("unmatched: " + ", ".join(unmatched))
     return "\n".join(lines) or "no results"
 
 
@@ -66,6 +76,8 @@ def run(args: argparse.Namespace, env: Mapping[str, str]) -> int:
         sys.stderr.write("Juno: the index is busy; retry in a moment\n")
         return 2
     corrections: dict[str, list[str]] = {}
+    stems: dict[str, list[str]] = {}
+    unmatched: list[str] = []
     hits = indexquery.search(
         db,
         args.query,
@@ -80,12 +92,18 @@ def run(args: argparse.Namespace, env: Mapping[str, str]) -> int:
         keys_weight=cfg.get_float("keys", "weight"),
         since=args.since,
         until=args.until,
+        stems=stems,
+        unmatched=unmatched,
     )
     if args.json:
         data: dict[str, Any] = {"query": args.query, "results": hits, "index": stats}
         if corrections:
             data["corrections"] = corrections
+        if stems:
+            data["stems"] = stems
+        if unmatched and hits:
+            data["unmatched"] = unmatched
         print(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True))
     else:
-        print(render(hits, corrections))
+        print(render(hits, corrections, stems, unmatched))
     return 0
