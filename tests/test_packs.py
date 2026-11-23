@@ -309,6 +309,18 @@ class Overview(unittest.TestCase):
         self.assertIn("Did a thing", text)
         self.assertNotIn("Active tickets", packs.overview(view, Caps(), [], 1000.0, False))
 
+    def test_overview_hides_tickets_closed_in_turkish(self) -> None:
+        view = vault(
+            tasks__ABC_1="---\ntitle: One\nstatus: kapandı\n---\n",
+            tasks__ABC_2="---\ntitle: Two\nstatus: Bitti\n---\n",
+            tasks__ABC_3="---\ntitle: Three\nstatus: TAMAMLANDI\n---\n",
+            tasks__ABC_4="---\ntitle: Four\nstatus: open\n---\n",
+        )
+        text = packs.overview(view, Caps(), packs.all_cards(view), 1000.0, True)
+        for key in ("ABC-1", "ABC-2", "ABC-3"):
+            self.assertNotIn(key, text)
+        self.assertIn("ABC-4", text)
+
 
 class Trim(unittest.TestCase):
     def test_share_room_is_water_filling(self) -> None:

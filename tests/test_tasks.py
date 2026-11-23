@@ -1,6 +1,7 @@
 import contextlib
 import io
 import json
+import os
 import time
 import unittest
 
@@ -233,6 +234,16 @@ class WithJira(TaskCase):
         seg = ledgerio.fold(self.cfg(), SID)
         self.assertEqual(seg.current_ticket(), "ABC-100")
         self.assertEqual(routing.handoff_targets(seg)[0]["path"], "handoffs/ABC-100.md")
+
+    def test_status_filter_matches_turkish_marks_and_case(self) -> None:
+        path = os.path.join(self.cfg().vault, "tasks", "ABC-100.md")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("---\njira: ABC-100\ntitle: T\nstatus: Kapandı\nrepos: [alpha]\n---\n")
+        for wanted in ("kapandı", "KAPANDI", "kapandi"):
+            code, out = self.juno("tasks", "--status", wanted)
+            self.assertEqual(code, 0)
+            self.assertIn("ABC-100", out, wanted)
 
     def start_text(self, sid: str) -> str:
         return self.context(
