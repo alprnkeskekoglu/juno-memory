@@ -102,6 +102,59 @@ class FrontmatterIsStrictYaml(unittest.TestCase):
                 self.assertNotIn(value[:1], self.INDICATORS, f"{where}: starts with indicator")
 
 
+class AuditSkill(unittest.TestCase):
+    def setUp(self) -> None:
+        self.fields, self.body = parse_frontmatter(read("audit"))
+
+    def test_exists_listed_and_user_invoked_only(self) -> None:
+        self.assertEqual(self.fields["name"], "audit")
+        text = str(self.fields["description"])
+        self.assertIn("Use only when the user types /juno:audit", text)
+        self.assertIn("in their own words", text)
+        self.assertIn("Never on Claude's own initiative", text)
+        for rel in ("README.md", os.path.join("docs", "spec.md")):
+            with open(os.path.join(REPO, rel), encoding="utf-8") as handle:
+                self.assertIn(
+                    "skills/audit/SKILL.md" if rel != "README.md" else "/juno:audit", handle.read()
+                )
+
+    def test_description_is_double_quoted(self) -> None:
+        with open(os.path.join(REPO, "skills", "audit", "SKILL.md"), encoding="utf-8") as handle:
+            line = next(x for x in handle.read().split("\n") if x.startswith("description:"))
+        value = line.split(":", 1)[1].strip()
+        self.assertTrue(value.startswith('"') and value.endswith('"'), value)
+
+    def test_allowed_tools_are_read_only_and_verbs_exist(self) -> None:
+        from juno import cli
+
+        tools = str(self.fields["allowed-tools"])
+        for tool in ("Edit", "Write", "NotebookEdit", "Agent"):
+            self.assertNotIn(tool, tools.split())
+        bash = re.findall(r"Bash\(([^)]*)\)", tools)
+        self.assertTrue(bash)
+        for entry in bash:
+            self.assertRegex(entry, r"^(juno [a-z]+( [a-z]+)? \*|git -C \* (log|show) \*)$")
+            if entry.startswith("juno "):
+                self.assertIn(entry.split()[1], cli.VERBS)
+        verbs = {x.split()[1] for x in bash if x.startswith("juno ")}
+        self.assertFalse(verbs & {"fix", "forget", "undo", "card", "note", "knowledge", "snapshot"})
+        for sub in ("rule list", "rule pending", "thread pending"):
+            self.assertIn(f"Bash(juno {sub} *)", tools)
+
+    def test_writes_nothing_and_proposes_the_exact_commands(self) -> None:
+        body = self.body
+        self.assertIn("writes nothing", body)
+        self.assertIn("only after the user approves", body)
+        for cmd in ("juno fix", "juno forget", "juno undo"):
+            self.assertIn(cmd, body)
+        self.assertIn("never add `--fix`", body)
+
+    def test_no_v1_names_or_user_paths(self) -> None:
+        text = self.body.casefold() + str(self.fields["description"]).casefold()
+        for banned in BANNED:
+            self.assertNotIn(banned.casefold(), text, banned)
+
+
 class VoiceImportSkill(unittest.TestCase):
     """Text-level checks; the behaviour itself (criteria 15 and 16) needs a live session."""
 

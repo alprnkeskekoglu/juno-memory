@@ -6,7 +6,9 @@ from juno import config
 from juno.adapters import gate, ledgerio
 from juno.cmd import cardsettle, gateio, write
 from juno.core import cardfmt, cardtarget, routing, writegate
+from juno.core.cardsettle import spans as cardsettle_spans
 from juno.core.errors import Refused
+from juno.core.ledger import Segment
 
 MIN_LINES, MAX_LINES = 2, 5
 LABEL_MAX = 40
@@ -38,6 +40,12 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--evidence", help="with --segment, dismiss or merge: the user's words, or repo:/ticket:"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="print the card, the privacy scan and the target file, and write nothing "
+        "(not for dismiss or merge)",
     )
     parser.add_argument(
         "lines",
@@ -82,8 +90,34 @@ def build(cfg: config.Config, args: argparse.Namespace, target: routing.Target, 
     return cardfmt.fix_links(card)[0].rstrip("\n") + "\n"
 
 
+def preview(cfg: config.Config, seg: Segment, plan: dict[str, tuple[str, str]], seg8: str) -> int:
+    """Print what a real run would write; nothing is locked, logged or written."""
+    olds = {rel: gate.read(cfg, rel) or "" for rel in plan}
+    if any(new != olds[rel] for rel, (_, new) in plan.items()):
+        gate.check_run_cap(cfg, seg)
+    print("Juno: dry run, nothing written")
+    for rel, (card, new) in plan.items():
+        old = olds[rel]
+        if new == old:
+            mode = "no change (the same card is already there)"
+        elif not old:
+            mode = "create the file and add the card"
+        elif cardsettle_spans(old, seg8):
+            mode = "replace this segment's card"
+        else:
+            mode = "append the card"
+        print(f"Target: {rel} ({mode})")
+        print("Privacy scan: clean")
+        print("---")
+        print(card, end="")
+        print("---")
+    return 0
+
+
 def settle(cfg: config.Config, args: argparse.Namespace) -> int | None:
     sub = args.lines[0] if args.learned is None and not args.segment else ""
+    if args.dry_run and sub in ("dismiss", "merge"):
+        raise Refused(f"--dry-run previews a card only, not `{sub}`")
     if sub == "dismiss":
         return gateio.report(cardsettle.dismiss(cfg, args), "stubs archived from")
     if sub == "merge":
@@ -91,7 +125,13 @@ def settle(cfg: config.Config, args: argparse.Namespace) -> int | None:
     if args.segment:
         if not args.evidence or args.learned is None:
             raise Refused("--segment needs --learned and --evidence")
+        if args.dry_run:
+            seg = write.guard(cfg)
+            plan = cardsettle.replace(cfg, args, build, dry_run=True)
+            assert isinstance(plan, dict)
+            return preview(cfg, seg, plan, args.segment)
         res = cardsettle.replace(cfg, args, build)
+        assert isinstance(res, gate.Result)
         return gateio.report(res, "card for the older segment written to")
     if args.learned is None:
         raise Refused("--learned is required (one sentence, or none)")
@@ -111,9 +151,13 @@ def do(cfg: config.Config, args: argparse.Namespace) -> int:
     fresh = [k for k in linked if k not in seg.tickets]
     target = cardtarget.pick(seg, linked, tickets, repos)
     card = build(cfg, args, target, seg.sid[:8])
+    rel = str(target["path"])
+    if args.dry_run:
+        name = rel.rsplit("/", 1)[-1][:-3]
+        new = cardfmt.place_card(gate.read(cfg, rel) or "", seg.sid[:8], card, name)
+        return preview(cfg, seg, {rel: (card, new)}, seg.sid[:8])
     if fresh:
         ledgerio.append(cfg, seg.sid, {"ev": "keys", "keys": fresh})
-    rel = str(target["path"])
     name = rel.rsplit("/", 1)[-1][:-3]
     with write.locked(cfg):
         new = cardfmt.place_card(gate.read(cfg, rel) or "", seg.sid[:8], card, name)
