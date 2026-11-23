@@ -321,7 +321,7 @@ Every event does the following:
 - Writes JSON to stdout only when it has context to add.
 - Logs errors to `hook-errors.log` and timings to `hook-timings.log`; an OSError line ends with `errno=N`.
 - Reads stdin as UTF-8 with `errors="replace"` and replaces lone surrogates in payload strings, ledger records and its output with U+FFFD.
-- When a state-dir write fails with ENOSPC, EACCES, EPERM or EROFS, SessionStart and UserPromptSubmit still inject the vault-derived context (rules, pins) plus one line saying Juno could not write its state dir; Stop stays silent. Other OSErrors are not caught. Writes fail closed: UserPromptSubmit drops a `juno-unrecorded-<uid>-<hash>` flag in `$TMPDIR` (else `/tmp`) and `ledgerio.fold` then treats the segment as `[nosave]`, so write verbs refuse.
+- When a state-dir write fails with ENOSPC, EACCES, EPERM or EROFS, SessionStart and UserPromptSubmit still inject the vault-derived context (rules, pins) plus one line saying Juno could not write its state dir; Stop stays silent. Other OSErrors are not caught. Writes fail closed: UserPromptSubmit drops a `juno-unrecorded-<uid>-<hash>` flag in both `$TMPDIR` (when set) and `/tmp`, and `ledgerio.fold` treats the segment as `[nosave]` if the flag exists in either, so write verbs refuse.
 - Always exits 0.
 
 Non-interactive sessions get nothing and write nothing.

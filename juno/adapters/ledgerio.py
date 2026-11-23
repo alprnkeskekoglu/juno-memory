@@ -42,10 +42,17 @@ def unrecorded_marker(cfg: config.Config, sid: object) -> str | None:
     return os.path.join(cfg.env.get("TMPDIR") or "/tmp", f"juno-unrecorded-{os.getuid()}-{key}")
 
 
+def unrecorded_markers(cfg: config.Config, sid: object) -> list[str]:
+    """Every place the flag lives: the hook and the verb may see different TMPDIR values."""
+    path = unrecorded_marker(cfg, sid)
+    if path is None:
+        return []
+    return list(dict.fromkeys([path, os.path.join("/tmp", os.path.basename(path))]))
+
+
 def mark_unrecorded(cfg: config.Config, sid: object) -> None:
     """The prompt may have carried [nosave]; fold() treats the segment as nosave from now on."""
-    path = unrecorded_marker(cfg, sid)
-    if path:
+    for path in unrecorded_markers(cfg, sid):
         with contextlib.suppress(OSError):
             os.close(os.open(path, os.O_WRONLY | os.O_CREAT, 0o600))
 
@@ -74,8 +81,7 @@ def fold(cfg: config.Config, sid: object) -> Segment:
         return Segment(str(sid), rules_from(cfg))
     data = fs.read_bytes(path)
     seg = ledger.fold_lines(str(sid), (data or b"").splitlines(), rules_from(cfg))
-    marker = unrecorded_marker(cfg, sid)
-    seg.nosave = seg.nosave or (marker is not None and os.path.exists(marker))
+    seg.nosave = seg.nosave or any(os.path.exists(p) for p in unrecorded_markers(cfg, sid))
     return seg
 
 

@@ -1,3 +1,4 @@
+import contextlib
 import errno
 import io
 import json
@@ -23,9 +24,17 @@ def boom(code: int) -> Any:
     return raiser
 
 
+def drop_tmp_flag(env: dict[str, str]) -> None:
+    """The unrecorded flag is also written to /tmp; remove it after the test."""
+    marker = ledgerio.unrecorded_marker(config.load(dict(env, TMPDIR="")), SID)
+    with contextlib.suppress(OSError):
+        os.remove(os.path.join("/tmp", os.path.basename(marker or "")))
+
+
 class StateDirUnwritable(HookCase):
     def setUp(self) -> None:
         super().setUp()
+        self.addCleanup(drop_tmp_flag, self.sb.env)
         rules = os.path.join(self.sb.vault, "rules", "global.md")
         with open(rules, "w", encoding="utf-8") as handle:
             handle.write('- 2026-01-01 · Keep answers short · src: user abcd1234 · "quote"\n')
@@ -73,6 +82,10 @@ class StateDirUnwritable(HookCase):
 
 
 class NosaveFailsClosed(WriteCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.addCleanup(drop_tmp_flag, self.env)
+
     def test_unrecorded_nosave_prompt_blocks_later_vault_writes(self) -> None:
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -93,6 +106,27 @@ class NosaveFailsClosed(WriteCase):
             self.assertEqual(code, 2, out)
         self.assertEqual([n for n in os.listdir(self.vp("notes")) if n.endswith(".md")], [])
         self.assertFalse(os.path.exists(self.vp("inbox.md")) and NOTE in self.get("inbox.md"))
+
+    def test_nosave_flag_survives_a_different_tmpdir_in_the_verb_process(self) -> None:
+        hook_tmp = tempfile.TemporaryDirectory()
+        verb_tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(hook_tmp.cleanup)
+        self.addCleanup(verb_tmp.cleanup)
+        entry = load_entry("user_prompt_submit")
+        payload = json.dumps(
+            {"session_id": self.sid, "prompt": "keep this out [nosave]", "prompt_id": "p2"}
+        )
+        with (
+            mock.patch.dict(os.environ, dict(self.env, TMPDIR=hook_tmp.name), clear=True),
+            mock.patch("sys.stdin", io.StringIO(payload)),
+            mock.patch("sys.stdout", io.StringIO()),
+            mock.patch.object(ledgerio, "append", boom(errno.ENOSPC)),
+        ):
+            entry.hookcore.run("user_prompt_submit", entry.handle)
+        argv = ("note", "--slug", "export-timeout", NOTE)
+        code, out = self.juno(*argv, env={"TMPDIR": verb_tmp.name})
+        self.assertEqual(code, 2, out)
+        self.assertEqual([n for n in os.listdir(self.vp("notes")) if n.endswith(".md")], [])
 
 
 class LoneSurrogate(HookCase):
