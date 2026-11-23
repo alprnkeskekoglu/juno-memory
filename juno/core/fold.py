@@ -18,11 +18,21 @@ TR_MAP = str.maketrans(
         "Ç": "c",
     }
 )
+TR_LOWER = str.maketrans({"I": "ı", "İ": "i"})
+TR_LETTERS = frozenset("çÇğĞıİöÖşŞüÜ")
 MIN_WORD = 4
 
 
 def nfc(text: str | None) -> str:
     return unicodedata.normalize("NFC", text or "")
+
+
+def tr_lower(text: str | None) -> str:
+    """Lowercase; a bare capital I turns dotless only when the text has another Turkish letter."""
+    value = nfc(text)
+    if TR_LETTERS.isdisjoint(value):
+        return value.lower()
+    return value.translate(TR_LOWER).lower()
 
 
 def fold(text: str | None, preset: str = "none") -> str:

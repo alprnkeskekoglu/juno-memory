@@ -262,6 +262,40 @@ class WithJira(TaskCase):
         self.assertNotIn("juno task set", second)
 
 
+class TurkishStatus(TaskCase):
+    def test_turkish_closed_statuses_are_stored_lowercased_and_seen_as_closed(self) -> None:
+        cases = (
+            ("Kapandı", "kapandı"),
+            ("KAPANDI", "kapandi"),
+            ("Tamamlandı", "tamamlandı"),
+            ("Çözüldü", "çözüldü"),
+            ("ÇÖZÜLDÜ", "çözüldü"),
+            ("TAMAMLANDI", "tamamlandi"),
+            ("İptal", "iptal"),
+            ("BİTTİ", "bitti"),
+        )
+        for raw, stored in cases:
+            with self.subTest(raw=raw):
+                self.assertEqual(taskfile.clean_status(raw), (stored, None))
+                self.assertTrue(vaultfmt.is_finished(stored))
+        code, out = self.juno("task", "set", "ABC-100", "--title", "T", "--status", "Kapandı")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.fields("ABC-100")["status"], "kapandı")
+        self.assertIn("\nstatus: kapandı\n", self.read("tasks/ABC-100.md"))
+        for wanted in ("kapandi", "KAPANDI", "Kapandı"):
+            self.assertIn("ABC-100", self.juno("tasks", "--status", wanted)[1], wanted)
+        self.assertEqual(self.juno("tasks", "--status", "open")[1], "no tasks\n")
+
+    def test_still_refused(self) -> None:
+        for raw in ("kapandı!", "", "   ", "x" * 41, "-kapandı", "_a"):
+            with self.subTest(raw=raw):
+                self.assertIsNotNone(taskfile.clean_status(raw)[1])
+        self.assertEqual(taskfile.clean_status("IŞIK")[0], "ışık")
+        self.assertEqual(taskfile.clean_status("In Progress")[0], "in-progress")
+        self.assertEqual(taskfile.clean_status("two words"), ("two-words", None))
+        self.assertEqual(taskfile.clean_status("ç" * 40)[1], None)
+
+
 class TaskFile(unittest.TestCase):
     def test_merge_adds_jira_when_missing(self) -> None:
         out = taskfile.merge(

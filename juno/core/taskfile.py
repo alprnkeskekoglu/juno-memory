@@ -1,10 +1,10 @@
 import re
 from collections.abc import Sequence
 
-from juno.core import privacy, vaultfmt
+from juno.core import fold, privacy, vaultfmt
 
 TITLE_MAX = 200
-STATUS_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,39}$")
+STATUS_RE = re.compile(r"^[^\W_][\w.-]{0,39}$")
 URL_RE = re.compile(r"^https?://[^\s\"']+$")
 REPO_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$")
 PLAIN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._/()+,-]*$")
@@ -32,7 +32,7 @@ def clean_title(raw: str, prefixes: Sequence[str] | None = None) -> tuple[str, s
 
 
 def clean_status(raw: str) -> tuple[str, str | None]:
-    status = "-".join(raw.strip().lower().split())
+    status = "-".join(fold.tr_lower(raw).split())
     if not STATUS_RE.match(status):
         return "", f"status {raw!r} is not a plain word (letters, digits, - . _; at most 40)"
     return status, None
