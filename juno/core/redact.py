@@ -1,5 +1,9 @@
+import base64
+import binascii
 import json
 import re
+import unicodedata
+from collections.abc import Callable
 
 CHUNK_BYTES = 3000
 
@@ -19,8 +23,14 @@ SECRET_PATTERNS = [
 SECRET_RES = [(kind, re.compile(pattern)) for kind, pattern in SECRET_PATTERNS]
 ASSIGN_RE = re.compile(
     r"(?i)(?<![A-Za-z0-9])((?:api[_-]?key|access[_-]?key|secret[_-]?key|client[_-]?secret|"
-    r"auth[_-]?token|secret|token|password|passwd)[\"']?\s*[:=]\s*[\"']?)([^\s\"'`,;]+)"
+    r"private[_-]?key|auth[_-]?token|secret|token|password|passwd)[\"']?\]?\s*[:=]\s*[\"']?)([^\s\"'`,;]+)"
 )
+SETX_RE = re.compile(
+    r"(?i)(?<![A-Za-z0-9_-])((?:setx|set\s+(?:-[A-Za-z]+\s+)*-[A-Za-z]*x[A-Za-z]*)\s+[\"']?"
+    r"[A-Za-z0-9_]*(?:api[_-]?key|access[_-]?key|secret[_-]?key|client[_-]?secret|private[_-]?key|"
+    r"auth[_-]?token|secret|token|password|passwd)[\"']?\s+[\"']?)([^\s\"'`,;]+)"
+)
+BASIC_RE = re.compile(r"\b(Basic\s+)([A-Za-z0-9+/]{12,}={0,2})(?![A-Za-z0-9+/=])")
 TICKET_SHAPE_RE = re.compile(r"[A-Za-z][A-Za-z0-9]{0,9}-[0-9]+")
 
 
@@ -31,25 +41,53 @@ def assign_value_is_secret(value: str) -> bool:
     return (len(value) >= 12 and mixed) or len(value) >= 20
 
 
+def basic_value_is_secret(value: str) -> bool:
+    try:
+        decoded = base64.b64decode(value + "=" * (-len(value) % 4), validate=True).decode("ascii")
+    except binascii.Error, UnicodeDecodeError:
+        return False
+    return re.fullmatch(r"[\w.@+-]{1,64}:[\x21-\x7e]{4,}", decoded) is not None
+
+
+ASSIGN_KINDS = (
+    ("key=value", ASSIGN_RE, assign_value_is_secret),
+    ("key=value", SETX_RE, assign_value_is_secret),
+    ("basic-auth", BASIC_RE, basic_value_is_secret),
+)
+
+
+def strip_format(text: str) -> str:
+    """Drop Unicode format characters (Cf: zero-width, bidi marks) that can hide a secret."""
+    return "".join(c for c in text if unicodedata.category(c) != "Cf")
+
+
 def find_secrets(text: str | None) -> list[str]:
-    text = text or ""
+    text = strip_format(text or "")
     kinds = [kind for kind, regex in SECRET_RES if regex.search(text)]
-    if any(assign_value_is_secret(m.group(2)) for m in ASSIGN_RE.finditer(text)):
-        kinds.append("key=value")
+    for kind, regex, is_secret in ASSIGN_KINDS:
+        if kind not in kinds and any(is_secret(m.group(2)) for m in regex.finditer(text)):
+            kinds.append(kind)
     return kinds
 
 
 def redact(text: str | None) -> str:
     text = text or ""
+    stripped = strip_format(text)
+    if stripped != text and find_secrets(stripped):
+        text = stripped
     for kind, regex in SECRET_RES:
         text = regex.sub(f"[redacted:{kind}]", text)
+    for kind, regex, is_secret in ASSIGN_KINDS:
 
-    def sub(match: re.Match[str]) -> str:
-        if assign_value_is_secret(match.group(2)):
-            return match.group(1) + "[redacted:key=value]"
-        return match.group(0)
+        def sub(
+            match: re.Match[str], kind: str = kind, is_secret: Callable[[str], bool] = is_secret
+        ) -> str:
+            if is_secret(match.group(2)):
+                return match.group(1) + f"[redacted:{kind}]"
+            return match.group(0)
 
-    return ASSIGN_RE.sub(sub, text)
+        text = regex.sub(sub, text)
+    return text
 
 
 def chunks(text: str, limit: int = CHUNK_BYTES) -> list[str]:
