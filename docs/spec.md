@@ -283,6 +283,7 @@ Constants that name nothing user-specific stay in code: caps inside extraction, 
 | `usage.jsonl` | durable positive-use trace, one row per signal: `t, sid8, rel, ev` with `ev` `read` (PostToolUse Read, or Grep/Glob with a path under the vault, main or subagent), `card` (a vault file linked in a card the run wrote) or `cite` (a vault file named in extraction evidence); pack delivery is exposure and is not logged | `usage_days`, pruned with the other state |
 | `voice-names.json` | casefolded names seen in the user's own prompts, for the voice example filter (12.13); mode 0600, at most 2,000 names; never copied to the vault | kept |
 | `voice.jsonl` | writing-voice samples and corrections moved out of the ledgers at session end, and imported samples (12.13): `k` (`sample` or `fix`), `id`, `t`, `sid`, `reg`, plus `kind`, `by` (`user`, `edited`, `claude`, `import`), `text` or `quote`, `draft`; mode 0600, at most 400 live samples, 100 corrections and `[voice] import_max` imported samples | kept, newest rows only |
+| `selftest.json`, `selftest.lock` | the questions of `juno selftest` (12.14): `next`, `questions[]` of `id`, `question`, `expect`, `sentence`, `control`, `added`; mode 0600, at most 200 questions; never copied to the vault | kept |
 | `eval/` | labelling sets, frozen sidecars, `last-gate.json` | kept |
 | `hook-errors.log`, `hook-timings.log`, `debug.log` | errors and timings | rotated at `error_log_bytes` |
 | `counters.json`, `vault.lock` | counters, the write lock | - |
@@ -464,6 +465,7 @@ The shim is `juno <verb>`. Each verb with `--json` prints one JSON object. Exit 
 | `digest` | `_generated/learned.md` | [v1: Enforcement] Digest |
 | `profiles` | tickets block in `projects/*.md` | [v1: Phase 2 item 3]; no-op without `[jira]` |
 | `eval sample\|freeze\|floor\|gate\|recall\|agree\|compare\|ab` | `eval/` | section 12.9; `compare --setting keys [--weights 0,1,2,4]` is the paired offline comparison; `ab` is an alias of `arm status` |
+| `selftest add "<q>" (--expect PATH \| --control) [--sentence S] [--json]` / `list [--json]` / `remove <id> [--json]` / `run [--limit K] [--budget CHARS] [--json]` | `selftest.json` (state) | section 12.14; `add` and `remove` refuse like `voice import`; `list` and `run` read only |
 | `keys backfill [--limit N] [--max-usd 2.0] [--dry-run] [--json]` / `status [--json]` | `keys.jsonl` | section 12.1; `backfill` calls the model, in the foreground, and is refused in an agent context |
 | `arm start <name> [--feature F] --prereg F` / `status [--json]` / `stop <name> --reason R` / `decide <name> [--json]` | `arms/` | section 12.12; `start` and `stop` need the interactive main session; `F` under `/tmp` or the state dir, deleted when read |
 | `dashboard [--out] [--json] [--open]` | `dashboard/` | section 12.10 |
@@ -698,6 +700,15 @@ Juno learns how the user writes to other people from the user's own outgoing tex
 - **Decided here: the profile is computed from `voice.jsonl` at injection, and `self/voice.md` is the readable copy rebuilt at session end.** Reason: the check needs numbers, and parsing a prose file for them would be fragile.
 - **Decided here: correction lines are injected below the sample threshold too.** Reason: they are the user's own words about a draft, not a measure, and the threshold only guards the statistics.
 - **Decided here: authorship uses the last Stop message as the draft.** Reason: the hooks see no other text the user saw before the post.
+
+### 12.14 Selftest (own questions against the search)
+
+`juno selftest` measures with the user's own questions whether `juno search` finds the right note (idea from upstream avenoxbeyin #675, #860). Files: `juno/cmd/selftest.py` (verbs), `juno/adapters/selftestio.py` (state file, lock, vault path check, the search call), `juno/core/selftest.py` (row, path syntax, scoring); tests in `tests/test_selftest.py`.
+
+- **Storage:** `selftest.json` in the state dir, mode 0600, written atomically under `selftest.lock`; never in the vault.
+- `add "<question>" --expect <path> [--sentence "<phrase>"]` saves a question; the path must be a vault-relative `.md` file that exists, with no `..`, `.` or empty part and no symlink on the way (an absolute path is accepted only inside the vault and stored relative). `add "<question>" --control` saves a control. **Decided here:** a control has no expected file and passes when `juno search` returns no result at all for it (same function and filters as `juno search`, so the normal threshold applies); it fails when anything is returned. `--sentence` does not go with `--control`. `list [--json]` and `remove <id>` (ids are `q1`, `q2`, ..., never reused).
+- `run [--limit K] [--budget CHARS] [--json]` asks every question through the retrieval `juno search <q> --limit K` uses (default 5, no repo, ticket, date or archive filter) and reports per question the `rank` of the expected file (`null` is a miss), `hit1`, `hitk`, `returned`, and for a question with a sentence `sentence`: `found`, `cut_by_budget` or `absent`. A sentence is checked against the snippets of the expected file's returned hits, case and whitespace folded. With `--budget`, the snippets in rank order, one newline between them, are cut at CHARS; a sentence present in the returned text but not in the cut text is `cut_by_budget` (file found, sentence cut), kept apart from `absent`. The summary holds hit@1 and hit@K counts and rates over the non-control questions, the Wilson lower bound of hit@K (`juno.core.eval.wilson_lower`), the sentence counts and `controls` / `controls_passed`. `run` always exits 0.
+- **Refusals:** `add` and `remove` refuse in a subagent and in a `[nosave]` or private segment of the calling session, as `voice import` does (a plain shell runs them); `list` and `run` are never refused.
 
 ## 13. Install and lifecycle
 

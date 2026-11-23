@@ -27,6 +27,10 @@ VERBS: dict[str, tuple[str, str]] = {
     "recap": ("recap", "recap of recent cards and ticket updates"),
     "stale": ("stale", "flag knowledge and profiles that may be out of date"),
     "eval": ("eval", "measure shadow-logged suggestions (sample, gate, recall, compare, ab)"),
+    "selftest": (
+        "selftest",
+        "ask your own saved questions and score whether search finds the note",
+    ),
     "arm": ("arm", "pre-registered experiment arms (start, status, stop, decide)"),
     "keys": ("keys", "fact keys for search (backfill, status)"),
     "task": ("task", "write or show tasks/<KEY>.md (needs [jira])"),
