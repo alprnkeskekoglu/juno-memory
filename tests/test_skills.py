@@ -133,13 +133,25 @@ class AuditSkill(unittest.TestCase):
         bash = re.findall(r"Bash\(([^)]*)\)", tools)
         self.assertTrue(bash)
         for entry in bash:
-            self.assertRegex(entry, r"^(juno [a-z]+( [a-z]+)? \*|git -C \* (log|show) \*)$")
+            self.assertRegex(
+                entry, r"^(juno [a-z]+( [a-z]+)?( \*| --json)?|git -C \* (log|show) \*)$"
+            )
             if entry.startswith("juno "):
                 self.assertIn(entry.split()[1], cli.VERBS)
         verbs = {x.split()[1] for x in bash if x.startswith("juno ")}
         self.assertFalse(verbs & {"fix", "forget", "undo", "card", "note", "knowledge", "snapshot"})
         for sub in ("rule list", "rule pending", "thread pending"):
             self.assertIn(f"Bash(juno {sub} *)", tools)
+
+    def test_no_allowed_entry_can_match_a_write_flag(self) -> None:
+        from fnmatch import fnmatchcase
+
+        tools = str(self.fields["allowed-tools"])
+        bash = re.findall(r"Bash\(([^)]*)\)", tools)
+        writes = ("juno stale --fix", "juno stale --dry-run", "juno doctor --purge-synthetic")
+        for cmd in writes:
+            for entry in bash:
+                self.assertFalse(fnmatchcase(cmd, entry), (cmd, entry))
 
     def test_writes_nothing_and_proposes_the_exact_commands(self) -> None:
         body = self.body

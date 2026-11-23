@@ -57,7 +57,10 @@ def vault_file(cfg: config.Config, rel: str) -> None:
 def search(
     cfg: config.Config, db: str, query: str, limit: int, corr: dict[str, list[str]] | None = None
 ) -> list[dict[str, Any]]:
-    """The retrieval `juno search <query> --limit K` runs, with no filters."""
+    """The retrieval `juno search <query> --limit K` runs, with no filters.
+
+    Keep the arguments in step with juno/cmd/search.py, including the Turkish stem fallback.
+    """
     return indexquery.search(
         db,
         query,
@@ -72,6 +75,8 @@ def search(
         keys_weight=cfg.get_float("keys", "weight"),
         since=None,
         until=None,
+        stems={},
+        unmatched=[],
     )
 
 

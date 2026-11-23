@@ -199,6 +199,17 @@ class Run(SelftestCase):
         self.assertEqual(res["returned"], len(seen))
         self.assertEqual(res["rank"], [r["relpath"] for r in seen].index("notes/alpha.md") + 1)
 
+    def test_stem_fallback_answers_like_juno_search(self) -> None:
+        self.put("notes/kitap.md", "# Kitap\n\nokunacak kitap listesi\n")
+        self.add("kitabı", "--expect", "notes/kitap.md")
+        seen = json.loads(self.sb.cli("search", "kitabı", "--json")[1])
+        self.assertIn("stems", seen)
+        res = self.run_json()["results"][0]
+        self.assertEqual(
+            res["rank"], [r["relpath"] for r in seen["results"]].index("notes/kitap.md") + 1
+        )
+        self.assertTrue(res["hit1"])
+
     def test_text_output_and_json_shape(self) -> None:
         self.add("zebra migration", "--expect", "notes/alpha.md", "--sentence", "ten minutes")
         out = self.st("run")[1]
