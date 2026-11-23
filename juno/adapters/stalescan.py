@@ -124,15 +124,17 @@ def analyze(cfg: config.Config, days: int, today: datetime.date | None = None) -
     scan = Scan(cfg)
     retired = vaultview.read_retired(cfg.state)
     entries: list[stale.Entry] = []
+    unread: list[str] = []
     started = time.monotonic()
     for kind, relpath, path in vault_files(cfg.vault):
         try:
             entry = scan_file(scan, kind, relpath, path, days, today, retired)
-        except OSError:
+        except OSError, UnicodeDecodeError:
+            unread.append(relpath)
             continue
         if entry:
             entries.append(entry)
-    return stale.report_of(days, today, entries, scan.exhausted, time.monotonic() - started)
+    return stale.report_of(days, today, entries, scan.exhausted, time.monotonic() - started, unread)
 
 
 def write_cache(cfg: config.Config, report: dict[str, Any]) -> str:

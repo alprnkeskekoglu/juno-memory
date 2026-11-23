@@ -799,7 +799,11 @@ A POSIX sh script written by init. It is refused when a non-Juno file already ex
   - the output style (13.10): PASS when `outputStyle` in the user settings is one of `juno:juno-calm`, `juno:juno-normal`, `juno:juno-playful` (the line shows which), INFO when it is not, WARN when it is a retired value (naming `juno migrate --style`) or when the selected style file (`juno-calm.md` when none is selected) is missing from the plugin;
   - config types valid;
   - vault schema version matches the code;
-  - `hook_output_chars` < 10,000.
+  - `hook_output_chars` < 10,000;
+  - `rules size`: `core 3501/4000, global 2653/5000, opening 6154/9500 (3346 left for packs and the newest card)`, measured on the text the session-start injector builds (`core.md` trimmed, the global rules as `- <text>` lines, the whole `RULES (follow)` block untrimmed). WARN when under 1,500 chars of `hook_output_chars` are left for packs and the newest card; a single file near its own cap is the `budget` line's WARN (≥ 90%), not repeated here;
+  - `snapshot` (INFO): age of the last commit of the vault's own git repository and whether a remote is configured. A configured remote does not prove the backup is current, and the line says so;
+  - `settings paths` (WARN): the settings hold Juno-written entries (those the install manifest recorded, still present) for a vault other than the config's, and lack the entries the config's vault needs, for example after moving the vault. The fix is `juno init`, which adds the missing entries and leaves the old ones;
+  - `unreadable` (WARN): vault markdown files that exist but could not be read (permission or decoding error), `N files could not be read: <first 3 paths> (and K more)`. Checks that read those files ignore them, so an unreadable file is never taken for an empty one. `juno stale` (text line and `unreadable` list in `--json`) and the weekly report (`## Memory` line) say the same for the files their scans skip.
 - Removed checks: grants, alarms, mentees, guard probes. The PreToolUse probe stays as a latency check: median < 50 ms in-process.
 - Exit 1 on any FAIL. `--json` gives the collecting, read-only mode the dashboard uses.
 

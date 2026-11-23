@@ -22,6 +22,7 @@ from juno.adapters import (
 from juno.adapters import status as status_io
 from juno.adapters.vaultview import DiskVault, scan_metas
 from juno.cmd import backlog as backlog_cmd
+from juno.cmd import snapshot
 from juno.core import backlog as bl
 from juno.core import (
     doctor_decisions,
@@ -30,11 +31,14 @@ from juno.core import (
     doctor_pinned,
     doctor_profiles,
     doctor_topics,
+    inject,
     notebody,
+    packs,
     retire,
     selfmodel,
     topics,
 )
+from juno.core import doctor_summary as ds
 from juno.core import doctor_vault as dv
 from juno.core import privacyack as ack_core
 from juno.core.doctor_vault import Check
@@ -57,10 +61,31 @@ PROBE_RUNS = 5
 BACKLOG_STALE_DAYS = 60
 
 
-def markdown_files(vault: str) -> dict[str, str]:
+class CountingVault(DiskVault):
+    """A DiskVault that lists the files it could not read instead of raising or reading
+    them as empty without a word."""
+
+    def __init__(self, cfg: config.Config) -> None:
+        super().__init__(cfg)
+        self.unreadable: set[str] = set()
+
+    def read(self, rel: str) -> str:
+        try:
+            return super().read(rel)
+        except OSError, UnicodeDecodeError:
+            self.unreadable.add(rel)
+            return ""
+
+
+def markdown_files(vault: str, unreadable: list[str] | None = None) -> dict[str, str]:
     found: dict[str, str] = {}
-    for rel in scan_metas(vault):
-        found[rel] = store.read_text(os.path.join(vault, *rel.split("/")))
+    for rel in scan_metas(vault, unreadable):
+        try:
+            found[rel] = store.read_text(os.path.join(vault, *rel.split("/")))
+        except OSError, UnicodeDecodeError:
+            if unreadable is None:
+                raise
+            unreadable.append(rel)
     return found
 
 
@@ -87,8 +112,32 @@ def rule_names(view: DiskVault) -> list[str]:
     return names
 
 
+def opening_rules(view: DiskVault) -> tuple[str, str, str]:
+    """core.md, the injected global rules and the whole rules block, each untrimmed, built the
+    way the session-start injector builds them."""
+    core = view.read("core.md")
+    glob = "\n".join(
+        "- " + inject.neutralize(r) for r in packs.visible_rules(view, "rules/global.md")
+    )
+    return core, glob, inject.rules_block(core, glob, *(10**9,) * 3)
+
+
+def snapshot_checks(cfg: config.Config) -> list[Check]:
+    vault = os.path.realpath(cfg.vault)
+    try:
+        snapshot.check_repo(cfg, vault)
+        code, out, _ = snapshot.vault_git(cfg, vault, "log", "-1", "--format=%ct %H")
+        remotes = snapshot.vault_git(cfg, vault, "remote")[1].split()
+    except snapshot.Failed:
+        return ds.snapshot_checks(False, None, [], time.time())
+    stamp, _, sha = out.strip().partition(" ")
+    last = (int(stamp), sha) if code == 0 and stamp.isdigit() else None
+    return ds.snapshot_checks(True, last, remotes, time.time())
+
+
 def vault_checks(cfg: config.Config) -> list[Check]:
-    view = DiskVault(cfg)
+    view = CountingVault(cfg)
+    unreadable: list[str] = []
     cards = all_cards(view)
     valid = [c for c in cards if c["valid"]]
     profiles = [n[:-3] for n in view.names("projects")]
@@ -107,6 +156,15 @@ def vault_checks(cfg: config.Config) -> list[Check]:
         cfg.get_int("caps", "core_chars"),
         cfg.get_int("caps", "global_rules_chars"),
     )
+    core, glob, block = opening_rules(view)
+    out += ds.rules_size_checks(
+        len(core.strip()),
+        len(glob),
+        len(block),
+        cfg.get_int("caps", "core_chars"),
+        cfg.get_int("caps", "global_rules_chars"),
+        cfg.get_int("caps", "hook_output_chars"),
+    )
     named = {(c["seg"], r) for c in valid for r in c.get("repos") or []}
     card_repos = Counter(r for _, r in named if not repos.plain_folder(cfg, r))
     min_cards = cfg.get_int("thresholds", "profile_min_cards")
@@ -118,14 +176,15 @@ def vault_checks(cfg: config.Config) -> list[Check]:
         cfg.get_int("caps", "subagent_global_rules_chars"),
     )
     out += index_checks(cfg)
-    resolution = retire.resolve(scan_metas(cfg.vault))
+    resolution = retire.resolve(scan_metas(cfg.vault, unreadable))
     out += dv.retire_checks(resolution.pairs, resolution.dead)
     sizes = {n: len(parse_cards(view.read(f"handoffs/{n}"), n)) for n in view.names("handoffs")}
     out += dv.handoff_size_checks(sizes)
     out += dv.learned_check(learned_stale(cfg))
-    out += content_checks(cfg, view)
+    out += content_checks(cfg, view, unreadable)
     moves = decisionmoveio.plan_for(cfg)
     out += doctor_decisions.decision_checks(moves, decisionmoveio.acks_to_move(cfg, moves))
+    out += ds.unreadable_checks(sorted({*unreadable, *view.unreadable}))
     return out
 
 
@@ -152,10 +211,12 @@ def index_checks(cfg: config.Config) -> list[Check]:
     return [("WARN", "index", "search index failed its integrity check; juno search rebuilds it")]
 
 
-def content_checks(cfg: config.Config, view: DiskVault) -> list[Check]:
+def content_checks(
+    cfg: config.Config, view: DiskVault, unreadable: list[str] | None = None
+) -> list[Check]:
     files = {
         rel: text
-        for rel, text in markdown_files(cfg.vault).items()
+        for rel, text in markdown_files(cfg.vault, unreadable).items()
         if kind_of(rel) not in NEVER_INJECTED_KINDS and kind_of(rel) != "archive"
     }
     acks = privacyack.read(cfg)
@@ -311,5 +372,6 @@ def collect(cfg: config.Config, run_probe: bool) -> list[Check]:
     out += runs_checks(cfg)
     out += shadow_checks(cfg)
     out += self_checks(cfg)
+    out += snapshot_checks(cfg)
     out += dv.synthetic_checks(ledgerio.synthetic_report(cfg))
     return out

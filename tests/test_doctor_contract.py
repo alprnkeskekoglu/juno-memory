@@ -30,6 +30,7 @@ SCANNED = (
     "juno/cmd/doctor.py",
     "juno/cmd/doctor_vault.py",
     "juno/core/doctor_vault.py",
+    "juno/core/doctor_summary.py",
     "juno/core/doctor_fit.py",
     "juno/core/doctor_decisions.py",
     "juno/core/doctor_links.py",
@@ -100,6 +101,15 @@ def no_manifest(case: WriteCase) -> None:
     os.unlink(os.path.join(case.sb.state, "install-manifest.json"))
     with open(case.sb.settings, "w", encoding="utf-8") as handle:
         handle.write("{}\n")
+
+
+def moved_vault(case: WriteCase) -> None:
+    """The settings and the manifest name an old vault; the config's vault has no entries."""
+    for path in (case.sb.settings, os.path.join(case.sb.state, "install-manifest.json")):
+        with open(path, encoding="utf-8") as handle:
+            moved = handle.read().replace(case.sb.vault, "/old/place/vault")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(moved)
 
 
 def retired_style(case: WriteCase) -> None:
@@ -280,6 +290,22 @@ ROWS = (
         "juno card merge",
         ("card", "merge", "app", "bbbb0002", "--evidence", QUOTE),
         duplicates,
+    ),
+    Row(
+        "snapshot",
+        "juno snapshot",
+        "snapshot",
+        "no snapshot commit yet",
+        ("snapshot",),
+        lambda case: None,
+    ),
+    Row(
+        "settings paths",
+        "juno init",
+        "settings paths",
+        "another vault",
+        ("init",),
+        moved_vault,
     ),
     Row("compact", "juno compact", "handoffs", "juno compact", ("compact",), many_cards),
     Row("digest", "juno digest", "learned", "not built yet", ("digest",), drifted_digest),

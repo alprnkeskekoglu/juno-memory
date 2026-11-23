@@ -170,6 +170,7 @@ def memory(raw: Raw) -> dict[str, Any]:
         "decay": decay if decay and decay.get("trace_start") is not None else None,
         "inbox": raw["inbox"] if raw["inbox"]["items"] else None,
         "duplicates": raw["duplicates"],
+        "unreadable": raw.get("unreadable") or [],
     }
 
 
